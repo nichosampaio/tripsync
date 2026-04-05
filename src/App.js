@@ -1392,35 +1392,67 @@ function VotingTab({trip,setTrip,user}) {
   );
 }
 
+// ─── ACCOMMODATION COST HELPERS ───────────────────────────────────────────────
+// Single source of truth for all accommodation cost math.
+function calcAccomNights(a) {
+  if(!a.checkIn||!a.checkOut) return 0;
+  const n = nightsBetween(a.checkIn, a.checkOut);
+  return Math.max(n, 0);
+}
+function calcAccomTotal(a) {
+  const nights = calcAccomNights(a);
+  const ppn = parseFloat(a.pricePerNight) || 0;
+  return ppn * nights;
+}
+function calcAllAccomTotal(accommodationOptions) {
+  return (accommodationOptions||[]).reduce((s,a) => s + calcAccomTotal(a), 0);
+}
+
 // ─── BUDGET TAB ───────────────────────────────────────────────────────────────
 function BudgetTab({trip,setTrip}) {
   const [limitInput,setLimitInput] = useState(String(trip.budgetLimit||""));
   const [editingLimit,setEditingLimit] = useState(false);
-  const memberCount=trip.members.length||1;
-  const items=trip.calendarItems||[];
-  const sum=type=>items.filter(c=>c.type===type).reduce((s,c)=>s+(c.price||0),0);
-  const actTotal=sum("activity"),mealTotal=sum("meal"),transportTotal=sum("transport"),hotelTotal=sum("hotel");
-  const grandTotal=actTotal+mealTotal+transportTotal+hotelTotal;
-  const perPerson=memberCount>0?grandTotal/memberCount:0;
-  const budgetLimit=trip.budgetLimit?+trip.budgetLimit:null;
-  const cats=[
-    {icon:"🎯",label:"Activities",total:actTotal,color:"#38bdf8"},
-    {icon:"🚌",label:"Transport",total:transportTotal,color:"#34d399"},
-    {icon:"🍽️",label:"Meals",total:mealTotal,color:"#fbbf24"},
-    {icon:"🏨",label:"Hotels/Stays",total:hotelTotal,color:"#818cf8"},
+  const memberCount = trip.members.length || 1;
+
+  // Activity / meal / transport costs from calendarItems
+  const items = trip.calendarItems || [];
+  const sum = type => items.filter(c=>c.type===type).reduce((s,c)=>s+(c.price||0),0);
+  const actTotal       = sum("activity");
+  const mealTotal      = sum("meal");
+  const transportTotal = sum("transport");
+
+  // Accommodation cost — computed dynamically from accommodationOptions
+  const accomOptions   = trip.accommodationOptions || [];
+  const accomTotal     = calcAllAccomTotal(accomOptions);
+
+  const grandTotal = actTotal + mealTotal + transportTotal + accomTotal;
+  const perPerson  = memberCount > 0 ? grandTotal / memberCount : 0;
+  const budgetLimit = trip.budgetLimit ? +trip.budgetLimit : null;
+
+  const cats = [
+    {icon:"🎯", label:"Activities",    total:actTotal,       color:"#38bdf8"},
+    {icon:"🚌", label:"Transport",     total:transportTotal, color:"#34d399"},
+    {icon:"🍽️", label:"Meals",         total:mealTotal,      color:"#fbbf24"},
+    {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#818cf8"},
   ];
-  const maxCat=Math.max(...cats.map(c=>c.total),1);
-  const saveLimit=()=>{setTrip(t=>({...t,budgetLimit:limitInput?+limitInput:null}));setEditingLimit(false);};
+  const maxCat = Math.max(...cats.map(c=>c.total), 1);
+  const saveLimit = () => { setTrip(t=>({...t,budgetLimit:limitInput?+limitInput:null})); setEditingLimit(false); };
 
   return (
     <div className="budget-dash">
+
+      {/* ── Category breakdown ── */}
       <div className="budget-card">
         <h4>💰 Trip Cost Breakdown</h4>
         {cats.map(cat=>(
           <div key={cat.label} className="cat-row">
             <span className="cat-icon">{cat.icon}</span>
             <span className="cat-label">{cat.label}</span>
-            <div className="cat-bar-wrap"><div className="cat-bar-bg"><div className="cat-bar-fill" style={{width:`${Math.round((cat.total/maxCat)*100)}%`,background:cat.color}}/></div></div>
+            <div className="cat-bar-wrap">
+              <div className="cat-bar-bg">
+                <div className="cat-bar-fill" style={{width:`${Math.round((cat.total/maxCat)*100)}%`,background:cat.color}}/>
+              </div>
+            </div>
             <span className="cat-amount" style={{color:cat.color}}>${cat.total.toLocaleString()}</span>
           </div>
         ))}
@@ -1433,6 +1465,94 @@ function BudgetTab({trip,setTrip}) {
           <span style={{fontFamily:"Syne",fontSize:18,fontWeight:800,color:"var(--accent2)"}}>${Math.ceil(perPerson).toLocaleString()}</span>
         </div>
       </div>
+
+      {/* ── Accommodation breakdown (per-stay detail) ── */}
+      <div className="budget-card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>
+            Total: ${accomTotal.toLocaleString()}
+          </span>
+        </div>
+
+        {accomOptions.length === 0 ? (
+          <p className="text-muted" style={{fontSize:13}}>
+            No accommodations added yet — go to <strong>🏨 Stays</strong> to add options with check-in/out dates and nightly rates.
+          </p>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {accomOptions.map(a => {
+              const nights   = calcAccomNights(a);
+              const ppn      = parseFloat(a.pricePerNight) || 0;
+              const total    = calcAccomTotal(a);
+              const ppnShare = memberCount > 0 ? total / memberCount : 0;
+              const hasData  = a.checkIn && a.checkOut && ppn > 0;
+
+              return (
+                <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                  {/* Name row */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
+                      {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
+                    </div>
+                    {hasData && (
+                      <div style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>
+                        ${total.toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Calculation breakdown */}
+                  {hasData ? (
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>
+                        ${ppn.toLocaleString()}/night
+                      </span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>
+                        {nights} night{nights!==1?"s":""}
+                      </span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>
+                        ${total.toLocaleString()}
+                      </span>
+                      {memberCount > 1 && (
+                        <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>
+                          ${Math.ceil(ppnShare).toLocaleString()}/person
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{fontSize:12,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
+                      ⚠️ {!a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab to include in budget
+                    </div>
+                  )}
+
+                  {/* Date range */}
+                  {(a.checkIn || a.checkOut) && (
+                    <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>
+                      🗓️ {a.checkIn ? fmtDate(a.checkIn) : "?"} → {a.checkOut ? fmtDate(a.checkOut) : "?"}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Multi-stay subtotal (only shown when >1 stay) */}
+            {accomOptions.length > 1 && (
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(129,140,248,0.06)",border:"1px solid rgba(129,140,248,0.2)",borderRadius:10}}>
+                <span style={{fontSize:13,color:"var(--muted)"}}>All stays combined</span>
+                <span style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"var(--accent2)"}}>
+                  ${accomTotal.toLocaleString()}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Budget limit tracker ── */}
       <div className="budget-card">
         <h4>🎯 Budget Limit</h4>
         {!editingLimit&&!budgetLimit&&(
@@ -1443,23 +1563,24 @@ function BudgetTab({trip,setTrip}) {
         )}
         {(editingLimit||budgetLimit)&&(
           <div>
-            {editingLimit?(
+            {editingLimit ? (
               <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
                 <span style={{fontSize:16,color:"var(--muted)"}}>$</span>
-                <input className="form-input" style={{maxWidth:140}} type="number" min={0} value={limitInput} onChange={e=>setLimitInput(e.target.value)} autoFocus/>
+                <input className="form-input" style={{maxWidth:140}} type="number" min={0}
+                  value={limitInput} onChange={e=>setLimitInput(e.target.value)} autoFocus/>
                 <button className="btn btn-primary btn-sm" onClick={saveLimit}>Save</button>
                 <button className="btn btn-ghost btn-sm" onClick={()=>setEditingLimit(false)}>Cancel</button>
               </div>
-            ):(
+            ) : (
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                 <span style={{fontSize:14,color:"var(--muted)"}}>Limit: <strong style={{color:"var(--text)"}}>${(+budgetLimit).toLocaleString()}</strong></span>
                 <button className="btn btn-ghost btn-sm" onClick={()=>{setLimitInput(String(budgetLimit));setEditingLimit(true);}}>✏️ Edit</button>
               </div>
             )}
             {budgetLimit&&!editingLimit&&(()=>{
-              const pct=Math.min((grandTotal/+budgetLimit)*100,100);
-              const over=grandTotal>+budgetLimit;
-              const diff=Math.abs(grandTotal-+budgetLimit);
+              const pct  = Math.min((grandTotal/+budgetLimit)*100,100);
+              const over = grandTotal > +budgetLimit;
+              const diff = Math.abs(grandTotal - +budgetLimit);
               return (
                 <div>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--muted)",marginBottom:3}}>
@@ -1469,8 +1590,10 @@ function BudgetTab({trip,setTrip}) {
                   <div className="budget-status-bar">
                     <div className="budget-status-fill" style={{width:`${pct}%`,background:over?"var(--red)":pct>80?"var(--yellow)":"var(--green)"}}/>
                   </div>
-                  {over?<div className="budget-over">⚠️ Exceeded by ${diff.toLocaleString()}</div>
-                      :<div className="budget-under">✓ ${diff.toLocaleString()} remaining</div>}
+                  {over
+                    ? <div className="budget-over">⚠️ Exceeded by ${diff.toLocaleString()}</div>
+                    : <div className="budget-under">✓ ${diff.toLocaleString()} remaining ({Math.round(100-pct)}% left)</div>
+                  }
                 </div>
               );
             })()}
@@ -1724,7 +1847,9 @@ function SummaryTab({trip}) {
   const topDest=[...trip.destinations].sort((a,b)=>b.votes.length-a.votes.length)[0];
   const nights=nightsBetween(trip.startDate,trip.endDate);
   const items=trip.calendarItems||[];
-  const grandTotal=items.reduce((s,c)=>s+(c.price||0),0);
+  const ciTotal=items.reduce((s,c)=>s+(c.price||0),0);
+  const accomTotal=calcAllAccomTotal(trip.accommodationOptions||[]);
+  const grandTotal=ciTotal+accomTotal;
   return (
     <div className="summary-card">
       <div className="flex-between" style={{marginBottom:6}}>
