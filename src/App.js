@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { supabase } from "./supabase";
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');`;
 
@@ -1989,14 +1990,97 @@ export default function App() {
   const [active,setActive]     = useState(null);
   const [tab,setTab]           = useState("schedule");
   const [showNew,setShowNew]   = useState(false);
-  const [loggedIn,setLoggedIn] = useState(false);
-  const [user,setUser]         = useState("Alex");
-  const [showLogin,setShowLogin] = useState(false);
-  const [loginForm,setLoginForm] = useState({name:"",email:"",password:""});
+
+  // ── Real Supabase Auth state ──
+  const [authUser,setAuthUser]     = useState(null);   // Supabase user object (null = logged out)
+  const [authLoading,setAuthLoading] = useState(true); // true while we wait for session check on load
+  const loggedIn = !!authUser;
+  const user = authUser?.user_metadata?.full_name || authUser?.email?.split("@")[0] || "Traveler";
+
+  // ── Auth modal state ──
+  const [showLogin,setShowLogin]   = useState(false);
+  const [authMode,setAuthMode]     = useState("login"); // "login" | "signup"
+  const [loginForm,setLoginForm]   = useState({name:"",email:"",password:""});
+  const [authError,setAuthError]   = useState("");
+  const [authBusy,setAuthBusy]     = useState(false);
+
+  // ── On mount: restore session + listen for auth changes ──
+  useEffect(() => {
+    // Check if there's already a session stored in the browser (e.g. returning user)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setAuthUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    // Listen for future login / logout events.
+    // Also covers the race condition where onAuthStateChange fires before getSession resolves.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // ── Sign Up ──
+  const handleSignUp = async () => {
+    setAuthError("");
+    if(!loginForm.name.trim()) { setAuthError("Please enter your name."); return; }
+    if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
+    if(loginForm.password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.signUp({
+      email: loginForm.email.trim(),
+      password: loginForm.password,
+      options: { data: { full_name: loginForm.name.trim() } },
+    });
+    setAuthBusy(false);
+    if(error) { setAuthError(error.message); return; }
+    // Supabase sends a confirmation email by default.
+    // For now, show a friendly message (we can disable email confirmation in Supabase dashboard for dev).
+    setAuthError("✅ Account created! Check your email to confirm, then sign in.");
+    setAuthMode("login");
+  };
+
+  // ── Sign In ──
+  const handleSignIn = async () => {
+    setAuthError("");
+    if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
+    if(!loginForm.password) { setAuthError("Please enter your password."); return; }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginForm.email.trim(),
+      password: loginForm.password,
+    });
+    setAuthBusy(false);
+    if(error) { setAuthError(error.message); return; }
+    // onAuthStateChange will fire and set authUser — no manual setAuthUser needed here
+    setShowLogin(false);
+    setLoginForm({name:"",email:"",password:""});
+    setPage("dashboard");
+  };
+
+  // ── Sign Out ──
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    // onAuthStateChange fires → authUser becomes null automatically
+    setPage("landing");
+    setActive(null);
+  };
 
   const updateTrip = t => { setTrips(ts=>ts.map(x=>x.id===t.id?t:x)); setActive(t); };
   const openTrip   = t => { setActive(t); setTab("schedule"); setPage("trip"); };
   const createTrip = t => { setTrips(ts=>[...ts,t]); setShowNew(false); setActive(t); setTab("schedule"); setPage("trip"); };
+
+  // ── While checking session on first load, show nothing (avoid flash) ──
+  if(authLoading) return (
+    <>
+      <style>{FONT+CSS}</style>
+      <div className="app" style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}>
+        <div style={{color:"var(--muted)",fontSize:15}}>Loading TripSync…</div>
+      </div>
+    </>
+  );
 
   const TABS = [
     {id:"info",l:"ℹ️ Trip Info"},{id:"schedule",l:"📅 Schedule"},{id:"map",l:"🗺️ Map"},
@@ -2004,6 +2088,9 @@ export default function App() {
     {id:"activities",l:"🎯 Items"},{id:"members",l:"👥 Members"},{id:"country",l:"🌍 Entry"},
     {id:"summary",l:"✅ Summary"},
   ];
+
+  // ── Route protection: if not logged in, only the landing page is accessible ──
+  const safePage = loggedIn ? page : "landing";
 
   return (
     <>
@@ -2013,25 +2100,29 @@ export default function App() {
           <div className="nav-logo" onClick={()=>setPage(loggedIn?"dashboard":"landing")}>Trip<span>Sync</span></div>
           {loggedIn && (
             <div className="nav-tabs">
-              <button className={`nav-tab ${page==="dashboard"?"active":""}`} onClick={()=>setPage("dashboard")}>My Trips</button>
+              <button className={`nav-tab ${safePage==="dashboard"?"active":""}`} onClick={()=>setPage("dashboard")}>My Trips</button>
               <button className="nav-tab" onClick={()=>setShowNew(true)}>+ New Trip</button>
             </div>
           )}
           <div className="nav-user">
             {loggedIn
-              ?<><div className="avatar">{user[0]}</div><span style={{fontSize:14,fontWeight:500}}>{user}</span></>
-              :<button className="btn btn-primary btn-sm" onClick={()=>setShowLogin(true)}>Sign In</button>
+              ?<>
+                <div className="avatar">{user[0].toUpperCase()}</div>
+                <span style={{fontSize:14,fontWeight:500}}>{user}</span>
+                <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>Sign Out</button>
+               </>
+              :<button className="btn btn-primary btn-sm" onClick={()=>{setAuthMode("login");setAuthError("");setShowLogin(true);}}>Sign In</button>
             }
           </div>
         </nav>
 
-        {page==="landing" && (
+        {safePage==="landing" && (
           <div className="landing">
             <h1>Plan trips together,<br/>without the chaos.</h1>
             <p>TripSync helps groups align on dates, destinations, budgets, and activities — turning group planning into something that actually works.</p>
             <div className="btn-group">
-              <button className="btn btn-primary" onClick={()=>{setLoggedIn(true);setPage("dashboard");}}>✦ Get Started Free</button>
-              <button className="btn btn-ghost" onClick={()=>{setLoggedIn(true);setPage("dashboard");}}>View Demo</button>
+              <button className="btn btn-primary" onClick={()=>{setAuthMode("signup");setAuthError("");setShowLogin(true);}}>✦ Get Started Free</button>
+              <button className="btn btn-ghost" onClick={()=>{setAuthMode("login");setAuthError("");setShowLogin(true);}}>Sign In</button>
             </div>
             <div className="features">
               {[
@@ -2046,7 +2137,7 @@ export default function App() {
           </div>
         )}
 
-        {page==="dashboard" && (
+        {safePage==="dashboard" && (
           <div className="dashboard">
             <div style={{marginBottom:32}} className="flex-between">
               <div><h2 style={{fontFamily:"Syne",fontSize:28,fontWeight:800,marginBottom:6}}>My Trips 🗺️</h2><p style={{color:"var(--muted)",fontSize:15}}>Welcome back, {user}.</p></div>
@@ -2078,7 +2169,7 @@ export default function App() {
           </div>
         )}
 
-        {page==="trip" && active && (
+        {safePage==="trip" && active && (
           <div className="trip-detail">
             <div className="trip-detail-header">
               <button className="back-btn" onClick={()=>setPage("dashboard")}>← Back</button>
@@ -2108,15 +2199,69 @@ export default function App() {
         {showNew && <NewTripModal onClose={()=>setShowNew(false)} onCreate={createTrip} user={user}/>}
 
         {showLogin && (
-          <div className="modal-overlay" onClick={()=>setShowLogin(false)}>
+          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:""});}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
-              <h3>Sign in to TripSync</h3>
-              <div className="form-group"><label className="form-label">Name</label><input className="form-input" placeholder="Your name" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email} onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}/></div>
-              <div className="form-group"><label className="form-label">Password</label><input className="form-input" type="password" placeholder="••••••••" value={loginForm.password} onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}/></div>
+              {/* Tab toggle: Sign In / Sign Up */}
+              <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
+                <button
+                  className="btn"
+                  style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,
+                    background:authMode==="login"?"var(--accent)":"transparent",
+                    color:authMode==="login"?"#0a0f1e":"var(--muted)"}}
+                  onClick={()=>{setAuthMode("login");setAuthError("");}}>
+                  Sign In
+                </button>
+                <button
+                  className="btn"
+                  style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,
+                    background:authMode==="signup"?"var(--accent)":"transparent",
+                    color:authMode==="signup"?"#0a0f1e":"var(--muted)"}}
+                  onClick={()=>{setAuthMode("signup");setAuthError("");}}>
+                  Create Account
+                </button>
+              </div>
+
+              <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
+
+              {authMode==="signup" && (
+                <div className="form-group">
+                  <label className="form-label">Your Name</label>
+                  <input className="form-input" placeholder="e.g. Maria" value={loginForm.name}
+                    onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/>
+                </div>
+              )}
+
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email}
+                  onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}/>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Password</label>
+                <input className="form-input" type="password" placeholder="••••••••" value={loginForm.password}
+                  onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}
+                  onKeyDown={e=>e.key==="Enter"&&(authMode==="login"?handleSignIn():handleSignUp())}/>
+                {authMode==="signup" && <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>Minimum 6 characters</div>}
+              </div>
+
+              {authError && (
+                <div style={{
+                  padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,
+                  background: authError.startsWith("✅") ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
+                  border: authError.startsWith("✅") ? "1px solid rgba(52,211,153,0.3)" : "1px solid rgba(248,113,113,0.3)",
+                  color: authError.startsWith("✅") ? "var(--green)" : "var(--red)",
+                }}>
+                  {authError}
+                </div>
+              )}
+
               <div className="form-actions">
-                <button className="btn btn-ghost" onClick={()=>setShowLogin(false)}>Cancel</button>
-                <button className="btn btn-primary" onClick={()=>{if(loginForm.name)setUser(loginForm.name);setLoggedIn(true);setShowLogin(false);setPage("dashboard");}}>Sign In</button>
+                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:""});}}>Cancel</button>
+                <button className="btn btn-primary" disabled={authBusy}
+                  onClick={authMode==="login"?handleSignIn:handleSignUp}>
+                  {authBusy ? "Please wait…" : authMode==="login" ? "Sign In →" : "Create Account →"}
+                </button>
               </div>
             </div>
           </div>
