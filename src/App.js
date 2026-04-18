@@ -2000,7 +2000,7 @@ export default function App() {
   // ── Auth modal state ──
   const [showLogin,setShowLogin]   = useState(false);
   const [authMode,setAuthMode]     = useState("login"); // "login" | "signup"
-  const [loginForm,setLoginForm]   = useState({name:"",email:"",password:""});
+  const [loginForm,setLoginForm]   = useState({name:"",email:"",password:"",confirmPassword:""});
   const [authError,setAuthError]   = useState("");
   const [authBusy,setAuthBusy]     = useState(false);
 
@@ -2028,6 +2028,7 @@ export default function App() {
     if(!loginForm.name.trim()) { setAuthError("Please enter your name."); return; }
     if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
     if(loginForm.password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
+    if(loginForm.password !== loginForm.confirmPassword) { setAuthError("Passwords do not match."); return; }
     setAuthBusy(true);
     const { error } = await supabase.auth.signUp({
       email: loginForm.email.trim(),
@@ -2056,7 +2057,7 @@ export default function App() {
     if(error) { setAuthError(error.message); return; }
     // onAuthStateChange will fire and set authUser — no manual setAuthUser needed here
     setShowLogin(false);
-    setLoginForm({name:"",email:"",password:""});
+    setLoginForm({name:"",email:"",password:"",confirmPassword:""});
     setPage("dashboard");
   };
 
@@ -2199,7 +2200,7 @@ export default function App() {
         {showNew && <NewTripModal onClose={()=>setShowNew(false)} onCreate={createTrip} user={user}/>}
 
         {showLogin && (
-          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:""});}}>
+          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
               {/* Tab toggle: Sign In / Sign Up */}
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
@@ -2245,6 +2246,15 @@ export default function App() {
                 {authMode==="signup" && <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>Minimum 6 characters</div>}
               </div>
 
+              {authMode==="signup" && (
+                <div className="form-group">
+                  <label className="form-label">Confirm Password</label>
+                  <input className="form-input" type="password" placeholder="••••••••" value={loginForm.confirmPassword}
+                    onChange={e=>setLoginForm(f=>({...f,confirmPassword:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&handleSignUp()}/>
+                </div>
+              )}
+
               {authError && (
                 <div style={{
                   padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,
@@ -2257,7 +2267,7 @@ export default function App() {
               )}
 
               <div className="form-actions">
-                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:""});}}>Cancel</button>
+                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});}}>Cancel</button>
                 <button className="btn btn-primary" disabled={authBusy}
                   onClick={authMode==="login"?handleSignIn:handleSignUp}>
                   {authBusy ? "Please wait…" : authMode==="login" ? "Sign In →" : "Create Account →"}
