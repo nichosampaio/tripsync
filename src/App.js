@@ -2312,7 +2312,9 @@ export default function App() {
                 </button>
               </div>
 
-              <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
+              <h3 style={{marginBottom:20}}>
+                {authMode==="login" ? "Welcome back 👋" : authMode==="signup" ? "Join TripSync ✦" : "Reset your password 🔑"}
+              </h3>
 
               {authMode==="signup" && (
                 <div className="form-group">
@@ -2325,35 +2327,22 @@ export default function App() {
               <div className="form-group">
                 <label className="form-label">Email</label>
                 <input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email}
-                  onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}/>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Password</label>
-                <input className="form-input" type="password" placeholder="••••••••" value={loginForm.password}
-                  onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}
-                  onKeyDown={e=>e.key==="Enter"&&(authMode==="login"?handleSignIn():handleSignUp())}/>
-                {authMode==="signup" && <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>Minimum 6 characters</div>}
-                {authMode==="login" && (
-                  <button type="button"
-                    style={{background:"none",border:"none",color:"var(--accent)",fontSize:12,cursor:"pointer",marginTop:6,padding:0,textAlign:"left"}}
-                    onClick={()=>{setAuthMode("forgot");setAuthError("");}}>
-                    Forgot your password?
-                  </button>
+                  onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}
+                  onKeyDown={e=>e.key==="Enter"&&authMode==="forgot"&&handleForgotPassword()}/>
+                {authMode==="forgot" && (
+                  <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>
+                    We'll send a reset link to this address.
+                  </div>
                 )}
               </div>
 
-              {authMode==="forgot" && (
-                <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:"16px",marginBottom:4}}>
-                  <p style={{fontSize:13,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>
-                    Enter your email and we'll send you a link to reset your password.
-                  </p>
-                  <div className="form-group" style={{marginBottom:0}}>
-                    <label className="form-label">Email</label>
-                    <input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email}
-                      onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}
-                      onKeyDown={e=>e.key==="Enter"&&handleForgotPassword()}/>
-                  </div>
+              {(authMode==="login"||authMode==="signup") && (
+                <div className="form-group">
+                  <label className="form-label">Password</label>
+                  <input className="form-input" type="password" placeholder="••••••••" value={loginForm.password}
+                    onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&(authMode==="login"?handleSignIn():handleSignUp())}/>
+                  {authMode==="signup" && <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>Minimum 6 characters</div>}
                 </div>
               )}
 
@@ -2363,6 +2352,26 @@ export default function App() {
                   <input className="form-input" type="password" placeholder="••••••••" value={loginForm.confirmPassword}
                     onChange={e=>setLoginForm(f=>({...f,confirmPassword:e.target.value}))}
                     onKeyDown={e=>e.key==="Enter"&&handleSignUp()}/>
+                </div>
+              )}
+
+              {authMode==="login" && (
+                <div style={{marginTop:-8,marginBottom:16,textAlign:"right"}}>
+                  <button type="button"
+                    style={{background:"none",border:"none",color:"var(--accent)",fontSize:12,cursor:"pointer",padding:0}}
+                    onClick={()=>{setAuthMode("forgot");setAuthError("");}}>
+                    Forgot your password?
+                  </button>
+                </div>
+              )}
+
+              {authMode==="forgot" && (
+                <div style={{marginTop:-8,marginBottom:16,textAlign:"right"}}>
+                  <button type="button"
+                    style={{background:"none",border:"none",color:"var(--muted)",fontSize:12,cursor:"pointer",padding:0}}
+                    onClick={()=>{setAuthMode("login");setAuthError("");}}>
+                    ← Back to sign in
+                  </button>
                 </div>
               )}
 
