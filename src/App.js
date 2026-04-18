@@ -1999,10 +1999,18 @@ export default function App() {
 
   // ── Auth modal state ──
   const [showLogin,setShowLogin]   = useState(false);
-  const [authMode,setAuthMode]     = useState("login"); // "login" | "signup"
+  const [authMode,setAuthMode]     = useState("login"); // "login" | "signup" | "forgot"
   const [loginForm,setLoginForm]   = useState({name:"",email:"",password:"",confirmPassword:""});
   const [authError,setAuthError]   = useState("");
   const [authBusy,setAuthBusy]     = useState(false);
+
+  // ── Reset password page state (used when user lands on /reset-password) ──
+  const isResetPage = window.location.pathname === "/reset-password";
+  const [resetPassword,setResetPassword]           = useState("");
+  const [resetConfirmPassword,setResetConfirmPassword] = useState("");
+  const [resetError,setResetError]                 = useState("");
+  const [resetBusy,setResetBusy]                   = useState(false);
+  const [resetDone,setResetDone]                   = useState(false);
 
   // ── On mount: restore session + listen for auth changes ──
   useEffect(() => {
@@ -2064,9 +2072,35 @@ export default function App() {
   // ── Sign Out ──
   const handleSignOut = async () => {
     await supabase.auth.signOut();
-    // onAuthStateChange fires → authUser becomes null automatically
     setPage("landing");
     setActive(null);
+  };
+
+  // ── Forgot Password — sends reset email ──
+  const handleForgotPassword = async () => {
+    setAuthError("");
+    if(!loginForm.email.trim()) { setAuthError("Please enter your email address."); return; }
+    setAuthBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email.trim(), {
+      redirectTo: "https://tripsync-orpin.vercel.app/reset-password",
+    });
+    setAuthBusy(false);
+    if(error) { setAuthError(error.message); return; }
+    setAuthError("✅ Reset link sent! Check your email.");
+  };
+
+  // ── Reset Password — saves new password after user clicks email link ──
+  const handleResetPassword = async () => {
+    setResetError("");
+    if(resetPassword.length < 6) { setResetError("Password must be at least 6 characters."); return; }
+    if(resetPassword !== resetConfirmPassword) { setResetError("Passwords do not match."); return; }
+    setResetBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: resetPassword });
+    setResetBusy(false);
+    if(error) { setResetError(error.message); return; }
+    setResetDone(true);
+    // Redirect to landing after 3 seconds
+    setTimeout(() => { window.location.href = "/"; }, 3000);
   };
 
   const updateTrip = t => { setTrips(ts=>ts.map(x=>x.id===t.id?t:x)); setActive(t); };
@@ -2079,6 +2113,62 @@ export default function App() {
       <style>{FONT+CSS}</style>
       <div className="app" style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}>
         <div style={{color:"var(--muted)",fontSize:15}}>Loading TripSync…</div>
+      </div>
+    </>
+  );
+
+  // ── /reset-password page — shown when user arrives from the reset email link ──
+  if(isResetPage) return (
+    <>
+      <style>{FONT+CSS}</style>
+      <div className="app" style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",padding:20}}>
+        <div className="modal" style={{maxWidth:440}}>
+          <div style={{textAlign:"center",marginBottom:24}}>
+            <div style={{fontSize:36,marginBottom:12}}>🔐</div>
+            <h3 style={{marginBottom:6}}>Set a new password</h3>
+            <p style={{fontSize:14,color:"var(--muted)"}}>Choose a new password for your TripSync account.</p>
+          </div>
+
+          {resetDone ? (
+            <div style={{textAlign:"center",padding:"20px 0"}}>
+              <div style={{fontSize:32,marginBottom:12}}>✅</div>
+              <p style={{color:"var(--green)",fontWeight:600,marginBottom:8}}>Password updated!</p>
+              <p style={{fontSize:13,color:"var(--muted)"}}>Redirecting you to TripSync…</p>
+            </div>
+          ) : (
+            <>
+              <div className="form-group">
+                <label className="form-label">New Password</label>
+                <input className="form-input" type="password" placeholder="••••••••"
+                  value={resetPassword} onChange={e=>setResetPassword(e.target.value)}/>
+                <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>Minimum 6 characters</div>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Confirm New Password</label>
+                <input className="form-input" type="password" placeholder="••••••••"
+                  value={resetConfirmPassword} onChange={e=>setResetConfirmPassword(e.target.value)}
+                  onKeyDown={e=>e.key==="Enter"&&handleResetPassword()}/>
+              </div>
+
+              {resetError && (
+                <div style={{
+                  padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,
+                  background:"rgba(248,113,113,0.1)",border:"1px solid rgba(248,113,113,0.3)",
+                  color:"var(--red)",
+                }}>
+                  {resetError}
+                </div>
+              )}
+
+              <button className="btn btn-primary" disabled={resetBusy}
+                style={{width:"100%",justifyContent:"center"}}
+                onClick={handleResetPassword}>
+                {resetBusy ? "Saving…" : "Save New Password →"}
+              </button>
+            </>
+          )}
+        </div>
       </div>
     </>
   );
@@ -2200,7 +2290,7 @@ export default function App() {
         {showNew && <NewTripModal onClose={()=>setShowNew(false)} onCreate={createTrip} user={user}/>}
 
         {showLogin && (
-          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});}}>
+          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});setAuthMode("login");}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
               {/* Tab toggle: Sign In / Sign Up */}
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
@@ -2244,7 +2334,28 @@ export default function App() {
                   onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}
                   onKeyDown={e=>e.key==="Enter"&&(authMode==="login"?handleSignIn():handleSignUp())}/>
                 {authMode==="signup" && <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>Minimum 6 characters</div>}
+                {authMode==="login" && (
+                  <button type="button"
+                    style={{background:"none",border:"none",color:"var(--accent)",fontSize:12,cursor:"pointer",marginTop:6,padding:0,textAlign:"left"}}
+                    onClick={()=>{setAuthMode("forgot");setAuthError("");}}>
+                    Forgot your password?
+                  </button>
+                )}
               </div>
+
+              {authMode==="forgot" && (
+                <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:"16px",marginBottom:4}}>
+                  <p style={{fontSize:13,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>
+                    Enter your email and we'll send you a link to reset your password.
+                  </p>
+                  <div className="form-group" style={{marginBottom:0}}>
+                    <label className="form-label">Email</label>
+                    <input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email}
+                      onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}
+                      onKeyDown={e=>e.key==="Enter"&&handleForgotPassword()}/>
+                  </div>
+                </div>
+              )}
 
               {authMode==="signup" && (
                 <div className="form-group">
@@ -2267,11 +2378,16 @@ export default function App() {
               )}
 
               <div className="form-actions">
-                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});}}>Cancel</button>
-                <button className="btn btn-primary" disabled={authBusy}
-                  onClick={authMode==="login"?handleSignIn:handleSignUp}>
-                  {authBusy ? "Please wait…" : authMode==="login" ? "Sign In →" : "Create Account →"}
-                </button>
+                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});setAuthMode("login");}}>Cancel</button>
+                {authMode==="forgot"
+                  ? <button className="btn btn-primary" disabled={authBusy} onClick={handleForgotPassword}>
+                      {authBusy ? "Sending…" : "Send Reset Link →"}
+                    </button>
+                  : <button className="btn btn-primary" disabled={authBusy}
+                      onClick={authMode==="login"?handleSignIn:handleSignUp}>
+                      {authBusy ? "Please wait…" : authMode==="login" ? "Sign In →" : "Create Account →"}
+                    </button>
+                }
               </div>
             </div>
           </div>
