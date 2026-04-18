@@ -506,6 +506,7 @@ function UniversalEditModal({ item, trip, setTrip, onClose }) {
     durationMin: String(item.durationMin || 30),
     location:    item.location || "",
     price:       item.price ? String(item.price) : "",
+    priceType:   item.priceType || "flat",
     description: item.metadata?.description || "",
     notes:       item.metadata?.notes || "",
     checkIn:     item.metadata?.checkIn || "",
@@ -541,6 +542,7 @@ function UniversalEditModal({ item, trip, setTrip, onClose }) {
         day: form.day||null, startTime: form.startTime||null,
         startMin, durationMin: durMin,
         location: form.location, price: form.price?+form.price:0,
+        priceType: form.priceType,
         metadata: {
           ...ci.metadata,
           description: form.description, notes: form.notes,
@@ -602,6 +604,26 @@ function UniversalEditModal({ item, trip, setTrip, onClose }) {
             <label className="form-label">Price (USD)</label>
             <input {...F("price")} placeholder="e.g. 45"/>
             {errs.price&&<div className="err-msg">{errs.price}</div>}
+          </div>
+          <div className="form-group">
+            <label className="form-label">Price Type</label>
+            <div style={{display:"flex",gap:6,marginTop:2}}>
+              <button type="button"
+                className={`type-tab ${form.priceType==="flat"?"active":""}`}
+                onClick={()=>setForm(f=>({...f,priceType:"flat"}))}>
+                👥 Whole Group
+              </button>
+              <button type="button"
+                className={`type-tab ${form.priceType==="per_person"?"active":""}`}
+                onClick={()=>setForm(f=>({...f,priceType:"per_person"}))}>
+                🧍 Per Person
+              </button>
+            </div>
+            <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>
+              {form.priceType==="per_person"
+                ? `Price will be multiplied by the number of members in the trip.`
+                : `Price is a single flat cost split equally across all members.`}
+            </div>
           </div>
         </div>
         <div className="form-group">
@@ -1172,7 +1194,7 @@ function MapTab({trip,setTrip}) {
 function ActivityTab({trip,setTrip,user}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
-  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",notes:"",day:""});
+  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:""});
   const [errs,setErrs] = useState({});
   const tripDays=useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
   const items=trip.calendarItems||[];
@@ -1192,9 +1214,10 @@ function ActivityTab({trip,setTrip,user}) {
       day:form.day||null,startTime:form.startTime||null,startMin,
       durationMin:+form.durationMin||60,location:form.location,
       price:form.price?+form.price:0,
+      priceType:form.priceType||"flat",
       metadata:{description:form.description,notes:form.notes,upvotes:[],downvotes:[],createdBy:user}
     }]}));
-    setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",notes:"",day:""});
+    setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:""});
     setShowAdd(false);
   };
 
@@ -1257,8 +1280,19 @@ function ActivityTab({trip,setTrip,user}) {
               {errs.price&&<div className="err-msg">{errs.price}</div>}
             </div>
             <div className="form-group">
-              <label className="form-label">Notes</label>
-              <input {...F("notes")} placeholder="e.g. Book in advance"/>
+              <label className="form-label">Price Type</label>
+              <div style={{display:"flex",gap:6,marginTop:2}}>
+                <button type="button"
+                  className={`type-tab ${form.priceType==="flat"?"active":""}`}
+                  onClick={()=>setForm(f=>({...f,priceType:"flat"}))}>
+                  👥 Group
+                </button>
+                <button type="button"
+                  className={`type-tab ${form.priceType==="per_person"?"active":""}`}
+                  onClick={()=>setForm(f=>({...f,priceType:"per_person"}))}>
+                  🧍 Per Person
+                </button>
+              </div>
             </div>
           </div>
           <div className="form-actions">
@@ -1410,25 +1444,40 @@ function calcAllAccomTotal(accommodationOptions) {
 }
 
 // ─── BUDGET TAB ───────────────────────────────────────────────────────────────
-function BudgetTab({trip,setTrip}) {
-  const [limitInput,setLimitInput] = useState(String(trip.budgetLimit||""));
-  const [editingLimit,setEditingLimit] = useState(false);
+function BudgetTab({trip, setTrip, user}) {
   const memberCount = trip.members.length || 1;
-
-  // Activity / meal / transport costs from calendarItems
   const items = trip.calendarItems || [];
-  const sum = type => items.filter(c=>c.type===type).reduce((s,c)=>s+(c.price||0),0);
-  const actTotal       = sum("activity");
-  const mealTotal      = sum("meal");
-  const transportTotal = sum("transport");
 
-  // Accommodation cost — computed dynamically from accommodationOptions
+  // ── Personal budget (stored per user in trip.personalBudgets map) ──
+  const personalBudgets = trip.personalBudgets || {};
+  const myBudget = personalBudgets[user] ?? null;
+  const [editingBudget, setEditingBudget] = useState(false);
+  const [budgetInput, setBudgetInput] = useState(myBudget != null ? String(myBudget) : "");
+
+  const saveBudget = () => {
+    const val = budgetInput ? +budgetInput : null;
+    setTrip(t => ({ ...t, personalBudgets: { ...(t.personalBudgets||{}), [user]: val } }));
+    setEditingBudget(false);
+  };
+
+  // ── Compute effective cost of each item ──
+  // per_person → price × memberCount, flat → price as-is
+  const effectiveCost = ci => {
+    const p = ci.price || 0;
+    return ci.priceType === "per_person" ? p * memberCount : p;
+  };
+
+  const sumType = type => items.filter(c=>c.type===type).reduce((s,c)=>s+effectiveCost(c), 0);
+
+  const actTotal       = sumType("activity");
+  const mealTotal      = sumType("meal");
+  const transportTotal = sumType("transport");
+  const noteTotal      = sumType("note");
   const accomOptions   = trip.accommodationOptions || [];
   const accomTotal     = calcAllAccomTotal(accomOptions);
 
-  const grandTotal = actTotal + mealTotal + transportTotal + accomTotal;
-  const perPerson  = memberCount > 0 ? grandTotal / memberCount : 0;
-  const budgetLimit = trip.budgetLimit ? +trip.budgetLimit : null;
+  const grandTotal  = actTotal + mealTotal + transportTotal + accomTotal + noteTotal;
+  const myShare     = memberCount > 0 ? grandTotal / memberCount : 0;
 
   const cats = [
     {icon:"🎯", label:"Activities",    total:actTotal,       color:"#38bdf8"},
@@ -1437,14 +1486,73 @@ function BudgetTab({trip,setTrip}) {
     {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#818cf8"},
   ];
   const maxCat = Math.max(...cats.map(c=>c.total), 1);
-  const saveLimit = () => { setTrip(t=>({...t,budgetLimit:limitInput?+limitInput:null})); setEditingLimit(false); };
+
+  // ── Budget status ──
+  const budgetSet   = myBudget != null && myBudget > 0;
+  const spent       = myShare;
+  const remaining   = budgetSet ? myBudget - spent : null;
+  const pct         = budgetSet ? Math.min((spent / myBudget) * 100, 100) : 0;
+  const over        = budgetSet && spent > myBudget;
 
   return (
     <div className="budget-dash">
 
-      {/* ── Category breakdown ── */}
+      {/* ── My Personal Budget ── */}
       <div className="budget-card">
-        <h4>💰 Trip Cost Breakdown</h4>
+        <h4>👤 My Budget</h4>
+        {!editingBudget && myBudget == null && (
+          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+            <p className="text-muted" style={{flex:1}}>You haven't set a personal budget yet.</p>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setEditingBudget(true)}>+ Set Budget</button>
+          </div>
+        )}
+        {(editingBudget || myBudget != null) && (
+          <div>
+            {editingBudget ? (
+              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:16,color:"var(--muted)"}}>$</span>
+                <input className="form-input" style={{maxWidth:140}} type="number" min={0}
+                  value={budgetInput} onChange={e=>setBudgetInput(e.target.value)} autoFocus/>
+                <button className="btn btn-primary btn-sm" onClick={saveBudget}>Save</button>
+                <button className="btn btn-ghost btn-sm" onClick={()=>setEditingBudget(false)}>Cancel</button>
+              </div>
+            ) : (
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <span style={{fontSize:14,color:"var(--muted)"}}>
+                  My budget: <strong style={{color:"var(--text)"}}>${(+myBudget).toLocaleString()}</strong>
+                </span>
+                <button className="btn btn-ghost btn-sm" onClick={()=>{setBudgetInput(String(myBudget));setEditingBudget(true);}}>✏️ Edit</button>
+              </div>
+            )}
+
+            {budgetSet && !editingBudget && (
+              <>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--muted)",marginBottom:3}}>
+                  <span>My share: ${Math.ceil(spent).toLocaleString()}</span>
+                  <span>Budget: ${(+myBudget).toLocaleString()}</span>
+                </div>
+                <div className="budget-status-bar">
+                  <div className="budget-status-fill" style={{
+                    width:`${pct}%`,
+                    background: over ? "var(--red)" : pct > 80 ? "var(--yellow)" : "var(--green)"
+                  }}/>
+                </div>
+                {over
+                  ? <div className="budget-over">⚠️ Over budget by ${Math.ceil(spent - myBudget).toLocaleString()}</div>
+                  : <div className="budget-under">✓ ${Math.floor(remaining).toLocaleString()} remaining ({Math.round(100-pct)}% left)</div>
+                }
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Trip Cost Breakdown ── */}
+      <div className="budget-card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <h4 style={{margin:0}}>💰 Trip Cost Breakdown</h4>
+          <span style={{fontSize:12,color:"var(--muted)"}}>👥 {memberCount} member{memberCount!==1?"s":""}</span>
+        </div>
         {cats.map(cat=>(
           <div key={cat.label} className="cat-row">
             <span className="cat-icon">{cat.icon}</span>
@@ -1458,149 +1566,101 @@ function BudgetTab({trip,setTrip}) {
           </div>
         ))}
         <div className="budget-total-row">
-          <span className="budget-total-label">Total</span>
+          <span className="budget-total-label">Total (all members)</span>
           <span className="budget-total-val">${grandTotal.toLocaleString()}</span>
         </div>
         <div className="per-person-row">
-          <span style={{fontSize:13,color:"var(--muted)"}}>👥 {memberCount} member{memberCount!==1?"s":""} · per person</span>
-          <span style={{fontFamily:"Syne",fontSize:18,fontWeight:800,color:"var(--accent2)"}}>${Math.ceil(perPerson).toLocaleString()}</span>
+          <span style={{fontSize:13,color:"var(--muted)"}}>My equal share ({memberCount} member{memberCount!==1?"s":""})</span>
+          <span style={{fontFamily:"Syne",fontSize:18,fontWeight:800,color:"var(--accent2)"}}>${Math.ceil(myShare).toLocaleString()}</span>
         </div>
       </div>
 
-      {/* ── Accommodation breakdown (per-stay detail) ── */}
+      {/* ── Item-by-item cost breakdown ── */}
+      <div className="budget-card">
+        <h4>🧾 Item Cost Detail</h4>
+        {items.length === 0 ? (
+          <p className="text-muted" style={{fontSize:13}}>No items added yet.</p>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginTop:4}}>
+            {items.filter(ci=>ci.price>0).map(ci => {
+              const effective = effectiveCost(ci);
+              const myPart    = memberCount > 0 ? effective / memberCount : 0;
+              const tm        = TYPE_META[ci.type];
+              return (
+                <div key={ci.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
+                  <span style={{fontSize:16,flexShrink:0}}>{tm?.icon}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:500}}>{ci.title}</span>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
+                    {ci.priceType==="per_person" ? (
+                      <span style={{fontSize:11,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
+                        🧍 ${ci.price}/person
+                      </span>
+                    ) : (
+                      <span style={{fontSize:11,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
+                        👥 ${ci.price} flat
+                      </span>
+                    )}
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--green)",minWidth:60,textAlign:"right"}}>
+                      ${Math.ceil(myPart).toLocaleString()}<span style={{fontSize:11,fontWeight:400,color:"var(--muted)"}}> /me</span>
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {items.filter(ci=>ci.price>0).length === 0 && (
+              <p className="text-muted" style={{fontSize:13}}>No priced items yet.</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Accommodation detail ── */}
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>
-            Total: ${accomTotal.toLocaleString()}
-          </span>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>Total: ${accomTotal.toLocaleString()}</span>
         </div>
-
         {accomOptions.length === 0 ? (
-          <p className="text-muted" style={{fontSize:13}}>
-            No accommodations added yet — go to <strong>🏨 Stays</strong> to add options with check-in/out dates and nightly rates.
-          </p>
+          <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
         ) : (
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             {accomOptions.map(a => {
               const nights   = calcAccomNights(a);
               const ppn      = parseFloat(a.pricePerNight) || 0;
               const total    = calcAccomTotal(a);
-              const ppnShare = memberCount > 0 ? total / memberCount : 0;
+              const myPart   = memberCount > 0 ? total / memberCount : 0;
               const hasData  = a.checkIn && a.checkOut && ppn > 0;
-
               return (
                 <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
-                  {/* Name row */}
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                     <div>
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && (
-                      <div style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>
-                        ${total.toLocaleString()}
-                      </div>
-                    )}
+                    {hasData && <div style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
-
-                  {/* Calculation breakdown */}
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>
-                        ${ppn.toLocaleString()}/night
-                      </span>
+                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
                       <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
-                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>
-                        {nights} night{nights!==1?"s":""}
-                      </span>
+                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
                       <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
-                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>
-                        ${total.toLocaleString()}
-                      </span>
-                      {memberCount > 1 && (
-                        <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>
-                          ${Math.ceil(ppnShare).toLocaleString()}/person
-                        </span>
-                      )}
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
+                      {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
                   ) : (
                     <div style={{fontSize:12,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
-                      ⚠️ {!a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab to include in budget
+                      ⚠️ {!a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab
                     </div>
                   )}
-
-                  {/* Date range */}
-                  {(a.checkIn || a.checkOut) && (
-                    <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>
-                      🗓️ {a.checkIn ? fmtDate(a.checkIn) : "?"} → {a.checkOut ? fmtDate(a.checkOut) : "?"}
-                    </div>
-                  )}
+                  {(a.checkIn||a.checkOut) && <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
                 </div>
               );
             })}
-
-            {/* Multi-stay subtotal (only shown when >1 stay) */}
-            {accomOptions.length > 1 && (
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:"rgba(129,140,248,0.06)",border:"1px solid rgba(129,140,248,0.2)",borderRadius:10}}>
-                <span style={{fontSize:13,color:"var(--muted)"}}>All stays combined</span>
-                <span style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"var(--accent2)"}}>
-                  ${accomTotal.toLocaleString()}
-                </span>
-              </div>
-            )}
           </div>
         )}
       </div>
 
-      {/* ── Budget limit tracker ── */}
-      <div className="budget-card">
-        <h4>🎯 Budget Limit</h4>
-        {!editingLimit&&!budgetLimit&&(
-          <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
-            <p className="text-muted" style={{flex:1}}>Set a target spend limit.</p>
-            <button className="btn btn-ghost btn-sm" onClick={()=>setEditingLimit(true)}>+ Set Limit</button>
-          </div>
-        )}
-        {(editingLimit||budgetLimit)&&(
-          <div>
-            {editingLimit ? (
-              <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12}}>
-                <span style={{fontSize:16,color:"var(--muted)"}}>$</span>
-                <input className="form-input" style={{maxWidth:140}} type="number" min={0}
-                  value={limitInput} onChange={e=>setLimitInput(e.target.value)} autoFocus/>
-                <button className="btn btn-primary btn-sm" onClick={saveLimit}>Save</button>
-                <button className="btn btn-ghost btn-sm" onClick={()=>setEditingLimit(false)}>Cancel</button>
-              </div>
-            ) : (
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                <span style={{fontSize:14,color:"var(--muted)"}}>Limit: <strong style={{color:"var(--text)"}}>${(+budgetLimit).toLocaleString()}</strong></span>
-                <button className="btn btn-ghost btn-sm" onClick={()=>{setLimitInput(String(budgetLimit));setEditingLimit(true);}}>✏️ Edit</button>
-              </div>
-            )}
-            {budgetLimit&&!editingLimit&&(()=>{
-              const pct  = Math.min((grandTotal/+budgetLimit)*100,100);
-              const over = grandTotal > +budgetLimit;
-              const diff = Math.abs(grandTotal - +budgetLimit);
-              return (
-                <div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--muted)",marginBottom:3}}>
-                    <span>Current: ${grandTotal.toLocaleString()}</span>
-                    <span>Limit: ${(+budgetLimit).toLocaleString()}</span>
-                  </div>
-                  <div className="budget-status-bar">
-                    <div className="budget-status-fill" style={{width:`${pct}%`,background:over?"var(--red)":pct>80?"var(--yellow)":"var(--green)"}}/>
-                  </div>
-                  {over
-                    ? <div className="budget-over">⚠️ Exceeded by ${diff.toLocaleString()}</div>
-                    : <div className="budget-under">✓ ${diff.toLocaleString()} remaining ({Math.round(100-pct)}% left)</div>
-                  }
-                </div>
-              );
-            })()}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -2277,7 +2337,7 @@ export default function App() {
               {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip}/>}
               {tab==="map"            && <MapTab trip={active} setTrip={updateTrip}/>}
               {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user}/>}
-              {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip}/>}
+              {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user}/>}
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user}/>}
               {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user}/>}
