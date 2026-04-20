@@ -1244,6 +1244,8 @@ function ActivityTab({trip,setTrip,user,db}) {
   return (
     <div>
       {editingItem && <UniversalEditModal item={editingItem} trip={trip} setTrip={setTrip} onClose={()=>setEditingItem(null)} db={db}/>}
+      <div className="section-hdr">
+        <h4>🎯 All Trip Items</h4>
         <button className="btn btn-accent2 btn-sm" onClick={()=>setShowAdd(v=>!v)}>+ Add Item</button>
       </div>
       <p className="text-muted" style={{marginBottom:14}}>All trip items — activities, meals, transport, hotels, notes. Click any to edit.</p>
