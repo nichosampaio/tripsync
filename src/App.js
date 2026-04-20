@@ -76,6 +76,7 @@ body { font-family: 'DM Sans', sans-serif; background: #0a0f1e; color: #e8eaf6; 
 .section-tab.active { color:var(--accent); border-bottom-color:var(--accent); background:rgba(56,189,248,0.05); }
 .section-content { animation:fadeIn 0.2s ease; }
 @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+@keyframes spin { to{transform:rotate(360deg)} }
 .datepicker-wrap { background:var(--surface); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
 .dp-top { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); }
 .dp-top span { font-family:'Syne',sans-serif; font-weight:700; font-size:15px; }
@@ -496,7 +497,7 @@ function SingleDatePicker({value,onChange,minDate,maxDate,placeholder,hasErr}) {
 }
 
 // ─── UNIVERSAL EDIT MODAL ──────────────────────────────────────────────────────
-function UniversalEditModal({ item, trip, setTrip, onClose }) {
+function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
   const tripDays = useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
   const [form, setForm] = useState({
     type:        item.type,
@@ -534,23 +535,25 @@ function UniversalEditModal({ item, trip, setTrip, onClose }) {
     if(!validate()) return;
     const startMin = timeStrToMin(form.startTime) ?? null;
     const durMin = Math.max(+form.durationMin||30, 5);
+    const updated = {
+      ...item,
+      type: form.type, title: form.title.trim(),
+      day: form.day||null, startTime: form.startTime||null,
+      startMin, durationMin: durMin,
+      location: form.location, price: form.price?+form.price:0,
+      priceType: form.priceType,
+      metadata: {
+        ...item.metadata,
+        description: form.description, notes: form.notes,
+        checkIn: form.checkIn||null, checkOut: form.checkOut||null,
+        transportationTime: form.transportationTime?+form.transportationTime:"",
+        travelTimeFromPrev: form.travelTimeFromPrev?+form.travelTimeFromPrev:0,
+      }
+    };
+    if(db) db.updateItem(updated);
     setTrip(t=>({
       ...t,
-      calendarItems: t.calendarItems.map(ci => ci.id!==item.id ? ci : {
-        ...ci,
-        type: form.type, title: form.title.trim(),
-        day: form.day||null, startTime: form.startTime||null,
-        startMin, durationMin: durMin,
-        location: form.location, price: form.price?+form.price:0,
-        priceType: form.priceType,
-        metadata: {
-          ...ci.metadata,
-          description: form.description, notes: form.notes,
-          checkIn: form.checkIn||null, checkOut: form.checkOut||null,
-          transportationTime: form.transportationTime?+form.transportationTime:"",
-          travelTimeFromPrev: form.travelTimeFromPrev?+form.travelTimeFromPrev:0,
-        }
-      })
+      calendarItems: t.calendarItems.map(ci => ci.id!==item.id ? ci : updated)
     }));
     onClose();
   };
@@ -727,7 +730,7 @@ function MiniCal({startDate,endDate,activeDay,onSelectDay}) {
 }
 
 // ─── DAY BLOCK ────────────────────────────────────────────────────────────────
-function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEditItem}) {
+function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEditItem,db}) {
   const d=fromYMD(dayYMD);
   const todayYMD=toYMD(new Date());
   const isToday=dayYMD===todayYMD;
@@ -755,16 +758,18 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
   const dayOfWeek=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
   const dateLabel=`${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 
-  const removeItem=id=>setTrip(t=>({...t,calendarItems:t.calendarItems.filter(ci=>ci.id!==id)}));
+  const removeItem=id=>{ if(db) db.deleteItem(id); setTrip(t=>({...t,calendarItems:t.calendarItems.filter(ci=>ci.id!==id)})); };
 
-  const addItem=()=>{
+  const addItem=async ()=>{
     if(!newTitle.trim()) return;
     const startMin=timeStrToMin(newTime)??null;
-    setTrip(t=>({...t,calendarItems:[...t.calendarItems,{
+    const newItem={
       id:uid(),type:newType,title:newTitle.trim(),day:dayYMD,
       startTime:newTime||null,startMin,durationMin:60,
-      location:"",price:0,metadata:{notes:"",description:""}
-    }]}));
+      location:"",price:0,priceType:"flat",metadata:{notes:"",description:"",upvotes:[],downvotes:[],createdBy:""}
+    };
+    const saved = db ? await db.addItem(trip.id, newItem) : newItem;
+    setTrip(t=>({...t,calendarItems:[...t.calendarItems,saved]}));
     setNewTitle(""); setNewTime("");
   };
 
@@ -774,7 +779,11 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     e.preventDefault();setDayDragOver(false);setSlotDragOver(null);
     const id=parseInt(e.dataTransfer.getData("ciId"));
     if(!id) return;
-    setTrip(t=>({...t,calendarItems:t.calendarItems.map(ci=>ci.id!==id?ci:{...ci,day:dayYMD})}));
+    setTrip(t=>{
+      const ci=t.calendarItems.find(c=>c.id===id);
+      if(ci&&db) db.updateItem({...ci,day:dayYMD});
+      return {...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD})};
+    });
   };
 
   const handleSlotDragOver=(e,hour)=>{e.preventDefault();e.stopPropagation();setSlotDragOver(hour);};
@@ -784,7 +793,11 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     const id=parseInt(e.dataTransfer.getData("ciId"));
     if(!id) return;
     const newStartMin=hour*60;
-    setTrip(t=>({...t,calendarItems:t.calendarItems.map(ci=>ci.id!==id?ci:{...ci,day:dayYMD,startMin:newStartMin,startTime:minToTimeStr(newStartMin)})}));
+    setTrip(t=>{
+      const ci=t.calendarItems.find(c=>c.id===id);
+      if(ci&&db) db.updateItem({...ci,day:dayYMD,startMin:newStartMin,startTime:minToTimeStr(newStartMin)});
+      return {...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD,startMin:newStartMin,startTime:minToTimeStr(newStartMin)})};
+    });
   };
 
   const timed=dayItems.filter(c=>c.startMin!=null);
@@ -928,7 +941,8 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
                     onDragStart={e=>{e.dataTransfer.setData("ciId",String(ci.id));e.dataTransfer.effectAllowed="move";}}
                     onDragOver={e=>{e.preventDefault();setListDragOverId(ci.id);}}
                     onDragLeave={()=>setListDragOverId(null)}
-                    onDrop={e=>{e.preventDefault();setListDragOverId(null);const srcId=parseInt(e.dataTransfer.getData("ciId"));if(srcId&&srcId!==ci.id){setTrip(t=>({...t,calendarItems:t.calendarItems.map(c=>c.id!==srcId?c:{...c,day:dayYMD})}));}}}
+                    onDrop={e=>{e.preventDefault();setListDragOverId(null);const srcId=parseInt(e.dataTransfer.getData("ciId"));if(srcId&&srcId!==ci.id){setTrip(t=>{const src=t.calendarItems.find(c=>c.id===srcId);if(src&&db)db.updateItem({...src,day:dayYMD});return{...t,calendarItems:t.calendarItems.map(c=>c.id!==srcId?c:{...c,day:dayYMD})};});}}}
+
                     onClick={()=>onEditItem(ci)}>
                     <span className="ci-drag">⠿</span>
                     <span className="ci-icon">{TI(ci.type)}</span>
@@ -969,7 +983,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
 }
 
 // ─── SCHEDULE TAB ─────────────────────────────────────────────────────────────
-function ScheduleTab({trip,setTrip}) {
+function ScheduleTab({trip,setTrip,db}) {
   const {startDate,endDate} = trip;
   const tripDays=useMemo(()=>buildTripDays(startDate,endDate),[startDate,endDate]);
   const [activeDay,setActiveDay] = useState(startDate||null);
@@ -998,8 +1012,7 @@ function ScheduleTab({trip,setTrip}) {
 
   return (
     <div>
-      {editingItem && <UniversalEditModal item={editingItem} trip={trip} setTrip={setTrip} onClose={()=>setEditingItem(null)}/>}
-      <div className="flex-between" style={{marginBottom:18,flexWrap:"wrap",gap:10}}>
+      {editingItem && <UniversalEditModal item={editingItem} trip={trip} setTrip={setTrip} onClose={()=>setEditingItem(null)} db={db}/>}
         <div>
           <h4 style={{fontFamily:"Syne",fontSize:18,fontWeight:700,marginBottom:4}}>Trip Schedule</h4>
           <p className="text-muted">{fmtRange(startDate,endDate)} · {nights} night{nights!==1?"s":""} · {tripDays.length} day{tripDays.length!==1?"s":""}</p>
@@ -1022,7 +1035,7 @@ function ScheduleTab({trip,setTrip}) {
               <DayBlock dayYMD={ymd} dayNum={idx+1} totalDays={tripDays.length}
                 trip={trip} setTrip={setTrip}
                 isOpen={openDays.has(ymd)} onToggleOpen={()=>toggleDay(ymd)}
-                onEditItem={setEditingItem}/>
+                onEditItem={setEditingItem} db={db}/>
             </div>
           ))}
         </div>
@@ -1032,7 +1045,7 @@ function ScheduleTab({trip,setTrip}) {
 }
 
 // ─── MAP TAB (Google My Maps) ─────────────────────────────────────────────────
-function MapTab({trip,setTrip}) {
+function MapTab({trip,setTrip,db}) {
   const savedUrl = trip.googleMapsUrl || "";
   const [inputUrl,setInputUrl] = useState(savedUrl);
   const [editing,setEditing]   = useState(!savedUrl);
@@ -1053,11 +1066,12 @@ function MapTab({trip,setTrip}) {
     const id=parseMapId(inputUrl.trim());
     if(!id){setErr("Couldn't find a map ID. Make sure you're copying from a Google My Maps link (it should contain ?mid=…).");return;}
     setErr("");
+    if(db) db.updateTrip(trip.id, { google_maps_url: inputUrl.trim() });
     setTrip(t=>({...t,googleMapsUrl:inputUrl.trim()}));
     setEditing(false);
   };
 
-  const clear=()=>{setTrip(t=>({...t,googleMapsUrl:""}));setInputUrl("");setEditing(true);setErr("");};
+  const clear=()=>{ if(db) db.updateTrip(trip.id, { google_maps_url: "" }); setTrip(t=>({...t,googleMapsUrl:""}));setInputUrl("");setEditing(true);setErr(""); };
 
   const copyUrl=text=>{
     navigator.clipboard?.writeText(text).catch(()=>{});
@@ -1191,7 +1205,7 @@ function MapTab({trip,setTrip}) {
 }
 
 // ─── ACTIVITIES TAB ───────────────────────────────────────────────────────────
-function ActivityTab({trip,setTrip,user}) {
+function ActivityTab({trip,setTrip,user,db}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
   const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:""});
@@ -1206,29 +1220,29 @@ function ActivityTab({trip,setTrip,user}) {
     setErrs(e); return !Object.keys(e).length;
   };
 
-  const addItem=()=>{
+  const addItem=async ()=>{
     if(!validate()) return;
     const startMin=timeStrToMin(form.startTime)??null;
-    setTrip(t=>({...t,calendarItems:[...t.calendarItems,{
+    const newItem={
       id:uid(),type:form.type,title:form.title.trim(),
       day:form.day||null,startTime:form.startTime||null,startMin,
       durationMin:+form.durationMin||60,location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
       metadata:{description:form.description,notes:form.notes,upvotes:[],downvotes:[],createdBy:user}
-    }]}));
+    };
+    const saved = await db.addItem(trip.id, newItem);
+    setTrip(t=>({...t,calendarItems:[...t.calendarItems,saved]}));
     setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:""});
     setShowAdd(false);
   };
 
-  const del=id=>setTrip(t=>({...t,calendarItems:t.calendarItems.filter(c=>c.id!==id)}));
+  const del=id=>{ db.deleteItem(id); setTrip(t=>({...t,calendarItems:t.calendarItems.filter(c=>c.id!==id)})); };
   const F=k=>({value:form[k],onChange:e=>setForm(f=>({...f,[k]:e.target.value})),className:"form-input"});
 
   return (
     <div>
-      {editingItem && <UniversalEditModal item={editingItem} trip={trip} setTrip={setTrip} onClose={()=>setEditingItem(null)}/>}
-      <div className="section-hdr">
-        <h4>🎯 All Trip Items</h4>
+      {editingItem && <UniversalEditModal item={editingItem} trip={trip} setTrip={setTrip} onClose={()=>setEditingItem(null)} db={db}/>}
         <button className="btn btn-accent2 btn-sm" onClick={()=>setShowAdd(v=>!v)}>+ Add Item</button>
       </div>
       <p className="text-muted" style={{marginBottom:14}}>All trip items — activities, meals, transport, hotels, notes. Click any to edit.</p>
@@ -1339,19 +1353,30 @@ function ActivityTab({trip,setTrip,user}) {
 }
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
-function VotingTab({trip,setTrip,user}) {
-  const voteItem=(section,id)=>setTrip(t=>({
-    ...t,[section]:t[section].map(item=>item.id!==id?item:{...item,votes:item.votes.includes(user)?item.votes.filter(v=>v!==user):[...item.votes,user]})
-  }));
+function VotingTab({trip,setTrip,user,db}) {
+  const voteItem=(section,id)=>{
+    const items=trip[section];
+    const item=items.find(i=>i.id===id);
+    if(!item) return;
+    const hasVote=item.votes.includes(user);
+    const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
+    if(db) db.upsertVote(trip.id, section, id, user, hasVote?0:1);
+    setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
+  };
 
-  const voteCI=(id,dir)=>setTrip(t=>({
-    ...t,calendarItems:t.calendarItems.map(ci=>{
-      if(ci.id!==id) return ci;
-      const up=ci.metadata?.upvotes||[],down=ci.metadata?.downvotes||[];
-      if(dir==="up"){const has=up.includes(user);return{...ci,metadata:{...ci.metadata,upvotes:has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user],downvotes:down.filter(u=>u!==user)}};}
-      else{const has=down.includes(user);return{...ci,metadata:{...ci.metadata,downvotes:has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user],upvotes:up.filter(u=>u!==user)}};}
-    })
-  }));
+  const voteCI=(id,dir)=>{
+    setTrip(t=>({
+      ...t,calendarItems:t.calendarItems.map(ci=>{
+        if(ci.id!==id) return ci;
+        const up=ci.metadata?.upvotes||[],down=ci.metadata?.downvotes||[];
+        let newUp,newDown;
+        if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user];newDown=down.filter(u=>u!==user);}
+        else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user];newUp=up.filter(u=>u!==user);}
+        if(db) db.updateVotes(id, newUp, newDown);
+        return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
+      })
+    }));
+  };
 
   const renderSection=(title,items,key,emoji)=>{
     const max=Math.max(...items.map(i=>i.votes.length),1);
@@ -1444,7 +1469,7 @@ function calcAllAccomTotal(accommodationOptions) {
 }
 
 // ─── BUDGET TAB ───────────────────────────────────────────────────────────────
-function BudgetTab({trip, setTrip, user}) {
+function BudgetTab({trip, setTrip, user, onSaveBudget}) {
   const memberCount = trip.members.length || 1;
   const items = trip.calendarItems || [];
 
@@ -1457,6 +1482,7 @@ function BudgetTab({trip, setTrip, user}) {
   const saveBudget = () => {
     const val = budgetInput ? +budgetInput : null;
     setTrip(t => ({ ...t, personalBudgets: { ...(t.personalBudgets||{}), [user]: val } }));
+    if(onSaveBudget) onSaveBudget(val);
     setEditingBudget(false);
   };
 
@@ -1667,7 +1693,7 @@ function BudgetTab({trip, setTrip, user}) {
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
 const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
-function AccommodationTab({trip,setTrip}) {
+function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
   const [editId,setEditId] = useState(null);
   const [form,setForm] = useState(BLANK_A);
@@ -1684,17 +1710,22 @@ function AccommodationTab({trip,setTrip}) {
   const openAdd=()=>{setForm(BLANK_A);setEditId(null);setErrs({});setShow(true);};
   const openEdit=a=>{setForm({name:a.name,address:a.address||"",pricePerNight:String(a.pricePerNight||""),rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
 
-  const save=()=>{
+  const save=async ()=>{
     if(!validate()) return;
+    const formatted={...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",rating:form.rating?+form.rating:""};
     if(editId){
-      setTrip(t=>({...t,accommodationOptions:t.accommodationOptions.map(a=>a.id===editId?{...a,...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",rating:form.rating?+form.rating:""}:a)}));
+      const updated={...trip.accommodationOptions.find(a=>a.id===editId),...formatted};
+      if(db) db.updateAccom(updated);
+      setTrip(t=>({...t,accommodationOptions:t.accommodationOptions.map(a=>a.id===editId?updated:a)}));
     } else {
-      setTrip(t=>({...t,accommodationOptions:[...t.accommodationOptions,{id:uid(),tripId:t.id,...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",rating:form.rating?+form.rating:""}]}));
+      const newAccom={id:uid(),tripId:trip.id,...formatted};
+      const saved = db ? await db.addAccom(trip.id, newAccom) : newAccom;
+      setTrip(t=>({...t,accommodationOptions:[...t.accommodationOptions,saved]}));
     }
     setShow(false);
   };
 
-  const del=id=>setTrip(t=>({...t,accommodationOptions:t.accommodationOptions.filter(a=>a.id!==id)}));
+  const del=id=>{ if(db) db.deleteAccom(id); setTrip(t=>({...t,accommodationOptions:t.accommodationOptions.filter(a=>a.id!==id)})); };
   const F=k=>({value:form[k],onChange:e=>setForm(f=>({...f,[k]:e.target.value})),className:`form-input${errs[k]?" err":""}`});
 
   return (
@@ -1752,7 +1783,7 @@ function AccommodationTab({trip,setTrip}) {
 }
 
 // ─── TRIP INFO TAB ────────────────────────────────────────────────────────────
-function TripInfoTab({trip,setTrip}) {
+function TripInfoTab({trip,setTrip,db}) {
   const [editing,setEditing] = useState(false);
   const [form,setForm] = useState({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});
   const [errs,setErrs] = useState({});
@@ -1770,6 +1801,12 @@ function TripInfoTab({trip,setTrip}) {
 
   const save=()=>{
     if(!validate()) return;
+    if(db) db.updateTrip(trip.id, {
+      name:       form.name.trim(),
+      start_date: form.startDate,
+      end_date:   form.endDate,
+      description:form.description,
+    });
     setTrip(t=>({...t,name:form.name.trim(),startDate:form.startDate,endDate:form.endDate,description:form.description,
       destinations:t.destinations.map((d,i)=>i===0?{...d,name:form.destination.trim()}:d)}));
     setEditing(false);
@@ -1813,12 +1850,16 @@ function TripInfoTab({trip,setTrip}) {
 }
 
 // ─── COUNTRY TAB ─────────────────────────────────────────────────────────────
-function CountryTab({trip,setTrip}) {
+function CountryTab({trip,setTrip,db}) {
   const c=trip.country||{};
   const [editing,setEditing] = useState(false);
   const [form,setForm] = useState({visa:c.visa||"",passport:c.passport||"",advisory:c.advisory||"",currency:c.currency||"",language:c.language||"",notes:c.notes||""});
   useMemo(()=>{const cc=trip.country||{};setForm({visa:cc.visa||"",passport:cc.passport||"",advisory:cc.advisory||"",currency:cc.currency||"",language:cc.language||"",notes:cc.notes||""});},[trip.id]);
-  const save=()=>{setTrip(t=>({...t,country:{...(t.country||{}),...form}}));setEditing(false);};
+  const save=()=>{
+    if(db) db.updateTrip(trip.id, { country_info: form });
+    setTrip(t=>({...t,country:{...(t.country||{}),...form}}));
+    setEditing(false);
+  };
   const FIELDS=[{key:"visa",icon:"🛂",label:"Visa Requirements"},{key:"passport",icon:"📘",label:"Passport Validity"},{key:"advisory",icon:"⚠️",label:"Travel Advisory"},{key:"currency",icon:"💱",label:"Currency"},{key:"language",icon:"🗣️",label:"Language"}];
   if(!editing) return (
     <div className="country-card">
@@ -1849,17 +1890,30 @@ function CountryTab({trip,setTrip}) {
 }
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
-function MembersTab({trip,setTrip,user}) {
+function MembersTab({trip,setTrip,user,db}) {
   const [emailInput,setEmailInput] = useState("");
   const [emailErr,setEmailErr] = useState("");
   const [invitations,setInvitations] = useState([]);
   const [copied,setCopied] = useState(false);
   const [link] = useState(()=>`tripsync.app/join/${Math.random().toString(36).slice(2,8)}`);
   const members=trip.tripMembers||trip.members.map((name,i)=>({userId:name,name,role:i===0?"owner":"editor",joinedAt:trip.startDate||"2026-01-01"}));
-  const sendInvite=()=>{
+
+  const sendInvite=async ()=>{
     if(!emailInput.trim()){setEmailErr("Enter email");return;}
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim())){setEmailErr("Invalid email");return;}
-    setEmailErr("");setInvitations(prev=>[...prev,{id:uid(),email:emailInput.trim()}]);setEmailInput("");
+    setEmailErr("");
+    const email=emailInput.trim();
+    // Write invite to notifications table so the recipient can see it when they sign in
+    if(db && !db.isMock) {
+      await supabase.from("notifications").insert({
+        trip_id:  trip.id,
+        type:     "invite",
+        message:  `You've been invited to join "${trip.name}"`,
+        metadata: { invited_email: email, invited_by: user },
+      });
+    }
+    setInvitations(prev=>[...prev,{id:uid(),email}]);
+    setEmailInput("");
   };
   return (
     <div>
@@ -2046,8 +2100,10 @@ const INITIAL_TRIPS = [
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [page,setPage]         = useState("landing");
-  const [trips,setTrips]       = useState(INITIAL_TRIPS);
+  const [trips,setTrips]       = useState([]);
+  const [tripsLoading,setTripsLoading] = useState(false);
   const [active,setActive]     = useState(null);
+  const [tripLoading,setTripLoading] = useState(false);
   const [tab,setTab]           = useState("schedule");
   const [showNew,setShowNew]   = useState(false);
 
@@ -2163,11 +2219,285 @@ export default function App() {
     setTimeout(() => { window.location.href = "/"; }, 3000);
   };
 
-  const updateTrip = t => { setTrips(ts=>ts.map(x=>x.id===t.id?t:x)); setActive(t); };
-  const openTrip   = t => { setActive(t); setTab("schedule"); setPage("trip"); };
-  const createTrip = t => { setTrips(ts=>[...ts,t]); setShowNew(false); setActive(t); setTab("schedule"); setPage("trip"); };
+  // ── Load trips for the logged-in user ──
+  const loadTrips = async () => {
+    setTripsLoading(true);
+    const { data, error } = await supabase
+      .from("trips")
+      .select(`
+        id, name, status, start_date, end_date, description,
+        google_maps_url, country_info,
+        trip_members ( user_id, role, joined_at, profiles ( full_name ) )
+      `)
+      .order("created_at", { ascending: false });
 
-  // ── While checking session on first load, show nothing (avoid flash) ──
+    if(error) { console.error("loadTrips:", error); setTripsLoading(false); return; }
+
+    if(!data || data.length === 0) {
+      // No real trips yet — fall back to mock data so the app isn't empty
+      setTrips(INITIAL_TRIPS);
+    } else {
+      setTrips(data.map(t => ({
+        id:          t.id,
+        name:        t.name,
+        status:      t.status || "planning",
+        startDate:   t.start_date,
+        endDate:     t.end_date,
+        members:     (t.trip_members||[]).map(m => m.profiles?.full_name || m.user_id),
+        tripMembers: (t.trip_members||[]).map(m => ({
+          userId:   m.user_id,
+          name:     m.profiles?.full_name || m.user_id,
+          role:     m.role,
+          joinedAt: m.joined_at,
+        })),
+        // These will be filled when the trip is opened
+        destinations:       t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : [],
+        accommodationOptions: [],
+        calendarItems:      [],
+        availability:       {},
+        personalBudgets:    {},
+        country:            t.country_info || null,
+        googleMapsUrl:      t.google_maps_url || "",
+        description:        t.description || "",
+      })));
+    }
+    setTripsLoading(false);
+  };
+
+  // ── Load full trip details when a trip is opened ──
+  const loadTripDetails = async (trip) => {
+    setTripLoading(true);
+
+    // Load calendar items (activities)
+    const { data: items } = await supabase
+      .from("activities")
+      .select("*")
+      .eq("trip_id", trip.id)
+      .order("created_at", { ascending: true });
+
+    // Load accommodations
+    const { data: accoms } = await supabase
+      .from("accommodations")
+      .select("*")
+      .eq("trip_id", trip.id);
+
+    const calendarItems = (items||[]).map(a => ({
+      id:          a.id,
+      type:        a.type || "activity",
+      title:       a.title,
+      day:         a.day,
+      startTime:   a.start_time,
+      startMin:    a.start_min,
+      durationMin: a.duration_min || 60,
+      location:    a.location || "",
+      price:       a.price || 0,
+      priceType:   a.price_type || "flat",
+      metadata: {
+        description: a.description || "",
+        notes:       a.notes || "",
+        upvotes:     a.upvotes || [],
+        downvotes:   a.downvotes || [],
+        createdBy:   a.created_by || "",
+        checkIn:     a.check_in || null,
+        checkOut:    a.check_out || null,
+        transportationTime: a.transportation_time || "",
+      },
+    }));
+
+    const accommodationOptions = (accoms||[]).map(a => ({
+      id:            a.id,
+      name:          a.name,
+      address:       a.address || "",
+      pricePerNight: a.price_per_night || 0,
+      rating:        a.rating || "",
+      checkIn:       a.check_in || "",
+      checkOut:      a.check_out || "",
+      notes:         a.notes || "",
+    }));
+
+    // Load personal budget for this user from profiles
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("personal_budget")
+      .eq("id", authUser.id)
+      .single();
+
+    const fullTrip = {
+      ...trip,
+      calendarItems,
+      accommodationOptions,
+      personalBudgets: { [user]: profile?.personal_budget ?? null },
+    };
+
+    setActive(fullTrip);
+    setTrips(ts => ts.map(t => t.id === trip.id ? fullTrip : t));
+    setTripLoading(false);
+  };
+
+  // ── Load trips when user logs in ──
+  useEffect(() => {
+    if(authUser) loadTrips();
+    else setTrips([]);
+  }, [authUser]);
+
+  // ── Save personal budget to Supabase profiles table ──
+  const savePersonalBudgetToDb = async (amount) => {
+    await supabase
+      .from("profiles")
+      .update({ personal_budget: amount })
+      .eq("id", authUser.id);
+  };
+
+  // ── Centralized DB write helpers — passed as `db` prop to all tabs ──
+  const isMock = trips.length > 0 && typeof trips[0].id === "number";
+
+  const db = {
+    // ── Activities (calendar items) ──
+    addItem: async (tripId, item) => {
+      if(isMock) return item;
+      const { data, error } = await supabase.from("activities").insert({
+        trip_id:            tripId,
+        type:               item.type,
+        title:              item.title,
+        day:                item.day || null,
+        start_time:         item.startTime || null,
+        start_min:          item.startMin  ?? null,
+        duration_min:       item.durationMin || 60,
+        location:           item.location || "",
+        price:              item.price || 0,
+        price_type:         item.priceType || "flat",
+        description:        item.metadata?.description || "",
+        notes:              item.metadata?.notes || "",
+        upvotes:            item.metadata?.upvotes || [],
+        downvotes:          item.metadata?.downvotes || [],
+        created_by:         item.metadata?.createdBy || "",
+        check_in:           item.metadata?.checkIn || null,
+        check_out:          item.metadata?.checkOut || null,
+        transportation_time:item.metadata?.transportationTime || null,
+      }).select().single();
+      if(error) { console.error("db.addItem:", error); return item; }
+      return { ...item, id: data.id };
+    },
+
+    updateItem: async (item) => {
+      if(isMock) return;
+      await supabase.from("activities").update({
+        type:               item.type,
+        title:              item.title,
+        day:                item.day || null,
+        start_time:         item.startTime || null,
+        start_min:          item.startMin  ?? null,
+        duration_min:       item.durationMin || 60,
+        location:           item.location || "",
+        price:              item.price || 0,
+        price_type:         item.priceType || "flat",
+        description:        item.metadata?.description || "",
+        notes:              item.metadata?.notes || "",
+        upvotes:            item.metadata?.upvotes || [],
+        downvotes:          item.metadata?.downvotes || [],
+        check_in:           item.metadata?.checkIn || null,
+        check_out:          item.metadata?.checkOut || null,
+        transportation_time:item.metadata?.transportationTime || null,
+      }).eq("id", item.id);
+    },
+
+    deleteItem: async (id) => {
+      if(isMock) return;
+      await supabase.from("activities").delete().eq("id", id);
+    },
+
+    updateVotes: async (itemId, upvotes, downvotes) => {
+      if(isMock) return;
+      await supabase.from("activities").update({ upvotes, downvotes }).eq("id", itemId);
+    },
+
+    // ── Votes table (destination/budget votes) ──
+    upsertVote: async (tripId, itemType, itemId, userId, value) => {
+      if(isMock) return;
+      await supabase.from("votes").upsert({
+        trip_id: tripId, item_type: itemType, item_id: String(itemId),
+        user_id: userId, value,
+      }, { onConflict: "trip_id,item_type,item_id,user_id" });
+    },
+
+    // ── Accommodations ──
+    addAccom: async (tripId, accom) => {
+      if(isMock) return accom;
+      const { data, error } = await supabase.from("accommodations").insert({
+        trip_id:         tripId,
+        name:            accom.name,
+        address:         accom.address || "",
+        price_per_night: accom.pricePerNight || null,
+        rating:          accom.rating || null,
+        check_in:        accom.checkIn || null,
+        check_out:       accom.checkOut || null,
+        notes:           accom.notes || "",
+      }).select().single();
+      if(error) { console.error("db.addAccom:", error); return accom; }
+      return { ...accom, id: data.id };
+    },
+
+    updateAccom: async (accom) => {
+      if(isMock) return;
+      await supabase.from("accommodations").update({
+        name:            accom.name,
+        address:         accom.address || "",
+        price_per_night: accom.pricePerNight || null,
+        rating:          accom.rating || null,
+        check_in:        accom.checkIn || null,
+        check_out:       accom.checkOut || null,
+        notes:           accom.notes || "",
+      }).eq("id", accom.id);
+    },
+
+    deleteAccom: async (id) => {
+      if(isMock) return;
+      await supabase.from("accommodations").delete().eq("id", id);
+    },
+
+    // ── Trip metadata (name, dates, status, destination, map URL, country info) ──
+    updateTrip: async (tripId, fields) => {
+      if(isMock) return;
+      await supabase.from("trips").update(fields).eq("id", tripId);
+    },
+  };
+
+  // ── Trip handlers ──
+  const updateTrip = t => { setTrips(ts=>ts.map(x=>x.id===t.id?t:x)); setActive(t); };
+
+  const openTrip = t => {
+    setTab("schedule");
+    setPage("trip");
+    // Supabase trips have UUID string ids; mock trips have numeric ids
+    if(typeof t.id === "string") {
+      loadTripDetails(t);
+    } else {
+      setActive(t);
+    }
+  };
+
+  const createTrip = async (t) => {
+    // If currently showing mock data (numeric ids), stay in mock mode
+    if(trips.length > 0 && typeof trips[0].id === "number") {
+      setTrips(ts=>[...ts,t]);
+      setShowNew(false); setActive(t); setTab("schedule"); setPage("trip");
+      return;
+    }
+    // Insert into Supabase
+    const { data: newTrip, error } = await supabase
+      .from("trips")
+      .insert({ name: t.name, status: "planning", start_date: t.startDate, end_date: t.endDate })
+      .select()
+      .single();
+    if(error) { console.error("createTrip:", error); return; }
+    // Add creator as owner in trip_members
+    await supabase.from("trip_members").insert({
+      trip_id: newTrip.id, user_id: authUser.id, role: "owner",
+    });
+    await loadTrips();
+    const fullNewTrip = { ...t, id: newTrip.id, calendarItems:[], accommodationOptions:[] };
+    setActive(fullNewTrip); setShowNew(false); setTab("schedule"); setPage("trip");
+  };
   if(authLoading) return (
     <>
       <style>{FONT+CSS}</style>
@@ -2294,6 +2624,12 @@ export default function App() {
               <div><h2 style={{fontFamily:"Syne",fontSize:28,fontWeight:800,marginBottom:6}}>My Trips 🗺️</h2><p style={{color:"var(--muted)",fontSize:15}}>Welcome back, {user}.</p></div>
               <button className="btn btn-primary" onClick={()=>setShowNew(true)}>+ New Trip</button>
             </div>
+            {tripsLoading ? (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"80px 0",gap:12}}>
+                <div style={{width:22,height:22,border:"3px solid var(--border)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+                <span style={{color:"var(--muted)",fontSize:14}}>Loading your trips…</span>
+              </div>
+            ) : (
             <div className="trip-grid">
               {trips.map(trip=>(
                 <div key={trip.id} className="trip-card" onClick={()=>openTrip(trip)}>
@@ -2317,6 +2653,7 @@ export default function App() {
                 <div style={{textAlign:"center"}}><div style={{fontSize:36,marginBottom:8}}>+</div><div style={{color:"var(--muted)",fontSize:14}}>Create new trip</div></div>
               </div>
             </div>
+            )}
           </div>
         )}
 
@@ -2329,19 +2666,26 @@ export default function App() {
               {active.startDate&&<span className="badge" style={{fontSize:12}}>📅 {fmtRange(active.startDate,active.endDate)}</span>}
               <button className="btn btn-ghost btn-sm" style={{marginLeft:"auto"}} onClick={()=>setTab("info")}>✏️ Edit Trip</button>
             </div>
+            {tripLoading ? (
+              <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"80px 0",gap:12}}>
+                <div style={{width:22,height:22,border:"3px solid var(--border)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+                <span style={{color:"var(--muted)",fontSize:14}}>Loading trip details…</span>
+              </div>
+            ) : (
+            <>
             <div className="section-tabs">
               {TABS.map(t=><button key={t.id} className={`section-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>{t.l}</button>)}
             </div>
             <div className="section-content">
-              {tab==="info"           && <TripInfoTab trip={active} setTrip={updateTrip}/>}
-              {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip}/>}
-              {tab==="map"            && <MapTab trip={active} setTrip={updateTrip}/>}
-              {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user}/>}
-              {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user}/>}
-              {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip}/>}
-              {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user}/>}
-              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user}/>}
-              {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip}/>}
+              {tab==="info"           && <TripInfoTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="map"            && <MapTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb}/>}
+              {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
           </div>
