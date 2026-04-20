@@ -1013,6 +1013,7 @@ function ScheduleTab({trip,setTrip,db}) {
   return (
     <div>
       {editingItem && <UniversalEditModal item={editingItem} trip={trip} setTrip={setTrip} onClose={()=>setEditingItem(null)} db={db}/>}
+      <div className="flex-between" style={{marginBottom:18,flexWrap:"wrap",gap:10}}>
         <div>
           <h4 style={{fontFamily:"Syne",fontSize:18,fontWeight:700,marginBottom:4}}>Trip Schedule</h4>
           <p className="text-muted">{fmtRange(startDate,endDate)} · {nights} night{nights!==1?"s":""} · {tripDays.length} day{tripDays.length!==1?"s":""}</p>
