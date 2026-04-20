@@ -2691,6 +2691,8 @@ export default function App() {
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
+            </>
+            )}
           </div>
         )}
 
