@@ -2108,6 +2108,8 @@ export default function App() {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
+      // If a session exists, go straight to the dashboard
+      if(session?.user) setPage("dashboard");
       setAuthLoading(false);
     });
 
@@ -2115,6 +2117,9 @@ export default function App() {
     // Also covers the race condition where onAuthStateChange fires before getSession resolves.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthUser(session?.user ?? null);
+      // On sign-in redirect to dashboard; on sign-out go to landing
+      if(session?.user) setPage("dashboard");
+      else setPage("landing");
       setAuthLoading(false);
     });
 
