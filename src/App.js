@@ -2136,10 +2136,13 @@ export default function App() {
     });
     setAuthBusy(false);
     if(error) { setAuthError(error.message); return; }
-    // Supabase sends a confirmation email by default.
-    // For now, show a friendly message (we can disable email confirmation in Supabase dashboard for dev).
-    setAuthError("✅ Account created! Check your email to confirm, then sign in.");
+    // Sign out immediately so the user is not auto-logged in after signup.
+    // They must sign in manually after account creation.
+    await supabase.auth.signOut();
+    setAuthUser(null);
+    setAuthError("✅ Account created! You can now sign in.");
     setAuthMode("login");
+    setLoginForm(f => ({ ...f, password: "", confirmPassword: "" }));
   };
 
   // ── Sign In ──
@@ -2148,19 +2151,13 @@ export default function App() {
     if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
     if(!loginForm.password) { setAuthError("Please enter your password."); return; }
     setAuthBusy(true);
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email: loginForm.email.trim(),
       password: loginForm.password,
     });
     setAuthBusy(false);
     if(error) { setAuthError(error.message); return; }
-    // Explicitly set the session so the client uses the user JWT for all future requests
-    if(data.session) {
-      await supabase.auth.setSession({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-      });
-    }
+    // onAuthStateChange will fire and set authUser — no manual setAuthUser needed here
     setShowLogin(false);
     setLoginForm({name:"",email:"",password:"",confirmPassword:""});
     setPage("dashboard");
@@ -2458,23 +2455,23 @@ export default function App() {
     }
   };
 
- const createTrip = async (t) => {
+  const createTrip = async (t) => {
     // If currently showing mock data (numeric ids), stay in mock mode
     if(trips.length > 0 && typeof trips[0].id === "number") {
       setTrips(ts=>[...ts,t]);
       setShowNew(false); setActive(t); setTab("schedule"); setPage("trip");
       return;
     }
-    const uid = authUser?.id;
+    // Insert into Supabase
     const { data: newTrip, error } = await supabase
       .from("trips")
-      .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: uid })
+      .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: authUser.id })
       .select()
       .single();
     if(error) { console.error("createTrip:", error); throw new Error(error.message); }
     // Add creator as owner in trip_members
     await supabase.from("trip_members").insert({
-      trip_id: newTrip.id, user_id: uid, role: "owner",
+      trip_id: newTrip.id, user_id: authUser.id, role: "owner",
     });
     await loadTrips();
     const fullNewTrip = { ...t, id: newTrip.id, calendarItems:[], accommodationOptions:[] };
