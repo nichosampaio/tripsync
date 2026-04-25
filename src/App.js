@@ -2044,31 +2044,64 @@ function NewTripModal({onClose,onCreate,user}) {
 // ── Demo trip shown to every new user so they can explore the app ──
 const DEMO_TRIP = {
   id:"demo-barcelona", name:"Study Abroad Weekend – Barcelona", status:"confirmed", isDemo:true,
-  startDate:"2025-10-18", endDate:"2025-10-20",
-  budgetLimit:1200, googleMapsUrl:"",
-  members:["Alex","Jamie","Sam","Taylor"],
+  startDate:"2025-10-17", endDate:"2025-10-21",
+  budgetLimit:1500, googleMapsUrl:"https://www.google.com/maps/d/embed?mid=1BwLTXJGSLCYBDaWQFsrJIqX5tFjZGzo",
+  members:["Alex","Jamie","Sam","Taylor","Morgan"],
   tripMembers:[
     {userId:"Alex",name:"Alex",role:"owner",joinedAt:"2025-06-01"},
     {userId:"Jamie",name:"Jamie",role:"editor",joinedAt:"2025-06-02"},
     {userId:"Sam",name:"Sam",role:"editor",joinedAt:"2025-06-03"},
-    {userId:"Taylor",name:"Taylor",role:"viewer",joinedAt:"2025-06-04"},
+    {userId:"Taylor",name:"Taylor",role:"editor",joinedAt:"2025-06-04"},
+    {userId:"Morgan",name:"Morgan",role:"viewer",joinedAt:"2025-06-05"},
   ],
-  destinations:[{id:1,name:"Barcelona 🇪🇸",votes:["Alex","Jamie","Sam","Taylor"]}],
-  budgets:{"$300–500":1,"$500–800":2,"$800+":1},
+  destinations:[
+    {id:1,name:"Barcelona 🇪🇸",votes:["Alex","Jamie","Sam","Taylor","Morgan"]},
+    {id:2,name:"Madrid 🏛️",votes:["Morgan","Taylor"]},
+    {id:3,name:"Seville 🌺",votes:["Jamie"]},
+  ],
+  budgets:{"$300–500":1,"$500–800":2,"$800+":2},
+  personalBudgets:{Alex:900,Jamie:750,Sam:800,Taylor:950,Morgan:700},
   accommodations:[],
   accommodationOptions:[
-    {id:30,name:"Eixample Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-18",checkOut:"2025-10-20",notes:"Rooftop terrace, near Sagrada Família"},
+    {id:30,name:"Eixample Design Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Rooftop terrace, sleeps 5, near Sagrada Família. VOTED FAVOURITE ✓"},
+    {id:31,name:"Gothic Quarter Hostel — Private Room",address:"Carrer dels Escudellers 18, Barcelona",pricePerNight:95,rating:4.3,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Central location, breakfast included, tight on space."},
+    {id:32,name:"Barceloneta Beach Hotel",address:"Passeig de Joan de Borbó 80, Barcelona",pricePerNight:185,rating:4.6,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Ocean views, rooftop pool, 5 min walk to beach."},
   ],
   calendarItems:[
-    {id:40,type:"activity",title:"Sagrada Família",day:"2025-10-18",startTime:"10:00",startMin:600,durationMin:120,location:"Carrer de Mallorca 401, Barcelona",price:26,metadata:{description:"Gaudí's iconic basilica.",notes:"Tower access extra.",upvotes:["Alex","Jamie","Sam","Taylor"],downvotes:[],createdBy:"Alex"}},
-    {id:41,type:"activity",title:"Gothic Quarter Walk",day:"2025-10-18",startTime:"13:00",startMin:780,durationMin:180,location:"Barri Gòtic, Barcelona",price:0,metadata:{description:"2000 years of history on foot.",notes:"Free self-guided.",upvotes:["Alex","Taylor"],downvotes:[],createdBy:"Jamie"}},
-    {id:42,type:"activity",title:"La Barceloneta Beach",day:"2025-10-19",startTime:"12:00",startMin:720,durationMin:240,location:"Barceloneta, Barcelona",price:15,metadata:{description:"City beach with chiringuitos.",upvotes:["Sam","Jamie"],downvotes:[],createdBy:"Sam"}},
-    {id:43,type:"activity",title:"Park Güell",day:"2025-10-20",startTime:"10:30",startMin:630,durationMin:120,location:"Carrer d'Olot, Barcelona",price:13,metadata:{description:"Gaudí's mosaic terrace park.",notes:"Tickets required for main terrace.",upvotes:["Alex","Sam"],downvotes:["Jamie"],createdBy:"Taylor"}},
-    {id:60,type:"meal",title:"Tapas Dinner — El Xampanyet",day:"2025-10-18",startTime:"20:00",startMin:1200,durationMin:90,location:"Carrer del Montcada 22, Barcelona",price:28,metadata:{notes:"Legendary cava bar in El Born.",upvotes:[],downvotes:[],createdBy:"Jamie"}},
-    {id:61,type:"transport",title:"Aerobus to Airport",day:"2025-10-20",startTime:"08:30",startMin:510,durationMin:35,location:"Plaça Catalunya",price:6,metadata:{notes:"Direct to T1/T2.",upvotes:[],downvotes:[],createdBy:"Alex"}},
+    // ── Day 1: Arrival — Oct 17 ──
+    {id:50,type:"transport",title:"Flight Arrival — El Prat Airport (T1)",day:"2025-10-17",startTime:"11:30",startMin:690,durationMin:30,location:"Barcelona–El Prat Airport, Terminal 1",price:0,metadata:{notes:"All 5 meeting at arrivals. Alex lands 11:30, others 12:00.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex",transportationTime:30}},
+    {id:51,type:"transport",title:"Aerobus to City Centre",day:"2025-10-17",startTime:"12:30",startMin:750,durationMin:35,location:"Plaça Catalunya, Barcelona",price:6,metadata:{notes:"Runs every 5 min, drops at Plaça Catalunya.",upvotes:["Alex","Sam","Taylor"],downvotes:[],createdBy:"Alex",transportationTime:35}},
+    {id:52,type:"hotel",title:"Check-In — Eixample Design Apartment",day:"2025-10-17",startTime:"15:00",startMin:900,durationMin:30,location:"Carrer de Provença 200, Barcelona",price:210,metadata:{checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"4 nights. Host sends code at 14:00.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex"}},
+    {id:53,type:"meal",title:"Welcome Dinner — Bodega Sepúlveda",day:"2025-10-17",startTime:"20:30",startMin:1230,durationMin:105,location:"Carrer de Sepúlveda 173, Barcelona",price:32,metadata:{notes:"Reservation under Alex, 5 pax. Try the patatas bravas.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Jamie"}},
+    // ── Day 2: Gaudí & Gothic — Oct 18 ──
+    {id:40,type:"activity",title:"Sagrada Família — Guided Tour",day:"2025-10-18",startTime:"09:30",startMin:570,durationMin:150,location:"Carrer de Mallorca 401, Barcelona",price:26,metadata:{description:"Gaudí's unfinished masterpiece — book tower access in advance.",notes:"Skip-the-line tickets purchased. Tower access extra €14.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex"}},
+    {id:54,type:"meal",title:"Brunch — Federal Café",day:"2025-10-18",startTime:"12:30",startMin:750,durationMin:60,location:"Carrer del Parlament 39, Barcelona",price:18,metadata:{notes:"Famous avocado toast. Arrive early — gets busy.",upvotes:["Jamie","Sam","Morgan"],downvotes:[],createdBy:"Jamie"}},
+    {id:41,type:"activity",title:"Gothic Quarter & El Born Walk",day:"2025-10-18",startTime:"14:00",startMin:840,durationMin:180,location:"Barri Gòtic, Barcelona",price:0,metadata:{description:"Self-guided walk through 2000 years of history. Pick up a map at the apartment.",notes:"Free — just walking. Stop at Mercat de Santa Caterina.",upvotes:["Alex","Taylor","Morgan"],downvotes:[],createdBy:"Jamie"}},
+    {id:55,type:"activity",title:"Picasso Museum",day:"2025-10-18",startTime:"15:00",startMin:900,durationMin:90,location:"Carrer de Montcada 15-23, Barcelona",price:14,metadata:{description:"World's best collection of early Picasso works.",notes:"Free on Thursday evenings after 18:00.",upvotes:["Jamie","Sam"],downvotes:["Alex","Taylor"],createdBy:"Taylor"}},
+    {id:60,type:"meal",title:"Tapas Dinner — El Xampanyet",day:"2025-10-18",startTime:"20:00",startMin:1200,durationMin:90,location:"Carrer del Montcada 22, Barcelona",price:28,metadata:{notes:"Legendary cava bar in El Born. No reservations — arrive early or wait.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Jamie"}},
+    // ── Day 3: Beach & Nightlife — Oct 19 ──
+    {id:42,type:"activity",title:"La Barceloneta Beach Morning",day:"2025-10-19",startTime:"10:00",startMin:600,durationMin:180,location:"Barceloneta Beach, Barcelona",price:0,metadata:{description:"City beach — rent sun loungers or bring a towel.",upvotes:["Sam","Jamie","Morgan"],downvotes:[],createdBy:"Sam"}},
+    {id:56,type:"meal",title:"Seafood Lunch — La Cova Fumada",day:"2025-10-19",startTime:"13:30",startMin:810,durationMin:90,location:"Carrer del Baluard 56, Barcelona",price:22,metadata:{notes:"Cash only. Birthplace of the bombas — a Barcelona must.",upvotes:["Alex","Sam","Taylor"],downvotes:[],createdBy:"Sam"}},
+    {id:57,type:"activity",title:"Camp Nou Stadium Tour",day:"2025-10-19",startTime:"16:00",startMin:960,durationMin:120,location:"Carrer d'Aristides Maillol, Barcelona",price:30,metadata:{description:"FC Barcelona's iconic stadium — largest in Europe.",notes:"Tour includes museum & pitch access.",upvotes:["Alex","Taylor","Morgan"],downvotes:["Jamie"],createdBy:"Morgan"}},
+    {id:58,type:"activity",title:"Sunset at Bunkers del Carmel",day:"2025-10-19",startTime:"18:30",startMin:1110,durationMin:90,location:"Turó de la Rovira, Barcelona",price:0,metadata:{description:"Best 360° panoramic view of Barcelona — a hidden gem.",notes:"Bring snacks and drinks. 20 min uphill walk.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex"}},
+    {id:59,type:"meal",title:"Dinner — Cervecería Catalana",day:"2025-10-19",startTime:"21:00",startMin:1260,durationMin:90,location:"Carrer de Mallorca 236, Barcelona",price:30,metadata:{notes:"Best pintxos in Eixample. Reservation recommended.",upvotes:["Alex","Jamie","Taylor"],downvotes:[],createdBy:"Taylor"}},
+    // ── Day 4: Montjuïc & Park Güell — Oct 20 ──
+    {id:43,type:"activity",title:"Park Güell — Monumental Zone",day:"2025-10-20",startTime:"09:00",startMin:540,durationMin:120,location:"Carrer d'Olot, Barcelona",price:13,metadata:{description:"Gaudí's mosaic terrace park with sweeping city views.",notes:"Timed entry tickets required for main terrace — book online.",upvotes:["Alex","Sam","Taylor","Morgan"],downvotes:["Jamie"],createdBy:"Taylor"}},
+    {id:62,type:"activity",title:"Montjuïc Castle & Cable Car",day:"2025-10-20",startTime:"12:00",startMin:720,durationMin:150,location:"Ctra. de Montjuïc 66, Barcelona",price:16,metadata:{description:"Historic fortress with panoramic harbour views. Take the Teleféric cable car up.",notes:"Cable car €12.70 return. Castle entry included.",upvotes:["Jamie","Sam","Morgan"],downvotes:[],createdBy:"Jamie"}},
+    {id:63,type:"meal",title:"Farewell Dinner — Tickets (Albert Adrià)",day:"2025-10-20",startTime:"20:00",startMin:1200,durationMin:120,location:"Avinguda del Paral·lel 164, Barcelona",price:75,metadata:{notes:"Michelin-starred tapas bar. Reservation made 2 months in advance — DO NOT MISS.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex"}},
+    // ── Day 5: Departure — Oct 21 ──
+    {id:64,type:"hotel",title:"Check-Out — Eixample Apartment",day:"2025-10-21",startTime:"10:00",startMin:600,durationMin:30,location:"Carrer de Provença 200, Barcelona",price:0,metadata:{notes:"Luggage drop-off available until 14:00.",upvotes:[],downvotes:[],createdBy:"Alex"}},
+    {id:65,type:"meal",title:"Last Breakfast — Bar Calders",day:"2025-10-21",startTime:"09:00",startMin:540,durationMin:45,location:"Carrer del Parlament 25, Barcelona",price:12,metadata:{notes:"Classic neighbourhood café, best croissants in Sant Antoni.",upvotes:["Jamie","Sam","Morgan"],downvotes:[],createdBy:"Jamie"}},
+    {id:61,type:"transport",title:"Aerobus to Airport — Departure",day:"2025-10-21",startTime:"13:00",startMin:780,durationMin:35,location:"Plaça Catalunya → El Prat Airport",price:6,metadata:{notes:"Alex & Sam 15:45 flight. Others 17:20. All depart together.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex",transportationTime:35}},
   ],
-  availability:{},
-  country:{name:"Spain",visa:"No visa required (Schengen, under 90 days)",passport:"Valid 3 months after departure",advisory:"Normal precautions",currency:"Euro — ~0.92 EUR per USD",language:"Spanish / Catalan"},
+  availability:{
+    "2025-10-17":{Alex:"avail",Jamie:"avail",Sam:"avail",Taylor:"avail",Morgan:"avail"},
+    "2025-10-18":{Alex:"avail",Jamie:"avail",Sam:"avail",Taylor:"avail",Morgan:"unavail"},
+    "2025-10-19":{Alex:"avail",Jamie:"avail",Sam:"avail",Taylor:"unavail",Morgan:"avail"},
+    "2025-10-20":{Alex:"avail",Jamie:"unavail",Sam:"avail",Taylor:"avail",Morgan:"avail"},
+    "2025-10-21":{Alex:"avail",Jamie:"avail",Sam:"avail",Taylor:"avail",Morgan:"avail"},
+  },
+  country:{name:"Spain",visa:"No visa required for US citizens (Schengen Zone, under 90 days)",passport:"Must be valid for at least 3 months beyond departure date",advisory:"Level 1 — Exercise Normal Precautions (US State Dept)",currency:"Euro (€) — approx. $1.08 USD per €1",language:"Spanish (Castilian) & Catalan — English widely spoken in tourist areas",emergency:"112 (EU emergency number)"},
 };
 const INITIAL_TRIPS = [DEMO_TRIP];
 
