@@ -2460,15 +2460,18 @@ export default function App() {
       return;
     }
     // Insert into Supabase
+    const uid = authUser?.id;
+    console.log("authUser:", authUser);
+    console.log("uid being sent:", uid);
     const { data: newTrip, error } = await supabase
       .from("trips")
-      .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: authUser.id })
+      .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: uid })
       .select()
       .single();
     if(error) { console.error("createTrip:", error); throw new Error(error.message); }
     // Add creator as owner in trip_members
     await supabase.from("trip_members").insert({
-      trip_id: newTrip.id, user_id: authUser.id, role: "owner",
+      trip_id: newTrip.id, user_id: uid, role: "owner",
     });
     await loadTrips();
     const fullNewTrip = { ...t, id: newTrip.id, calendarItems:[], accommodationOptions:[] };
