@@ -2465,11 +2465,7 @@ export default function App() {
       setShowNew(false); setActive(t); setTab("schedule"); setPage("trip");
       return;
     }
-    const session = await supabase.auth.getSession();
-    console.log("SESSION TOKEN:", session.data.session?.access_token?.slice(0,20) || "NULL - NOT AUTHENTICATED");
     const uid = authUser?.id;
-    console.log("authUser:", authUser);
-    console.log("uid being sent:", uid);
     const { data: newTrip, error } = await supabase
       .from("trips")
       .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: uid })
