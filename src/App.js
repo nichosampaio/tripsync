@@ -1996,23 +1996,31 @@ function NewTripModal({onClose,onCreate,user}) {
   const [startDate,setStart] = useState(null);
   const [endDate,setEnd] = useState(null);
   const [errs,setErrs] = useState({});
-  const submit=()=>{
+  const [busy,setBusy] = useState(false);
+  const [submitErr,setSubmitErr] = useState("");
+  const submit=async()=>{
     const e={};
     if(!form.name.trim()) e.name="Required";
     if(!startDate) e.dates="Select start date";
     else if(!endDate) e.dates="Select end date";
     setErrs(e); if(Object.keys(e).length) return;
+    setSubmitErr(""); setBusy(true);
     const dests=form.destinations.split(",").map(d=>d.trim()).filter(Boolean).map((d,i)=>({id:i+1,name:d,votes:[]}));
-    onCreate({
-      id:uid(),name:form.name.trim(),status:"planning",
-      startDate,endDate,budgetLimit:null,
-      members:[user],
-      tripMembers:[{userId:user,name:user,role:"owner",joinedAt:toYMD(new Date())}],
-      destinations:dests.length?dests:[{id:1,name:"TBD",votes:[]}],
-      budgets:{"$300–500":0,"$500–800":0,"$800+":0},
-      accommodations:[],accommodationOptions:[],calendarItems:[],
-      availability:{},country:null,googleMapsUrl:""
-    });
+    try {
+      await onCreate({
+        id:uid(),name:form.name.trim(),status:"planning",
+        startDate,endDate,budgetLimit:null,
+        members:[user],
+        tripMembers:[{userId:user,name:user,role:"owner",joinedAt:toYMD(new Date())}],
+        destinations:dests.length?dests:[{id:1,name:"TBD",votes:[]}],
+        budgets:{"$300–500":0,"$500–800":0,"$800+":0},
+        accommodations:[],accommodationOptions:[],calendarItems:[],
+        availability:{},country:null,googleMapsUrl:""
+      });
+    } catch(err) {
+      setSubmitErr("Failed to create trip — check your connection and try again.");
+      setBusy(false);
+    }
   };
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -2021,9 +2029,10 @@ function NewTripModal({onClose,onCreate,user}) {
         <div className="form-group"><label className="form-label">Trip Name *</label><input className={`form-input${errs.name?" err":""}`} placeholder="e.g. Spring Break 2026" value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>{errs.name&&<div className="err-msg">{errs.name}</div>}</div>
         <div className="form-group"><label className="form-label">Destinations (comma separated)</label><input className="form-input" placeholder="e.g. Miami, Cancun" value={form.destinations} onChange={e=>setForm(f=>({...f,destinations:e.target.value}))}/></div>
         <div className="form-group"><label className="form-label">Trip Dates *</label>{errs.dates&&<div className="err-msg" style={{marginBottom:8}}>{errs.dates}</div>}<DatePicker startDate={startDate} endDate={endDate} onChange={(s,e)=>{setStart(s);setEnd(e);}}/></div>
+        {submitErr&&<div className="err-msg" style={{marginBottom:8,textAlign:"center"}}>{submitErr}</div>}
         <div className="form-actions">
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={submit}>Create Trip →</button>
+          <button className="btn btn-ghost" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn btn-primary" onClick={submit} disabled={busy}>{busy?"Creating…":"Create Trip →"}</button>
         </div>
       </div>
     </div>
@@ -2031,74 +2040,36 @@ function NewTripModal({onClose,onCreate,user}) {
 }
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
-const INITIAL_TRIPS = [
-  {
-    id:1, name:"Spring Break 2026", status:"planning",
-    startDate:"2026-03-14", endDate:"2026-03-18",
-    budgetLimit:4000, googleMapsUrl:"",
-    members:["Alex","Jamie","Sam","Taylor","Morgan","Riley","Drew","Casey"],
-    tripMembers:[
-      {userId:"Alex",name:"Alex",role:"owner",joinedAt:"2026-01-10"},
-      {userId:"Jamie",name:"Jamie",role:"editor",joinedAt:"2026-01-11"},
-      {userId:"Sam",name:"Sam",role:"editor",joinedAt:"2026-01-12"},
-      {userId:"Taylor",name:"Taylor",role:"editor",joinedAt:"2026-01-12"},
-      {userId:"Morgan",name:"Morgan",role:"editor",joinedAt:"2026-01-14"},
-      {userId:"Riley",name:"Riley",role:"editor",joinedAt:"2026-01-15"},
-      {userId:"Drew",name:"Drew",role:"viewer",joinedAt:"2026-01-16"},
-      {userId:"Casey",name:"Casey",role:"viewer",joinedAt:"2026-01-18"},
-    ],
-    destinations:[
-      {id:1,name:"Cancun 🇲🇽",votes:["Alex","Jamie","Sam","Taylor","Morgan"]},
-      {id:2,name:"Miami 🌴",votes:["Riley","Drew","Casey"]},
-      {id:3,name:"Puerto Rico 🏝️",votes:["Alex","Sam"]},
-    ],
-    budgets:{"$300–500":3,"$500–800":5,"$800+":2},
-    accommodations:[],
-    accommodationOptions:[
-      {id:10,name:"Beachside Airbnb",address:"Zona Hotelera, Cancun",pricePerNight:180,rating:4.8,checkIn:"2026-03-14",checkOut:"2026-03-18",notes:"Private pool, sleeps 8"},
-      {id:11,name:"Marriott Resort",address:"Blvd Kukulcan Km 14.5",pricePerNight:240,rating:4.5,checkIn:"2026-03-14",checkOut:"2026-03-18",notes:"All-inclusive option"},
-    ],
-    calendarItems:[
-      {id:20,type:"activity",title:"Snorkeling at Reef",day:"2026-03-15",startTime:"09:00",startMin:540,durationMin:180,location:"Mesoamerican Barrier Reef, Cancun",price:55,metadata:{description:"Guided snorkeling tour.",notes:"Reservation recommended.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[],createdBy:"Alex"}},
-      {id:21,type:"activity",title:"Catamaran Boat Tour",day:"2026-03-16",startTime:"08:00",startMin:480,durationMin:480,location:"Marina Cancun",price:85,metadata:{description:"Full-day sailing with open bar.",notes:"Book 48hrs ahead.",upvotes:["Alex","Sam","Riley"],downvotes:["Casey"],createdBy:"Jamie"}},
-      {id:22,type:"activity",title:"Chichen Itza Day Trip",day:null,startTime:"07:00",startMin:420,durationMin:600,location:"Chichen Itza, Yucatan",price:70,metadata:{description:"UNESCO World Heritage Site.",notes:"Very hot — bring water.",upvotes:["Jamie","Taylor"],downvotes:["Morgan","Drew"],createdBy:"Taylor"}},
-      {id:23,type:"activity",title:"Beach Club Day",day:"2026-03-17",startTime:"11:00",startMin:660,durationMin:360,location:"Zona Hotelera, Cancun",price:40,metadata:{description:"Premium beachfront club with pools.",notes:"Free entry before 11am.",upvotes:["Alex","Jamie","Sam","Taylor","Morgan","Riley","Drew"],downvotes:[],createdBy:"Morgan"}},
-      {id:50,type:"meal",title:"Welcome Dinner — La Habichuela",day:"2026-03-14",startTime:"19:00",startMin:1140,durationMin:90,location:"Downtown Cancun",price:35,metadata:{notes:"Reservation needed.",upvotes:[],downvotes:[],createdBy:"Alex"}},
-      {id:51,type:"hotel",title:"Check-In — Beachside Airbnb",day:"2026-03-14",startTime:"15:00",startMin:900,durationMin:30,location:"Zona Hotelera, Cancun",price:0,metadata:{checkIn:"2026-03-14",checkOut:"2026-03-18",notes:"4 nights",upvotes:[],downvotes:[],createdBy:"Alex"}},
-      {id:52,type:"transport",title:"Airport Transfer — Uber XL",day:"2026-03-18",startTime:"10:00",startMin:600,durationMin:45,location:"Cancun Airport",price:25,metadata:{notes:"Book in advance.",upvotes:[],downvotes:[],createdBy:"Alex",transportationTime:45}},
-    ],
-    availability:{},
-    country:{name:"Mexico",visa:"No visa required for US citizens (under 180 days)",passport:"Valid for duration of stay",advisory:"Normal precautions in tourist zones",currency:"Mexican Peso — ~17 MXN per USD",language:"Spanish"},
-  },
-  {
-    id:2, name:"Study Abroad Weekend – Barcelona", status:"confirmed",
-    startDate:"2026-10-18", endDate:"2026-10-20",
-    budgetLimit:1200, googleMapsUrl:"",
-    members:["Alex","Jamie","Sam","Taylor"],
-    tripMembers:[
-      {userId:"Alex",name:"Alex",role:"owner",joinedAt:"2026-06-01"},
-      {userId:"Jamie",name:"Jamie",role:"editor",joinedAt:"2026-06-02"},
-      {userId:"Sam",name:"Sam",role:"editor",joinedAt:"2026-06-03"},
-      {userId:"Taylor",name:"Taylor",role:"viewer",joinedAt:"2026-06-04"},
-    ],
-    destinations:[{id:1,name:"Barcelona 🇪🇸",votes:["Alex","Jamie","Sam","Taylor"]}],
-    budgets:{"$300–500":1,"$500–800":2,"$800+":1},
-    accommodations:[],
-    accommodationOptions:[
-      {id:30,name:"Eixample Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2026-10-18",checkOut:"2026-10-20",notes:"Rooftop terrace, near Sagrada Família"},
-    ],
-    calendarItems:[
-      {id:40,type:"activity",title:"Sagrada Família",day:"2026-10-18",startTime:"10:00",startMin:600,durationMin:120,location:"Carrer de Mallorca 401, Barcelona",price:26,metadata:{description:"Gaudí's iconic basilica.",notes:"Tower access extra.",upvotes:["Alex","Jamie","Sam","Taylor"],downvotes:[],createdBy:"Alex"}},
-      {id:41,type:"activity",title:"Gothic Quarter Walk",day:"2026-10-18",startTime:"13:00",startMin:780,durationMin:180,location:"Barri Gòtic, Barcelona",price:0,metadata:{description:"2000 years of history on foot.",notes:"Free self-guided.",upvotes:["Alex","Taylor"],downvotes:[],createdBy:"Jamie"}},
-      {id:42,type:"activity",title:"La Barceloneta Beach",day:"2026-10-19",startTime:"12:00",startMin:720,durationMin:240,location:"Barceloneta, Barcelona",price:15,metadata:{description:"City beach with chiringuitos.",upvotes:["Sam","Jamie"],downvotes:[],createdBy:"Sam"}},
-      {id:43,type:"activity",title:"Park Güell",day:"2026-10-20",startTime:"10:30",startMin:630,durationMin:120,location:"Carrer d'Olot, Barcelona",price:13,metadata:{description:"Gaudí's mosaic terrace park.",notes:"Tickets required for main terrace.",upvotes:["Alex","Sam"],downvotes:["Jamie"],createdBy:"Taylor"}},
-      {id:60,type:"meal",title:"Tapas Dinner — El Xampanyet",day:"2026-10-18",startTime:"20:00",startMin:1200,durationMin:90,location:"Carrer del Montcada 22, Barcelona",price:28,metadata:{notes:"Legendary cava bar in El Born.",upvotes:[],downvotes:[],createdBy:"Jamie"}},
-      {id:61,type:"transport",title:"Aerobus to Airport",day:"2026-10-20",startTime:"08:30",startMin:510,durationMin:35,location:"Plaça Catalunya",price:6,metadata:{notes:"Direct to T1/T2.",upvotes:[],downvotes:[],createdBy:"Alex"}},
-    ],
-    availability:{},
-    country:{name:"Spain",visa:"No visa required (Schengen, under 90 days)",passport:"Valid 3 months after departure",advisory:"Normal precautions",currency:"Euro — ~0.92 EUR per USD",language:"Spanish / Catalan"},
-  }
-];
+// ── Demo trip shown to every new user so they can explore the app ──
+const DEMO_TRIP = {
+  id:"demo-barcelona", name:"Study Abroad Weekend – Barcelona", status:"confirmed", isDemo:true,
+  startDate:"2025-10-18", endDate:"2025-10-20",
+  budgetLimit:1200, googleMapsUrl:"",
+  members:["Alex","Jamie","Sam","Taylor"],
+  tripMembers:[
+    {userId:"Alex",name:"Alex",role:"owner",joinedAt:"2025-06-01"},
+    {userId:"Jamie",name:"Jamie",role:"editor",joinedAt:"2025-06-02"},
+    {userId:"Sam",name:"Sam",role:"editor",joinedAt:"2025-06-03"},
+    {userId:"Taylor",name:"Taylor",role:"viewer",joinedAt:"2025-06-04"},
+  ],
+  destinations:[{id:1,name:"Barcelona 🇪🇸",votes:["Alex","Jamie","Sam","Taylor"]}],
+  budgets:{"$300–500":1,"$500–800":2,"$800+":1},
+  accommodations:[],
+  accommodationOptions:[
+    {id:30,name:"Eixample Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-18",checkOut:"2025-10-20",notes:"Rooftop terrace, near Sagrada Família"},
+  ],
+  calendarItems:[
+    {id:40,type:"activity",title:"Sagrada Família",day:"2025-10-18",startTime:"10:00",startMin:600,durationMin:120,location:"Carrer de Mallorca 401, Barcelona",price:26,metadata:{description:"Gaudí's iconic basilica.",notes:"Tower access extra.",upvotes:["Alex","Jamie","Sam","Taylor"],downvotes:[],createdBy:"Alex"}},
+    {id:41,type:"activity",title:"Gothic Quarter Walk",day:"2025-10-18",startTime:"13:00",startMin:780,durationMin:180,location:"Barri Gòtic, Barcelona",price:0,metadata:{description:"2000 years of history on foot.",notes:"Free self-guided.",upvotes:["Alex","Taylor"],downvotes:[],createdBy:"Jamie"}},
+    {id:42,type:"activity",title:"La Barceloneta Beach",day:"2025-10-19",startTime:"12:00",startMin:720,durationMin:240,location:"Barceloneta, Barcelona",price:15,metadata:{description:"City beach with chiringuitos.",upvotes:["Sam","Jamie"],downvotes:[],createdBy:"Sam"}},
+    {id:43,type:"activity",title:"Park Güell",day:"2025-10-20",startTime:"10:30",startMin:630,durationMin:120,location:"Carrer d'Olot, Barcelona",price:13,metadata:{description:"Gaudí's mosaic terrace park.",notes:"Tickets required for main terrace.",upvotes:["Alex","Sam"],downvotes:["Jamie"],createdBy:"Taylor"}},
+    {id:60,type:"meal",title:"Tapas Dinner — El Xampanyet",day:"2025-10-18",startTime:"20:00",startMin:1200,durationMin:90,location:"Carrer del Montcada 22, Barcelona",price:28,metadata:{notes:"Legendary cava bar in El Born.",upvotes:[],downvotes:[],createdBy:"Jamie"}},
+    {id:61,type:"transport",title:"Aerobus to Airport",day:"2025-10-20",startTime:"08:30",startMin:510,durationMin:35,location:"Plaça Catalunya",price:6,metadata:{notes:"Direct to T1/T2.",upvotes:[],downvotes:[],createdBy:"Alex"}},
+  ],
+  availability:{},
+  country:{name:"Spain",visa:"No visa required (Schengen, under 90 days)",passport:"Valid 3 months after departure",advisory:"Normal precautions",currency:"Euro — ~0.92 EUR per USD",language:"Spanish / Catalan"},
+};
+const INITIAL_TRIPS = [DEMO_TRIP];
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
 export default function App() {
@@ -2237,10 +2208,11 @@ export default function App() {
     if(error) { console.error("loadTrips:", error); setTripsLoading(false); return; }
 
     if(!data || data.length === 0) {
-      // No real trips yet — fall back to mock data so the app isn't empty
-      setTrips(INITIAL_TRIPS);
+      // No real trips yet — show demo trip so the app isn't empty
+      setTrips([DEMO_TRIP]);
     } else {
-      setTrips(data.map(t => ({
+      // Always prepend the demo trip so new users see a real example
+      setTrips([DEMO_TRIP, ...data.map(t => ({
         id:          t.id,
         name:        t.name,
         status:      t.status || "planning",
@@ -2262,7 +2234,7 @@ export default function App() {
         country:            t.country_info || null,
         googleMapsUrl:      t.google_maps_url || "",
         description:        t.description || "",
-      })));
+      }))]);
     }
     setTripsLoading(false);
   };
@@ -2492,7 +2464,7 @@ export default function App() {
       .insert({ name: t.name, status: "planning", start_date: t.startDate, end_date: t.endDate })
       .select()
       .single();
-    if(error) { console.error("createTrip:", error); return; }
+    if(error) { console.error("createTrip:", error); throw new Error(error.message); }
     // Add creator as owner in trip_members
     await supabase.from("trip_members").insert({
       trip_id: newTrip.id, user_id: authUser.id, role: "owner",
@@ -2501,6 +2473,20 @@ export default function App() {
     const fullNewTrip = { ...t, id: newTrip.id, calendarItems:[], accommodationOptions:[] };
     setActive(fullNewTrip); setShowNew(false); setTab("schedule"); setPage("trip");
   };
+  const deleteTrip = async (tripId) => {
+    // Demo trip: just remove from local state
+    if(tripId === "demo-barcelona") {
+      setTrips(ts => ts.filter(t => t.id !== tripId));
+      if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
+      return;
+    }
+    // Real Supabase trip
+    const { error } = await supabase.from("trips").delete().eq("id", tripId);
+    if(error) { console.error("deleteTrip:", error); return; }
+    setTrips(ts => ts.filter(t => t.id !== tripId));
+    if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
+  };
+
   if(authLoading) return (
     <>
       <style>{FONT+CSS}</style>
@@ -2635,8 +2621,15 @@ export default function App() {
             ) : (
             <div className="trip-grid">
               {trips.map(trip=>(
-                <div key={trip.id} className="trip-card" onClick={()=>openTrip(trip)}>
-                  <div className="trip-card-header">
+                <div key={trip.id} className="trip-card" onClick={()=>openTrip(trip)} style={{position:"relative"}}>
+                  {trip.isDemo&&<div style={{position:"absolute",top:12,left:12,fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"var(--accent)",background:"rgba(94,234,212,0.1)",border:"1px solid rgba(94,234,212,0.25)",borderRadius:6,padding:"2px 7px"}}>Example Trip</div>}
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    style={{position:"absolute",top:10,right:10,padding:"4px 8px",fontSize:13,color:"var(--muted)",zIndex:2}}
+                    onClick={e=>{e.stopPropagation();if(window.confirm(`Delete "${trip.name}"? This cannot be undone.`))deleteTrip(trip.id);}}
+                    title="Delete trip"
+                  >✕</button>
+                  <div className="trip-card-header" style={{marginTop: trip.isDemo ? 20 : 0}}>
                     <div className="trip-name">{trip.name}</div>
                     <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"Confirmed ✓":"Planning ⏳"}</span>
                   </div>
