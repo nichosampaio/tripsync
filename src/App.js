@@ -2148,13 +2148,19 @@ export default function App() {
     if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
     if(!loginForm.password) { setAuthError("Please enter your password."); return; }
     setAuthBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email: loginForm.email.trim(),
       password: loginForm.password,
     });
     setAuthBusy(false);
     if(error) { setAuthError(error.message); return; }
-    // onAuthStateChange will fire and set authUser — no manual setAuthUser needed here
+    // Explicitly set the session so the client uses the user JWT for all future requests
+    if(data.session) {
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+    }
     setShowLogin(false);
     setLoginForm({name:"",email:"",password:"",confirmPassword:""});
     setPage("dashboard");
