@@ -1805,10 +1805,11 @@ function TripInfoTab({trip,setTrip,db}) {
   const save=()=>{
     if(!validate()) return;
     if(db) db.updateTrip(trip.id, {
-      name:       form.name.trim(),
-      start_date: form.startDate,
-      end_date:   form.endDate,
-      description:form.description,
+      title:       form.name.trim(),
+      destination: form.destination.trim() || null,
+      start_date:  form.startDate,
+      end_date:    form.endDate,
+      description: form.description,
     });
     setTrip(t=>({...t,name:form.name.trim(),startDate:form.startDate,endDate:form.endDate,description:form.description,
       destinations:t.destinations.map((d,i)=>i===0?{...d,name:form.destination.trim()}:d)}));
@@ -2199,7 +2200,7 @@ export default function App() {
     const { data, error } = await supabase
       .from("trips")
       .select(`
-        id, name, status, start_date, end_date, description,
+        id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info,
         trip_members ( user_id, role, joined_at, profiles ( full_name ) )
       `)
@@ -2214,7 +2215,7 @@ export default function App() {
       // Always prepend the demo trip so new users see a real example
       setTrips([DEMO_TRIP, ...data.map(t => ({
         id:          t.id,
-        name:        t.name,
+        name:        t.title,
         status:      t.status || "planning",
         startDate:   t.start_date,
         endDate:     t.end_date,
@@ -2226,7 +2227,7 @@ export default function App() {
           joinedAt: m.joined_at,
         })),
         // These will be filled when the trip is opened
-        destinations:       t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : [],
+        destinations:       t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
         accommodationOptions: [],
         calendarItems:      [],
         availability:       {},
@@ -2461,7 +2462,7 @@ export default function App() {
     // Insert into Supabase
     const { data: newTrip, error } = await supabase
       .from("trips")
-      .insert({ name: t.name, status: "planning", start_date: t.startDate, end_date: t.endDate })
+      .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: authUser.id })
       .select()
       .single();
     if(error) { console.error("createTrip:", error); throw new Error(error.message); }
