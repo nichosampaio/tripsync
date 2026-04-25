@@ -2485,6 +2485,11 @@ export default function App() {
   const openTrip = t => {
     setTab("schedule");
     setPage("trip");
+    // Demo trip has all data pre-loaded — just set it directly
+    if(t.isDemo) {
+      setActive(t);
+      return;
+    }
     // Supabase trips have UUID string ids; mock trips have numeric ids
     if(typeof t.id === "string") {
       loadTripDetails(t);
