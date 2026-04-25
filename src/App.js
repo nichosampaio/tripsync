@@ -2452,14 +2452,15 @@ export default function App() {
     }
   };
 
-  const createTrip = async (t) => {
+ const createTrip = async (t) => {
     // If currently showing mock data (numeric ids), stay in mock mode
     if(trips.length > 0 && typeof trips[0].id === "number") {
       setTrips(ts=>[...ts,t]);
       setShowNew(false); setActive(t); setTab("schedule"); setPage("trip");
       return;
     }
-    // Insert into Supabase
+    const session = await supabase.auth.getSession();
+    console.log("SESSION TOKEN:", session.data.session?.access_token?.slice(0,20) || "NULL - NOT AUTHENTICATED");
     const uid = authUser?.id;
     console.log("authUser:", authUser);
     console.log("uid being sent:", uid);
