@@ -1934,7 +1934,7 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
           const leaveLabel = isOwner ? "Leave & Delete" : "Leave Trip";
           const leaveTitle = isOwner && otherCount > 0
             ? `Remove all ${otherCount} member(s) before leaving`
-            : isOwner ? "You're the only member — leaving will delete this trip"
+            : isOwner ? "Leaving will delete this trip (you're the only member)"
             : "Leave this trip";
           return (
             <div key={m.userId} className="member-row">
@@ -2262,8 +2262,9 @@ export default function App() {
       .select(`
         id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info,
-        trip_members ( user_id, role, joined_at, profiles ( full_name ) )
+        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) )
       `)
+      .eq("trip_members.user_id", authUser.id)
       .order("created_at", { ascending: false });
 
     if(error) { console.error("loadTrips:", error); setTripsLoading(false); return; }
@@ -2546,6 +2547,19 @@ export default function App() {
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
       return;
     }
+    // Guard 1: only the owner can delete
+    const tripToDelete = trips.find(t => t.id === tripId);
+    const myMembership = (tripToDelete?.tripMembers || []).find(m => m.userId === authUser.id);
+    if(!myMembership || myMembership.role !== "owner") {
+      alert("Only the trip owner can delete this trip.");
+      return;
+    }
+    // Guard 2: cannot delete while other members are present
+    const otherMembers = (tripToDelete?.tripMembers || []).filter(m => m.userId !== authUser.id);
+    if(otherMembers.length > 0) {
+      alert(`You must remove all ${otherMembers.length} member(s) before deleting this trip.`);
+      return;
+    }
     // Real Supabase trip
     const { error } = await supabase.from("trips").delete().eq("id", tripId);
     if(error) { console.error("deleteTrip:", error); return; }
@@ -2554,7 +2568,7 @@ export default function App() {
   };
 
   const leaveTrip = async (tripId) => {
-    // Demo trip — just remove from local state, no DB call needed
+    // Demo trip — just remove from local state
     if(tripId === "demo-barcelona") {
       setTrips(ts => ts.filter(t => t.id !== tripId));
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
@@ -2565,12 +2579,11 @@ export default function App() {
     const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
     const isOwner = myMembership?.role === "owner";
 
-    // Owner trying to leave while others are still in the trip — block it
+    // Owner trying to leave while others are still present — block it
     if(isOwner && otherMembers.length > 0) {
       alert(`You created this trip. You can only leave once all ${otherMembers.length} other member(s) have left.`);
       return;
     }
-
     // Owner leaving an empty trip — delete the whole trip
     if(isOwner && otherMembers.length === 0) {
       if(!window.confirm(`You're the only one left. Leaving will permanently delete "${tripToLeave.name}". Continue?`)) return;
@@ -2580,7 +2593,6 @@ export default function App() {
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
       return;
     }
-
     // Regular member leaving — remove only their trip_members row
     if(!window.confirm(`Leave "${tripToLeave.name}"? You'll need to be re-invited to rejoin.`)) return;
     const { error } = await supabase.from("trip_members")
@@ -2728,12 +2740,21 @@ export default function App() {
               {trips.map(trip=>(
                 <div key={trip.id} className="trip-card" onClick={()=>openTrip(trip)} style={{position:"relative"}}>
                   {trip.isDemo&&<div style={{position:"absolute",top:12,left:12,fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"var(--accent)",background:"rgba(94,234,212,0.1)",border:"1px solid rgba(94,234,212,0.25)",borderRadius:6,padding:"2px 7px"}}>Example Trip</div>}
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    style={{position:"absolute",top:10,right:10,padding:"4px 8px",fontSize:13,color:"var(--muted)",zIndex:2}}
-                    onClick={e=>{e.stopPropagation();if(window.confirm(`Delete "${trip.name}"? This cannot be undone.`))deleteTrip(trip.id);}}
-                    title="Delete trip"
-                  >✕</button>
+{(()=>{
+                    const myRole=(trip.tripMembers||[]).find(m=>m.userId===authUser?.id)?.role;
+                    const otherCount=(trip.tripMembers||[]).filter(m=>m.userId!==authUser?.id).length;
+                    if(myRole!=="owner") return null;
+                    const canDelete=otherCount===0;
+                    const tip=canDelete?"Delete trip":`Remove all ${otherCount} member(s) first`;
+                    return(
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{position:"absolute",top:10,right:10,padding:"4px 8px",fontSize:13,color:canDelete?"var(--muted)":"var(--border)",zIndex:2,cursor:canDelete?"pointer":"not-allowed"}}
+                        onClick={e=>{e.stopPropagation();if(!canDelete){alert(tip);return;}if(window.confirm(`Delete "${trip.name}"? This cannot be undone.`))deleteTrip(trip.id);}}
+                        title={tip}
+                      >✕</button>
+                    );
+                  })()}
                   <div className="trip-card-header" style={{marginTop: trip.isDemo ? 20 : 0}}>
                     <div className="trip-name">{trip.name}</div>
                     <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"Confirmed ✓":"Planning ⏳"}</span>
