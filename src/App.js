@@ -1110,9 +1110,9 @@ function MapTab({trip,setTrip,db}) {
           <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:16,marginBottom:18}}>
             <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>How to get your map URL</div>
             {[
-              {n:"1",t:"Go to Google My Maps",d:"Visit mymaps.google.com (different from Google Maps) and sign in"},
-              {n:"2",t:"Create or open your trip map",d:"Click '+ Create a new map' or open an existing one"},
-              {n:"3",t:"Copy the URL",d:"Copy the URL from your browser's address bar — it starts with maps.google.com/maps/d/"},
+              {n:"1",t:"Go to Google My Maps",d:"Visit maps.google.com → click ☰ → Your Places → Maps"},
+              {n:"2",t:"Open or create your trip map",d:"Create a new map or open an existing one for this trip"},
+              {n:"3",t:"Copy the URL",d:"Copy from your browser address bar — or use Share → Copy Link"},
             ].map(s=>(
               <div key={s.n} style={{display:"flex",gap:10,marginBottom:s.n==="3"?0:10}}>
                 <div style={{width:22,height:22,borderRadius:"50%",background:"var(--accent)",color:"#0a0f1e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{s.n}</div>
@@ -2161,19 +2161,30 @@ export default function App() {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
-      // If a session exists, go straight to the dashboard
-      if(session?.user) setPage("dashboard");
+      // Only redirect if currently on landing — never interrupt dashboard or an open trip
+      setPage(p => {
+        console.log("[TripSync] getSession fired, current page:", p, "| has session:", !!session?.user);
+        return (session?.user && p === "landing") ? "dashboard" : p;
+      });
       setAuthLoading(false);
     });
 
-    // Listen for future login / logout events.
-    // We check the event type so that silent token refreshes (TOKEN_REFRESHED, INITIAL_SESSION)
-    // don't reset the page — that was wiping trip state whenever the user switched browser tabs.
+    // Listen for auth events. SIGNED_IN fires on interactive login AND on tab-focus token refresh
+    // in some Supabase/browser combinations. We guard with a page check so it never interrupts
+    // a trip the user is working in.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[TripSync] onAuthStateChange event:", event);
       setAuthUser(session?.user ?? null);
       setAuthLoading(false);
-      if(event === "SIGNED_IN")  setPage("dashboard");
-      else if(event === "SIGNED_OUT") { setPage("landing"); setActive(null); }
+      if(event === "SIGNED_IN") {
+        setPage(p => {
+          console.log("[TripSync] SIGNED_IN — current page:", p, "→", p === "landing" ? "dashboard" : "no change");
+          return p === "landing" ? "dashboard" : p;
+        });
+      } else if(event === "SIGNED_OUT") {
+        setPage("landing");
+        setActive(null);
+      }
       // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED → update authUser only, never touch page/state
     });
 
@@ -2258,6 +2269,7 @@ export default function App() {
 
   // ── Load trips for the logged-in user ──
   const loadTrips = async () => {
+    console.log("[TripSync] loadTrips called — stack:", new Error().stack.split("\n")[2]);
     setTripsLoading(true);
     const { data, error } = await supabase
       .from("trips")
@@ -2385,9 +2397,13 @@ export default function App() {
   // ── Load trips when user logs in ──
   useEffect(() => {
     const newId = authUser?.id ?? null;
+    console.log("[TripSync] authUser useEffect — newId:", newId, "| prevId:", authUserIdRef.current);
     // Only reload trips when the actual user ID changes (login/logout),
     // not when Supabase silently refreshes the token and re-emits the authUser object.
-    if(newId === authUserIdRef.current) return;
+    if(newId === authUserIdRef.current) {
+      console.log("[TripSync] authUser useEffect — same ID, skipping loadTrips");
+      return;
+    }
     authUserIdRef.current = newId;
     if(newId) loadTrips();
     else { setTrips([]); setActive(null); }
