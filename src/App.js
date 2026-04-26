@@ -1345,7 +1345,14 @@ function ActivityTab({trip,setTrip,user,db}) {
                   {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
                 </div>
                 {ci.metadata?.notes&&<div style={{fontSize:12,color:"var(--muted)",marginTop:8,padding:"7px 10px",background:"rgba(255,255,255,0.03)",borderRadius:7,borderLeft:"2px solid var(--border)"}}>📝 {ci.metadata.notes}</div>}
-                {ci.metadata?.createdBy&&<div className="suggested-by"><span className="sugg-avatar">{ci.metadata.createdBy[0]}</span>By {ci.metadata.createdBy}</div>}
+                {ci.metadata?.createdBy&&(()=>{
+                  const createdByRaw = ci.metadata.createdBy;
+                  // Resolve UUID to display name if possible
+                  const member = (trip.tripMembers||[]).find(m=>m.userId===createdByRaw);
+                  const displayName = member?.name || createdByRaw;
+                  const initial = displayName[0]?.toUpperCase() || "?";
+                  return <div className="suggested-by"><span className="sugg-avatar">{initial}</span>By {displayName}</div>;
+                })()}
               </div>
             );
           })}
@@ -2336,7 +2343,8 @@ export default function App() {
       .select(`
         id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info,
-        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) )
+        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
+        activities ( id )
       `)
       .eq("trip_members.user_id", uid)
       .order("created_at", { ascending: false });
@@ -2357,6 +2365,8 @@ export default function App() {
         joinedAt: m.joined_at,
       })),
       destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      // Use activity count from joined data for dashboard display
+      activityCount:       (t.activities||[]).length,
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       calendarItems:       existing?.calendarItems      ?? [],
       accommodationOptions:existing?.accommodationOptions ?? [],
@@ -2531,7 +2541,7 @@ export default function App() {
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
         status:         "proposed",
-        created_by:     authUser?.id || null,
+        created_by:     item.metadata?.createdBy || null,
       }).select().single();
       if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
@@ -2891,7 +2901,7 @@ export default function App() {
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
                     <div className="trip-meta-item">📅 <strong>{fmtRange(trip.startDate,trip.endDate)}</strong></div>
-                    <div className="trip-meta-item">🎯 <strong>{(trip.calendarItems||[]).length} item{(trip.calendarItems||[]).length!==1?"s":""}</strong></div>
+                    <div className="trip-meta-item">🎯 <strong>{trip.activityCount ?? (trip.calendarItems||[]).length} item{(trip.activityCount ?? (trip.calendarItems||[]).length)!==1?"s":""}</strong></div>
                     <div className="trip-meta-item">👥 <strong>{trip.members.length} members</strong></div>
                   </div>
                   <div className="members-row">
