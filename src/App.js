@@ -2533,7 +2533,14 @@ export default function App() {
         status:         "proposed",
         created_by:     item.metadata?.createdBy || null,
       }).select().single();
-      if(error) { console.error("db.addItem:", error); return item; }
+      if(error) {
+        const msg = `DB ERROR saving activity: ${error.message} (code: ${error.code})`;
+        console.error("db.addItem FULL ERROR:", JSON.stringify(error));
+        console.error("db.addItem PAYLOAD:", { tripId, title: item.title, category: toDbCategory(item.type), created_by: item.metadata?.createdBy || null });
+        alert(msg);
+        return item;
+      }
+      console.log("db.addItem SUCCESS — saved to Supabase with id:", data.id);
       return { ...item, id: data.id };
     },
 
