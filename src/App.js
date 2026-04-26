@@ -2161,30 +2161,24 @@ export default function App() {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
-      // Only send to dashboard if on landing — never interrupt a trip view
       if(session?.user) setPage(p => p === "landing" ? "dashboard" : p);
       setAuthLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      // Only update authUser state when the user identity actually changes.
-      // Calling setAuthUser on every TOKEN_REFRESHED causes re-renders that can
-      // briefly flip loggedIn to false and unmount the trip view.
       setAuthUser(prev => {
         const incoming = session?.user ?? null;
-        // Keep the exact same object reference if the ID hasn't changed — avoids re-renders
         if(prev?.id === incoming?.id) return prev;
         return incoming;
       });
       setAuthLoading(false);
       if(event === "SIGNED_IN") {
-        // Only redirect if on landing — never kick user out of a trip they're working in
         setPage(p => p === "landing" ? "dashboard" : p);
       } else if(event === "SIGNED_OUT") {
-        setPage("landing");
-        setActive(null);
+        setPage("landing"); setActive(null);
+        sessionStorage.removeItem("tripsync_active_id");
+        sessionStorage.removeItem("tripsync_active_tab");
       }
-      // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED → identity unchanged, no page/state changes
     });
 
     return () => subscription.unsubscribe();
@@ -2267,7 +2261,9 @@ export default function App() {
   };
 
   // ── Load trips for the logged-in user ──
-  const loadTrips = async () => {
+  const loadTrips = async (userId) => {
+    const uid = userId || authUserIdRef.current;
+    if(!uid) { console.warn("loadTrips called with no user ID — skipping"); setTripsLoading(false); return; }
     setTripsLoading(true);
     const { data, error } = await supabase
       .from("trips")
@@ -2276,7 +2272,7 @@ export default function App() {
         google_maps_url, country_info,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) )
       `)
-      .eq("trip_members.user_id", authUserIdRef.current)
+      .eq("trip_members.user_id", uid)
       .order("created_at", { ascending: false });
 
     if(error) { console.error("loadTrips:", error); setTripsLoading(false); return; }
@@ -2315,9 +2311,47 @@ export default function App() {
     setActive(prev => {
       if(!prev || prev.id === "demo-barcelona") return prev;
       const fresh = (data||[]).find(t => t.id === prev.id);
-      if(!fresh) return prev; // trip no longer accessible — leave as-is until next navigation
+      if(!fresh) return prev;
       return buildTrip(fresh, prev);
     });
+
+    // After page reload: if sessionStorage has a saved trip ID, restore it fully
+    const savedId  = sessionStorage.getItem("tripsync_active_id");
+    const savedTab = sessionStorage.getItem("tripsync_active_tab");
+    if(savedId && (data||[]).find(t => t.id === savedId)) {
+      const shell = buildTrip((data||[]).find(t => t.id === savedId), null);
+      if(savedTab) setTab(savedTab);
+      setPage("trip");
+      setTimeout(async () => {
+        const uid = userId || authUserIdRef.current;
+        const [{ data: items }, { data: accoms }, { data: profile }] = await Promise.all([
+          supabase.from("activities").select("*").eq("trip_id", savedId).order("created_at", { ascending: true }),
+          supabase.from("accommodations").select("*").eq("trip_id", savedId),
+          supabase.from("profiles").select("personal_budget").eq("id", uid).single(),
+        ]);
+        const calendarItems = (items||[]).map(a => ({
+          id: a.id, type: a.type || "activity", title: a.title, day: a.day,
+          startTime: a.start_time, startMin: a.start_min, durationMin: a.duration_min || 60,
+          location: a.location || "", price: a.price || 0, priceType: a.price_type || "flat",
+          metadata: {
+            description: a.description || "", notes: a.notes || "",
+            upvotes: a.upvotes || [], downvotes: a.downvotes || [],
+            createdBy: a.created_by || "", checkIn: a.check_in || null,
+            checkOut: a.check_out || null, transportationTime: a.transportation_time || "",
+          },
+        }));
+        const accommodationOptions = (accoms||[]).map(a => ({
+          id: a.id, name: a.name, address: a.address || "",
+          pricePerNight: a.price_per_night || 0, rating: a.rating || "",
+          checkIn: a.check_in || "", checkOut: a.check_out || "",
+          notes: a.notes || "", votes: a.votes || [],
+        }));
+        const restoredTrip = { ...shell, calendarItems, accommodationOptions,
+          personalBudgets: { [uid]: profile?.personal_budget ?? null } };
+        setActive(restoredTrip);
+        setTrips(ts => ts.map(t => t.id === savedId ? restoredTrip : t));
+      }, 50);
+    }
 
     setTripsLoading(false);
   };
@@ -2399,7 +2433,8 @@ export default function App() {
     // not when Supabase silently refreshes the token and re-emits the authUser object.
     if(newId === authUserIdRef.current) return;
     authUserIdRef.current = newId;
-    if(newId) loadTrips();
+    // Pass userId directly so loadTrips never queries with a stale/null ref
+    if(newId) loadTrips(newId);
     else { setTrips([]); setActive(null); }
   }, [authUser]);
 
@@ -2526,6 +2561,16 @@ export default function App() {
   };
 
   // ── Trip handlers ──
+  useEffect(() => {
+    if(active?.id && active.id !== "demo-barcelona") {
+      sessionStorage.setItem("tripsync_active_id", active.id);
+      sessionStorage.setItem("tripsync_active_tab", tab);
+    } else if(!active) {
+      sessionStorage.removeItem("tripsync_active_id");
+      sessionStorage.removeItem("tripsync_active_tab");
+    }
+  }, [active?.id, tab]);
+
   const updateTrip = t => { setTrips(ts=>ts.map(x=>x.id===t.id?t:x)); setActive(t); };
 
   const openTrip = t => {
@@ -2562,12 +2607,8 @@ export default function App() {
     await supabase.from("trip_members").insert({
       trip_id: newTrip.id, user_id: authUser.id, role: "owner",
     });
-    // Build trip locally — calling loadTrips() here caused a race condition that wiped active trip state
     const fullNewTrip = {
-      ...t,
-      id: newTrip.id,
-      calendarItems: [],
-      accommodationOptions: [],
+      ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [],
       tripMembers: [{ userId: authUser.id, name: user, role: "owner", joinedAt: new Date().toISOString().slice(0,10) }],
     };
     setTrips(ts => {
