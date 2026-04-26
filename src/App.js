@@ -336,7 +336,7 @@ const uid = () => ++_id;
 
 function toYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function fromYMD(s) { if(!s)return null; const[y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
-function fmtDate(s) { if(!s)return""; const d=fromYMD(s); return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; }
+function fmtDate(s) { if(!s)return""; try { const d=s.includes("T")?new Date(s):fromYMD(s); if(!d||isNaN(d.getTime()))return""; return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; } catch(e){return"";} }
 function fmtRange(s,e) {
   if(!s)return"No dates set"; if(!e)return fmtDate(s);
   const sd=fromYMD(s),ed=fromYMD(e);
@@ -2375,9 +2375,9 @@ export default function App() {
       // Set shell immediately so trip page renders right away
       setActive(shell);
       setPage("trip");
-      // Reuse loadTripDetails to fetch full data — avoids duplicating mapper logic
-      // Wrap in setTimeout(0) so setActive/setPage state updates flush first
-      setTimeout(() => loadTripDetails(shell), 0);
+      // Load full details — called directly here so authUser is in scope
+      // loadTripDetails updates active with calendarItems + accommodations
+      loadTripDetails(shell);
     }
 
     setTripsLoading(false);
@@ -2435,12 +2435,13 @@ export default function App() {
       votes:         [],
     }));
 
-    // Load personal budget for this user from profiles
-    const { data: profile } = await supabase
+    // Load personal budget — guard against authUser being null during restore
+    const currentUserId = authUser?.id || authUserIdRef.current;
+    const { data: profile } = currentUserId ? await supabase
       .from("profiles")
       .select("personal_budget")
-      .eq("id", authUser.id)
-      .single();
+      .eq("id", currentUserId)
+      .single() : { data: null };
 
     const fullTrip = {
       ...trip,
