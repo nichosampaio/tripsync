@@ -1367,6 +1367,18 @@ function VotingTab({trip,setTrip,user,db}) {
     setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
   };
 
+  const voteAccom=(id)=>{
+    setTrip(t=>({
+      ...t,
+      accommodationOptions:t.accommodationOptions.map(a=>{
+        if(a.id!==id) return a;
+        const hasVote=(a.votes||[]).includes(user);
+        const newVotes=hasVote?(a.votes||[]).filter(v=>v!==user):[...(a.votes||[]),user];
+        return {...a,votes:newVotes};
+      })
+    }));
+  };
+
   const voteCI=(id,dir)=>{
     setTrip(t=>({
       ...t,calendarItems:t.calendarItems.map(ci=>{
@@ -1411,6 +1423,29 @@ function VotingTab({trip,setTrip,user,db}) {
   return (
     <div>
       {renderSection("Destination",trip.destinations,"destinations","📍")}
+      {trip.accommodationOptions.length>0&&(
+        <div className="vote-card">
+          <h4>🏨 Accommodations ({trip.accommodationOptions.length})</h4>
+          <div className="vote-options">
+            {[...trip.accommodationOptions].sort((a,b)=>(b.votes||[]).length-(a.votes||[]).length).map(a=>{
+              const v=(a.votes||[]).includes(user);
+              const max=Math.max(...trip.accommodationOptions.map(x=>(x.votes||[]).length),1);
+              return (
+                <div key={a.id} className={`vote-opt ${v?"voted":""}`} onClick={()=>voteAccom(a.id)}>
+                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:2}}>
+                    <span style={{fontSize:13,fontWeight:v?600:400}}>{a.name}</span>
+                    {a.pricePerNight&&<span style={{fontSize:11,color:"var(--muted)"}}>💰 ${a.pricePerNight}/night</span>}
+                    {a.rating&&<span style={{fontSize:11,color:"var(--muted)"}}>{renderStars(a.rating)}</span>}
+                  </div>
+                  <div className="vbar-wrap"><div className="vbar-bg"><div className="vbar-fill" style={{width:`${Math.round(((a.votes||[]).length/max)*100)}%`}}/></div></div>
+                  <span className="vote-count">{(a.votes||[]).length} 👍</span>
+                  <button className={`vote-btn ${v?"on":""}`}>{v?"✓":"Vote"}</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="vote-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h4>🗳️ Activities & Items ({votable.length})</h4>
@@ -1695,7 +1730,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 }
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
-const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
+const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:"",votes:[]};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
   const [editId,setEditId] = useState(null);
@@ -1775,6 +1810,7 @@ function AccommodationTab({trip,setTrip,db}) {
                 {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong></div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
+                {(a.votes||[]).length>0&&<div className="card-meta-row">🗳️ <strong>{(a.votes||[]).length} vote{(a.votes||[]).length!==1?"s":""}</strong><span style={{fontSize:11,color:"var(--muted)",marginLeft:6}}>{(a.votes||[]).join(", ")}</span></div>}
               </div>
               {a.notes&&<div className="card-notes">{a.notes}</div>}
             </div>
@@ -2063,9 +2099,9 @@ const DEMO_TRIP = {
   personalBudgets:{Alex:900,Jamie:750,Sam:800,Taylor:950,Morgan:700},
   accommodations:[],
   accommodationOptions:[
-    {id:30,name:"Eixample Design Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Rooftop terrace, sleeps 5, near Sagrada Família. VOTED FAVOURITE ✓"},
-    {id:31,name:"Gothic Quarter Hostel — Private Room",address:"Carrer dels Escudellers 18, Barcelona",pricePerNight:95,rating:4.3,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Central location, breakfast included, tight on space."},
-    {id:32,name:"Barceloneta Beach Hotel",address:"Passeig de Joan de Borbó 80, Barcelona",pricePerNight:185,rating:4.6,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Ocean views, rooftop pool, 5 min walk to beach."},
+    {id:30,name:"Eixample Design Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Rooftop terrace, sleeps 5, near Sagrada Família. VOTED FAVOURITE ✓",votes:["Alex","Jamie","Sam","Taylor","Morgan"]},
+    {id:31,name:"Gothic Quarter Hostel — Private Room",address:"Carrer dels Escudellers 18, Barcelona",pricePerNight:95,rating:4.3,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Central location, breakfast included, tight on space.",votes:["Morgan"]},
+    {id:32,name:"Barceloneta Beach Hotel",address:"Passeig de Joan de Borbó 80, Barcelona",pricePerNight:185,rating:4.6,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Ocean views, rooftop pool, 5 min walk to beach.",votes:["Taylor","Sam"]},
   ],
   calendarItems:[
     // ── Day 1: Arrival — Oct 17 ──
@@ -2330,6 +2366,7 @@ export default function App() {
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
       notes:         a.notes || "",
+      votes:         a.votes || [],
     }));
 
     // Load personal budget for this user from profiles
