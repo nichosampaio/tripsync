@@ -2319,7 +2319,9 @@ export default function App() {
     const savedId  = sessionStorage.getItem("tripsync_active_id");
     const savedTab = sessionStorage.getItem("tripsync_active_tab");
     if(savedId && (data||[]).find(t => t.id === savedId)) {
-      const shell = buildTrip((data||[]).find(t => t.id === savedId), null);
+      // Build shell from the raw DB row so trip_members maps correctly into tripMembers
+      const rawRow = (data||[]).find(t => t.id === savedId);
+      const shell = buildTrip(rawRow, null);
       if(savedTab) setTab(savedTab);
       setPage("trip");
       setTimeout(async () => {
@@ -2347,6 +2349,7 @@ export default function App() {
           notes: a.notes || "", votes: a.votes || [],
         }));
         const restoredTrip = { ...shell, calendarItems, accommodationOptions,
+          tripMembers: shell.tripMembers,
           personalBudgets: { [resolvedUid]: profile?.personal_budget ?? null } };
         setActive(restoredTrip);
         setTrips(ts => ts.map(t => t.id === savedId ? restoredTrip : t));
@@ -2642,6 +2645,11 @@ export default function App() {
       return;
     }
     const tripToLeave = trips.find(t => t.id === tripId);
+    // Safety guard: if tripMembers hasn't loaded yet, don't proceed — prevents false "owner alone" deletes
+    if(!tripToLeave?.tripMembers?.length) {
+      alert("Trip membership data is still loading. Please try again in a moment.");
+      return;
+    }
     const myMembership = (tripToLeave?.tripMembers || []).find(m => m.userId === authUser.id);
     const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
     const isOwner = myMembership?.role === "owner";
