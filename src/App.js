@@ -1577,6 +1577,14 @@ function calcAccomTotal(a) {
 function calcAllAccomTotal(accommodationOptions) {
   return (accommodationOptions||[]).reduce((s,a) => s + calcAccomTotal(a), 0);
 }
+function calcVehicleTotal(v) {
+  const days = parseInt(v.days) || 0;
+  const ppd  = parseFloat(v.pricePerDay) || 0;
+  return ppd * days;
+}
+function calcAllVehicleTotal(vehicleRentals) {
+  return (vehicleRentals||[]).reduce((s,v) => s + calcVehicleTotal(v), 0);
+}
 
 // ─── BUDGET TAB ───────────────────────────────────────────────────────────────
 function BudgetTab({trip, setTrip, user, onSaveBudget}) {
@@ -1611,8 +1619,10 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
   const noteTotal      = sumType("note");
   const accomOptions   = trip.accommodationOptions || [];
   const accomTotal     = calcAllAccomTotal(accomOptions);
+  const vehicleOptions = trip.vehicleRentals || [];
+  const vehicleTotal   = calcAllVehicleTotal(vehicleOptions);
 
-  const grandTotal  = actTotal + mealTotal + transportTotal + accomTotal + noteTotal;
+  const grandTotal  = actTotal + mealTotal + transportTotal + accomTotal + vehicleTotal + noteTotal;
   const myShare     = memberCount > 0 ? grandTotal / memberCount : 0;
 
   const cats = [
@@ -1620,6 +1630,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
     {icon:"🚌", label:"Transport",     total:transportTotal, color:"#34d399"},
     {icon:"🍽️", label:"Meals",         total:mealTotal,      color:"#fbbf24"},
     {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#818cf8"},
+    {icon:"🚗", label:"Vehicles",       total:vehicleTotal,  color:"#f97316"},
   ];
   const maxCat = Math.max(...cats.map(c=>c.total), 1);
 
@@ -1790,6 +1801,53 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                     </div>
                   )}
                   {(a.checkIn||a.checkOut) && <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ── Vehicle Rental Detail ── */}
+      <div className="budget-card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <h4 style={{margin:0}}>🚗 Vehicle Rental Detail</h4>
+          <span style={{fontSize:13,fontWeight:700,color:"#f97316"}}>Total: ${vehicleTotal.toLocaleString()}</span>
+        </div>
+        {vehicleOptions.length === 0 ? (
+          <p className="text-muted" style={{fontSize:13}}>No vehicle rentals added yet — go to <strong>🚗 Vehicles</strong> to add options.</p>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            {vehicleOptions.map(v => {
+              const total  = calcVehicleTotal(v);
+              const ppd    = parseFloat(v.pricePerDay) || 0;
+              const days   = parseInt(v.days) || 0;
+              const myPart = memberCount > 0 ? total / memberCount : 0;
+              const VTYPE  = {car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+              return (
+                <div key={v.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:14}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model&&` — ${v.model}`}</div>
+                      {v.pickupLocation && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
+                    </div>
+                    {total > 0 && <div style={{fontFamily:"Syne",fontSize:16,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                  </div>
+                  {total > 0 ? (
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                      <span style={{fontSize:12,background:"rgba(249,115,22,0.12)",color:"#f97316",border:"1px solid rgba(249,115,22,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppd.toLocaleString()}/day</span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{days} day{days!==1?"s":""}</span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
+                      {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
+                    </div>
+                  ) : (
+                    <div style={{fontSize:12,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
+                      ⚠️ Missing days or daily rate — edit in Vehicles tab
+                    </div>
+                  )}
+                  {v.transmission && <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>⚙️ {v.transmission} · {v.seats&&`${v.seats} seats`}</div>}
                 </div>
               );
             })}
