@@ -2161,30 +2161,19 @@ export default function App() {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
-      // Only redirect if currently on landing — never interrupt dashboard or an open trip
-      setPage(p => {
-        console.log("[TripSync] getSession fired, current page:", p, "| has session:", !!session?.user);
-        return (session?.user && p === "landing") ? "dashboard" : p;
-      });
+      // If a session exists, go straight to the dashboard
+      if(session?.user) setPage("dashboard");
       setAuthLoading(false);
     });
 
-    // Listen for auth events. SIGNED_IN fires on interactive login AND on tab-focus token refresh
-    // in some Supabase/browser combinations. We guard with a page check so it never interrupts
-    // a trip the user is working in.
+    // Listen for future login / logout events.
+    // We check the event type so that silent token refreshes (TOKEN_REFRESHED, INITIAL_SESSION)
+    // don't reset the page — that was wiping trip state whenever the user switched browser tabs.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[TripSync] onAuthStateChange event:", event);
       setAuthUser(session?.user ?? null);
       setAuthLoading(false);
-      if(event === "SIGNED_IN") {
-        setPage(p => {
-          console.log("[TripSync] SIGNED_IN — current page:", p, "→", p === "landing" ? "dashboard" : "no change");
-          return p === "landing" ? "dashboard" : p;
-        });
-      } else if(event === "SIGNED_OUT") {
-        setPage("landing");
-        setActive(null);
-      }
+      if(event === "SIGNED_IN")  setPage("dashboard");
+      else if(event === "SIGNED_OUT") { setPage("landing"); setActive(null); }
       // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED → update authUser only, never touch page/state
     });
 
@@ -2269,7 +2258,6 @@ export default function App() {
 
   // ── Load trips for the logged-in user ──
   const loadTrips = async () => {
-    console.log("[TripSync] loadTrips called — stack:", new Error().stack.split("\n")[2]);
     setTripsLoading(true);
     const { data, error } = await supabase
       .from("trips")
@@ -2397,13 +2385,9 @@ export default function App() {
   // ── Load trips when user logs in ──
   useEffect(() => {
     const newId = authUser?.id ?? null;
-    console.log("[TripSync] authUser useEffect — newId:", newId, "| prevId:", authUserIdRef.current);
     // Only reload trips when the actual user ID changes (login/logout),
     // not when Supabase silently refreshes the token and re-emits the authUser object.
-    if(newId === authUserIdRef.current) {
-      console.log("[TripSync] authUser useEffect — same ID, skipping loadTrips");
-      return;
-    }
+    if(newId === authUserIdRef.current) return;
     authUserIdRef.current = newId;
     if(newId) loadTrips();
     else { setTrips([]); setActive(null); }
@@ -2568,8 +2552,20 @@ export default function App() {
     await supabase.from("trip_members").insert({
       trip_id: newTrip.id, user_id: authUser.id, role: "owner",
     });
-    await loadTrips();
-    const fullNewTrip = { ...t, id: newTrip.id, calendarItems:[], accommodationOptions:[] };
+    // Build the full trip object locally — no need to reload all trips from DB just to add one.
+    // Calling loadTrips() here was causing a race condition that wiped the active trip's state.
+    const fullNewTrip = {
+      ...t,
+      id: newTrip.id,
+      calendarItems: [],
+      accommodationOptions: [],
+      tripMembers: [{ userId: authUser.id, name: user, role: "owner", joinedAt: new Date().toISOString().slice(0,10) }],
+    };
+    setTrips(ts => {
+      // Replace any optimistic placeholder or just append
+      const exists = ts.find(x => x.id === newTrip.id);
+      return exists ? ts.map(x => x.id === newTrip.id ? fullNewTrip : x) : [...ts, fullNewTrip];
+    });
     setActive(fullNewTrip); setShowNew(false); setTab("schedule"); setPage("trip");
   };
   const deleteTrip = async (tripId) => {
