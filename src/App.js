@@ -2544,7 +2544,8 @@ export default function App() {
       .select(`
         id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info,
-        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) )
+        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
+        activities ( id )
       `)
       .eq("trip_members.user_id", uid)
       .order("created_at", { ascending: false });
@@ -2566,6 +2567,7 @@ export default function App() {
       })),
       destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
+      activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
       vehicleRentals:      existing?.vehicleRentals     ?? [],
       accommodationOptions:existing?.accommodationOptions ?? [],
@@ -3165,7 +3167,7 @@ export default function App() {
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
                     <div className="trip-meta-item">📅 <strong>{fmtRange(trip.startDate,trip.endDate)}</strong></div>
-                    <div className="trip-meta-item">🎯 <strong>{(trip.calendarItems||[]).length} item{(trip.calendarItems||[]).length!==1?"s":""}</strong></div>
+                    <div className="trip-meta-item">🎯 <strong>{trip.activityCount ?? (trip.calendarItems||[]).length} item{(trip.activityCount ?? (trip.calendarItems||[]).length)!==1?"s":""}</strong></div>
                     <div className="trip-meta-item">👥 <strong>{trip.members.length} members</strong></div>
                   </div>
                   <div className="members-row">
