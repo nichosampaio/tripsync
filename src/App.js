@@ -1110,9 +1110,9 @@ function MapTab({trip,setTrip,db}) {
           <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:16,marginBottom:18}}>
             <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>How to get your map URL</div>
             {[
-              {n:"1",t:"Go to Google My Maps",d:"Visit maps.google.com → click ☰ → Your Places → Maps"},
-              {n:"2",t:"Open or create your trip map",d:"Create a new map or open an existing one for this trip"},
-              {n:"3",t:"Copy the URL",d:"Copy from your browser address bar — or use Share → Copy Link"},
+              {n:"1",t:"Go to Google My Maps",d:"Visit mymaps.google.com (different from Google Maps) and sign in"},
+              {n:"2",t:"Create or open your trip map",d:"Click '+ Create a new map' or open an existing one"},
+              {n:"3",t:"Copy the URL",d:"Copy the URL from your browser's address bar — it starts with maps.google.com/maps/d/"},
             ].map(s=>(
               <div key={s.n} style={{display:"flex",gap:10,marginBottom:s.n==="3"?0:10}}>
                 <div style={{width:22,height:22,borderRadius:"50%",background:"var(--accent)",color:"#0a0f1e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{s.n}</div>
@@ -2161,18 +2161,18 @@ export default function App() {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
-      // Only send to dashboard if the user is on the landing page — never interrupt an active trip view
-      if(session?.user) setPage(p => p === "landing" ? "dashboard" : p);
+      // If a session exists, go straight to the dashboard
+      if(session?.user) setPage("dashboard");
       setAuthLoading(false);
     });
 
     // Listen for future login / logout events.
-    // SIGNED_IN fires on interactive logins AND sometimes on tab-focus token refresh in some browsers.
-    // We guard with a page check so re-authentication never kicks someone out of a trip they're in.
+    // We check the event type so that silent token refreshes (TOKEN_REFRESHED, INITIAL_SESSION)
+    // don't reset the page — that was wiping trip state whenever the user switched browser tabs.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthUser(session?.user ?? null);
       setAuthLoading(false);
-      if(event === "SIGNED_IN")  setPage(p => p === "landing" ? "dashboard" : p);
+      if(event === "SIGNED_IN")  setPage("dashboard");
       else if(event === "SIGNED_OUT") { setPage("landing"); setActive(null); }
       // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED → update authUser only, never touch page/state
     });
