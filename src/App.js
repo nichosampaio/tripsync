@@ -1900,23 +1900,32 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
   const [invitations,setInvitations] = useState([]);
   const [copied,setCopied] = useState(false);
   const [link] = useState(()=>`tripsync.app/join/${Math.random().toString(36).slice(2,8)}`);
-  const members=trip.tripMembers||trip.members.map((name,i)=>({userId:name,name,role:i===0?"admin":"editor",joinedAt:trip.startDate||"2026-01-01"}));
+  // Safely build members list — tripMembers is the authoritative source from DB.
+  // Fall back to trip.members (plain name strings) only for demo/mock trips.
+  // Never crash if both are missing — just show empty list.
+  const members = (trip.tripMembers && trip.tripMembers.length > 0)
+    ? trip.tripMembers
+    : (trip.members || []).map((name, i) => ({
+        userId: name, name, role: i === 0 ? "admin" : "member",
+        joinedAt: trip.startDate || "2026-01-01"
+      }));
 
-  const sendInvite=async ()=>{
-    if(!emailInput.trim()){setEmailErr("Enter email");return;}
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim())){setEmailErr("Invalid email");return;}
+  const sendInvite = async () => {
+    if(!emailInput.trim()) { setEmailErr("Enter email"); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim())) { setEmailErr("Invalid email"); return; }
     setEmailErr("");
-    const email=emailInput.trim();
-    // Write invite to notifications table so the recipient can see it when they sign in
+    const email = emailInput.trim();
+    // Store invite as a member_joined notification (uses allowed enum value)
     if(db && !db.isMock) {
       await supabase.from("notifications").insert({
+        user_id:  authUserId,
         trip_id:  trip.id,
-        type:     "invite",
-        message:  `You've been invited to join "${trip.name}"`,
+        type:     "member_joined",
+        message:  `Invite sent to ${email} for "${trip.name}"`,
         metadata: { invited_email: email, invited_by: user },
       });
     }
-    setInvitations(prev=>[...prev,{id:uid(),email}]);
+    setInvitations(prev => [...prev, { id: uid(), email }]);
     setEmailInput("");
   };
   return (
