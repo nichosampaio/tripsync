@@ -1371,7 +1371,14 @@ function ActivityTab({trip,setTrip,user,db}) {
                   {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
                 </div>
                 {ci.metadata?.notes&&<div style={{fontSize:12,color:"var(--muted)",marginTop:8,padding:"7px 10px",background:"rgba(255,255,255,0.03)",borderRadius:7,borderLeft:"2px solid var(--border)"}}>📝 {ci.metadata.notes}</div>}
-                {ci.metadata?.createdBy&&<div className="suggested-by"><span className="sugg-avatar">{ci.metadata.createdBy[0]}</span>By {ci.metadata.createdBy}</div>}
+                {ci.metadata?.createdBy&&(()=>{
+                  const raw = ci.metadata.createdBy;
+                  // If it looks like a UUID, resolve to display name via tripMembers
+                  const isUuid = /^[0-9a-f-]{36}$/i.test(raw);
+                  const member = isUuid ? (trip.tripMembers||[]).find(m=>m.userId===raw) : null;
+                  const displayName = member?.name || (isUuid ? "Unknown" : raw);
+                  return <div className="suggested-by"><span className="sugg-avatar">{displayName[0]?.toUpperCase()||"?"}</span>By {displayName}</div>;
+                })()}
               </div>
             );
           })}
