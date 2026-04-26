@@ -336,7 +336,7 @@ const uid = () => ++_id;
 
 function toYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function fromYMD(s) { if(!s)return null; const[y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
-function fmtDate(s) { if(!s)return""; try { const d = s.includes("T") ? new Date(s) : fromYMD(s); if(!d||isNaN(d.getTime()))return""; return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; } catch(e) { return ""; } }
+function fmtDate(s) { if(!s)return""; const d=fromYMD(s); return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; }
 function fmtRange(s,e) {
   if(!s)return"No dates set"; if(!e)return fmtDate(s);
   const sd=fromYMD(s),ed=fromYMD(e);
@@ -1367,6 +1367,23 @@ function VotingTab({trip,setTrip,user,db}) {
     setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
   };
 
+  const voteAccom = (id) => {
+    setTrip(t => ({
+      ...t,
+      accommodationOptions: t.accommodationOptions.map(a => {
+        if(a.id !== id) return a;
+        const votes = a.votes || [];
+        const hasVote = votes.includes(user);
+        const newVotes = hasVote ? votes.filter(v => v !== user) : [...votes, user];
+        // Persist to Supabase — store votes as a JSON array in the votes column
+        if(db && !db.isMock) {
+          supabase.from("accommodations").update({ votes: newVotes }).eq("id", id);
+        }
+        return { ...a, votes: newVotes };
+      })
+    }));
+  };
+
   const voteCI=(id,dir)=>{
     setTrip(t=>({
       ...t,calendarItems:t.calendarItems.map(ci=>{
@@ -1411,6 +1428,30 @@ function VotingTab({trip,setTrip,user,db}) {
   return (
     <div>
       {renderSection("Destination",trip.destinations,"destinations","📍")}
+      {(trip.accommodationOptions||[]).length > 0 && (
+        <div className="vote-card">
+          <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
+          <div className="vote-options">
+            {[...(trip.accommodationOptions||[])].sort((a,b)=>(b.votes||[]).length-(a.votes||[]).length).map(a => {
+              const votes = a.votes || [];
+              const hasVote = votes.includes(user);
+              const max = Math.max(...(trip.accommodationOptions||[]).map(x=>(x.votes||[]).length), 1);
+              return (
+                <div key={a.id} className={`vote-opt ${hasVote?"voted":""}`} onClick={()=>voteAccom(a.id)}>
+                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:2}}>
+                    <span style={{fontSize:13,fontWeight:hasVote?600:400}}>{a.name}</span>
+                    {a.pricePerNight>0&&<span style={{fontSize:11,color:"var(--muted)"}}>💰 ${a.pricePerNight}/night</span>}
+                    {a.checkIn&&a.checkOut&&<span style={{fontSize:11,color:"var(--muted)"}}>📅 {fmtDate(a.checkIn)} – {fmtDate(a.checkOut)}</span>}
+                  </div>
+                  <div className="vbar-wrap"><div className="vbar-bg"><div className="vbar-fill" style={{width:`${Math.round((votes.length/max)*100)}%`}}/></div></div>
+                  <span className="vote-count">{votes.length} 👍</span>
+                  <button className={`vote-btn ${hasVote?"on":""}`}>{hasVote?"✓":"Vote"}</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className="vote-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h4>🗳️ Activities & Items ({votable.length})</h4>
@@ -2328,12 +2369,14 @@ export default function App() {
     const savedId  = sessionStorage.getItem("tripsync_active_id");
     const savedTab = sessionStorage.getItem("tripsync_active_tab");
     if(savedId && (data||[]).find(t => t.id === savedId)) {
-      // Build shell from the raw DB row so trip_members maps correctly into tripMembers
       const rawRow = (data||[]).find(t => t.id === savedId);
       const shell = buildTrip(rawRow, null);
       if(savedTab) setTab(savedTab);
+      // Set active BEFORE setPage so trip page never renders with active=null
+      setActive(shell);
       setPage("trip");
-      setTimeout(async () => {
+      // Load full details in background — UI already shows trip shell
+      (async () => {
         const resolvedUid = uid;
         const [{ data: items }, { data: accoms }, { data: profile }] = await Promise.all([
           supabase.from("activities").select("*").eq("trip_id", savedId).order("created_at", { ascending: true }),
@@ -2356,14 +2399,14 @@ export default function App() {
           id: a.id, name: a.name, address: a.address || "",
           pricePerNight: parseFloat(a.cost_per_night) || 0, rating: "",
           checkIn: a.check_in || "", checkOut: a.check_out || "",
-          notes: "", votes: [],
+          notes: "", votes: a.votes || [],
         }));
         const restoredTrip = { ...shell, calendarItems, accommodationOptions,
           tripMembers: shell.tripMembers,
           personalBudgets: { [resolvedUid]: profile?.personal_budget ?? null } };
         setActive(restoredTrip);
         setTrips(ts => ts.map(t => t.id === savedId ? restoredTrip : t));
-      }, 50);
+      })();
     }
 
     setTripsLoading(false);
