@@ -2137,6 +2137,7 @@ export default function App() {
   // ── Real Supabase Auth state ──
   const [authUser,setAuthUser]     = useState(null);   // Supabase user object (null = logged out)
   const [authLoading,setAuthLoading] = useState(true); // true while we wait for session check on load
+  const authUserIdRef = useRef(null); // tracks the last user ID so token refreshes don't re-trigger loadTrips
   const loggedIn = !!authUser;
   const user = authUser?.user_metadata?.full_name || authUser?.email?.split("@")[0] || "Traveler";
 
@@ -2166,20 +2167,14 @@ export default function App() {
     });
 
     // Listen for future login / logout events.
-    // IMPORTANT: we check the event type so that silent token refreshes (TOKEN_REFRESHED,
-    // INITIAL_SESSION) don't reset the page the user is currently on — that was causing
-    // all in-memory trip state to be wiped whenever the user switched browser tabs and back.
+    // We check the event type so that silent token refreshes (TOKEN_REFRESHED, INITIAL_SESSION)
+    // don't reset the page — that was wiping trip state whenever the user switched browser tabs.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthUser(session?.user ?? null);
       setAuthLoading(false);
-      if(event === "SIGNED_IN") {
-        // Only redirect on an actual interactive sign-in, not on token refresh
-        setPage("dashboard");
-      } else if(event === "SIGNED_OUT") {
-        setPage("landing");
-        setActive(null);
-      }
-      // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED etc. — do nothing to page/state
+      if(event === "SIGNED_IN")  setPage("dashboard");
+      else if(event === "SIGNED_OUT") { setPage("landing"); setActive(null); }
+      // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED → update authUser only, never touch page/state
     });
 
     return () => subscription.unsubscribe();
@@ -2271,40 +2266,49 @@ export default function App() {
         google_maps_url, country_info,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) )
       `)
-      .eq("trip_members.user_id", authUser.id)
+      .eq("trip_members.user_id", authUserIdRef.current)
       .order("created_at", { ascending: false });
 
     if(error) { console.error("loadTrips:", error); setTripsLoading(false); return; }
 
-    if(!data || data.length === 0) {
-      // No real trips yet — show demo trip so the app isn't empty
-      setTrips([DEMO_TRIP]);
-    } else {
-      // Always prepend the demo trip so new users see a real example
-      setTrips([DEMO_TRIP, ...data.map(t => ({
-        id:          t.id,
-        name:        t.title,
-        status:      t.status || "planning",
-        startDate:   t.start_date,
-        endDate:     t.end_date,
-        members:     (t.trip_members||[]).map(m => m.profiles?.full_name || m.user_id),
-        tripMembers: (t.trip_members||[]).map(m => ({
-          userId:   m.user_id,
-          name:     m.profiles?.full_name || m.user_id,
-          role:     m.role,
-          joinedAt: m.joined_at,
-        })),
-        // These will be filled when the trip is opened
-        destinations:       t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
-        accommodationOptions: [],
-        calendarItems:      [],
-        availability:       {},
-        personalBudgets:    {},
-        country:            t.country_info || null,
-        googleMapsUrl:      t.google_maps_url || "",
-        description:        t.description || "",
-      }))]);
-    }
+    const buildTrip = (t, existing) => ({
+      id:          t.id,
+      name:        t.title,
+      status:      t.status || "planning",
+      startDate:   t.start_date,
+      endDate:     t.end_date,
+      members:     (t.trip_members||[]).map(m => m.profiles?.full_name || m.user_id),
+      tripMembers: (t.trip_members||[]).map(m => ({
+        userId:   m.user_id,
+        name:     m.profiles?.full_name || m.user_id,
+        role:     m.role,
+        joinedAt: m.joined_at,
+      })),
+      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      // Preserve full loaded data if this trip is already open — never overwrite with empty shells
+      calendarItems:       existing?.calendarItems      ?? [],
+      accommodationOptions:existing?.accommodationOptions ?? [],
+      availability:        existing?.availability        ?? {},
+      personalBudgets:     existing?.personalBudgets     ?? {},
+      country:             t.country_info || null,
+      googleMapsUrl:       t.google_maps_url || "",
+      description:         t.description || "",
+    });
+
+    setTrips(prev => {
+      const existingMap = Object.fromEntries(prev.map(t => [t.id, t]));
+      const freshTrips = (data||[]).map(t => buildTrip(t, existingMap[t.id]));
+      return data?.length ? [DEMO_TRIP, ...freshTrips] : [DEMO_TRIP];
+    });
+
+    // If a trip is currently open, keep it in sync without wiping its data
+    setActive(prev => {
+      if(!prev || prev.id === "demo-barcelona") return prev;
+      const fresh = (data||[]).find(t => t.id === prev.id);
+      if(!fresh) return prev; // trip no longer accessible — leave as-is until next navigation
+      return buildTrip(fresh, prev);
+    });
+
     setTripsLoading(false);
   };
 
@@ -2380,8 +2384,13 @@ export default function App() {
 
   // ── Load trips when user logs in ──
   useEffect(() => {
-    if(authUser) loadTrips();
-    else setTrips([]);
+    const newId = authUser?.id ?? null;
+    // Only reload trips when the actual user ID changes (login/logout),
+    // not when Supabase silently refreshes the token and re-emits the authUser object.
+    if(newId === authUserIdRef.current) return;
+    authUserIdRef.current = newId;
+    if(newId) loadTrips();
+    else { setTrips([]); setActive(null); }
   }, [authUser]);
 
   // ── Save personal budget to Supabase profiles table ──
