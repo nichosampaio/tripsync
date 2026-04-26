@@ -2166,13 +2166,20 @@ export default function App() {
     });
 
     // Listen for future login / logout events.
-    // Also covers the race condition where onAuthStateChange fires before getSession resolves.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    // IMPORTANT: we check the event type so that silent token refreshes (TOKEN_REFRESHED,
+    // INITIAL_SESSION) don't reset the page the user is currently on — that was causing
+    // all in-memory trip state to be wiped whenever the user switched browser tabs and back.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthUser(session?.user ?? null);
-      // On sign-in redirect to dashboard; on sign-out go to landing
-      if(session?.user) setPage("dashboard");
-      else setPage("landing");
       setAuthLoading(false);
+      if(event === "SIGNED_IN") {
+        // Only redirect on an actual interactive sign-in, not on token refresh
+        setPage("dashboard");
+      } else if(event === "SIGNED_OUT") {
+        setPage("landing");
+        setActive(null);
+      }
+      // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED etc. — do nothing to page/state
     });
 
     return () => subscription.unsubscribe();
@@ -2541,26 +2548,16 @@ export default function App() {
     setActive(fullNewTrip); setShowNew(false); setTab("schedule"); setPage("trip");
   };
   const deleteTrip = async (tripId) => {
-    // Demo trip: just remove from local state
     if(tripId === "demo-barcelona") {
       setTrips(ts => ts.filter(t => t.id !== tripId));
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
       return;
     }
-    // Guard 1: only the owner can delete
     const tripToDelete = trips.find(t => t.id === tripId);
     const myMembership = (tripToDelete?.tripMembers || []).find(m => m.userId === authUser.id);
-    if(!myMembership || myMembership.role !== "owner") {
-      alert("Only the trip owner can delete this trip.");
-      return;
-    }
-    // Guard 2: cannot delete while other members are present
+    if(!myMembership || myMembership.role !== "owner") { alert("Only the trip owner can delete this trip."); return; }
     const otherMembers = (tripToDelete?.tripMembers || []).filter(m => m.userId !== authUser.id);
-    if(otherMembers.length > 0) {
-      alert(`You must remove all ${otherMembers.length} member(s) before deleting this trip.`);
-      return;
-    }
-    // Real Supabase trip
+    if(otherMembers.length > 0) { alert(`You must remove all ${otherMembers.length} member(s) before deleting this trip.`); return; }
     const { error } = await supabase.from("trips").delete().eq("id", tripId);
     if(error) { console.error("deleteTrip:", error); return; }
     setTrips(ts => ts.filter(t => t.id !== tripId));
@@ -2568,7 +2565,6 @@ export default function App() {
   };
 
   const leaveTrip = async (tripId) => {
-    // Demo trip — just remove from local state
     if(tripId === "demo-barcelona") {
       setTrips(ts => ts.filter(t => t.id !== tripId));
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
@@ -2578,13 +2574,10 @@ export default function App() {
     const myMembership = (tripToLeave?.tripMembers || []).find(m => m.userId === authUser.id);
     const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
     const isOwner = myMembership?.role === "owner";
-
-    // Owner trying to leave while others are still present — block it
     if(isOwner && otherMembers.length > 0) {
       alert(`You created this trip. You can only leave once all ${otherMembers.length} other member(s) have left.`);
       return;
     }
-    // Owner leaving an empty trip — delete the whole trip
     if(isOwner && otherMembers.length === 0) {
       if(!window.confirm(`You're the only one left. Leaving will permanently delete "${tripToLeave.name}". Continue?`)) return;
       const { error } = await supabase.from("trips").delete().eq("id", tripId);
@@ -2593,7 +2586,6 @@ export default function App() {
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
       return;
     }
-    // Regular member leaving — remove only their trip_members row
     if(!window.confirm(`Leave "${tripToLeave.name}"? You'll need to be re-invited to rejoin.`)) return;
     const { error } = await supabase.from("trip_members")
       .delete()
