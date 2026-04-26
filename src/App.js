@@ -2372,41 +2372,12 @@ export default function App() {
       const rawRow = (data||[]).find(t => t.id === savedId);
       const shell = buildTrip(rawRow, null);
       if(savedTab) setTab(savedTab);
-      // Set active BEFORE setPage so trip page never renders with active=null
+      // Set shell immediately so trip page renders right away
       setActive(shell);
       setPage("trip");
-      // Load full details in background — UI already shows trip shell
-      (async () => {
-        const resolvedUid = uid;
-        const [{ data: items }, { data: accoms }, { data: profile }] = await Promise.all([
-          supabase.from("activities").select("*").eq("trip_id", savedId).order("created_at", { ascending: true }),
-          supabase.from("accommodations").select("*").eq("trip_id", savedId),
-          supabase.from("profiles").select("personal_budget").eq("id", resolvedUid).single(),
-        ]);
-        const calendarItems = (items||[]).map(a => ({
-          id: a.id, type: a.category || "general", title: a.title,
-          day: a.scheduled_date || null, startTime: a.scheduled_time || null,
-          startMin: null, durationMin: 60, location: "",
-          price: parseFloat(a.cost) || 0, priceType: a.price_type || "flat",
-          metadata: {
-            description: "", notes: "",
-            upvotes: [], downvotes: [],
-            createdBy: a.created_by || "", checkIn: null,
-            checkOut: null, transportationTime: "",
-          },
-        }));
-        const accommodationOptions = (accoms||[]).map(a => ({
-          id: a.id, name: a.name, address: a.address || "",
-          pricePerNight: parseFloat(a.cost_per_night) || 0, rating: "",
-          checkIn: a.check_in || "", checkOut: a.check_out || "",
-          notes: "", votes: a.votes || [],
-        }));
-        const restoredTrip = { ...shell, calendarItems, accommodationOptions,
-          tripMembers: shell.tripMembers,
-          personalBudgets: { [resolvedUid]: profile?.personal_budget ?? null } };
-        setActive(restoredTrip);
-        setTrips(ts => ts.map(t => t.id === savedId ? restoredTrip : t));
-      })();
+      // Reuse loadTripDetails to fetch full data — avoids duplicating mapper logic
+      // Wrap in setTimeout(0) so setActive/setPage state updates flush first
+      setTimeout(() => loadTripDetails(shell), 0);
     }
 
     setTripsLoading(false);
