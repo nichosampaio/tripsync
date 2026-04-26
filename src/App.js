@@ -1367,18 +1367,6 @@ function VotingTab({trip,setTrip,user,db}) {
     setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
   };
 
-  const voteAccom=(id)=>{
-    setTrip(t=>({
-      ...t,
-      accommodationOptions:t.accommodationOptions.map(a=>{
-        if(a.id!==id) return a;
-        const hasVote=(a.votes||[]).includes(user);
-        const newVotes=hasVote?(a.votes||[]).filter(v=>v!==user):[...(a.votes||[]),user];
-        return {...a,votes:newVotes};
-      })
-    }));
-  };
-
   const voteCI=(id,dir)=>{
     setTrip(t=>({
       ...t,calendarItems:t.calendarItems.map(ci=>{
@@ -1423,29 +1411,6 @@ function VotingTab({trip,setTrip,user,db}) {
   return (
     <div>
       {renderSection("Destination",trip.destinations,"destinations","📍")}
-      {trip.accommodationOptions.length>0&&(
-        <div className="vote-card">
-          <h4>🏨 Accommodations ({trip.accommodationOptions.length})</h4>
-          <div className="vote-options">
-            {[...trip.accommodationOptions].sort((a,b)=>(b.votes||[]).length-(a.votes||[]).length).map(a=>{
-              const v=(a.votes||[]).includes(user);
-              const max=Math.max(...trip.accommodationOptions.map(x=>(x.votes||[]).length),1);
-              return (
-                <div key={a.id} className={`vote-opt ${v?"voted":""}`} onClick={()=>voteAccom(a.id)}>
-                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:2}}>
-                    <span style={{fontSize:13,fontWeight:v?600:400}}>{a.name}</span>
-                    {a.pricePerNight&&<span style={{fontSize:11,color:"var(--muted)"}}>💰 ${a.pricePerNight}/night</span>}
-                    {a.rating&&<span style={{fontSize:11,color:"var(--muted)"}}>{renderStars(a.rating)}</span>}
-                  </div>
-                  <div className="vbar-wrap"><div className="vbar-bg"><div className="vbar-fill" style={{width:`${Math.round(((a.votes||[]).length/max)*100)}%`}}/></div></div>
-                  <span className="vote-count">{(a.votes||[]).length} 👍</span>
-                  <button className={`vote-btn ${v?"on":""}`}>{v?"✓":"Vote"}</button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
       <div className="vote-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
           <h4>🗳️ Activities & Items ({votable.length})</h4>
@@ -1730,7 +1695,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 }
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
-const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:"",votes:[]};
+const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
   const [editId,setEditId] = useState(null);
@@ -1810,7 +1775,6 @@ function AccommodationTab({trip,setTrip,db}) {
                 {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong></div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
-                {(a.votes||[]).length>0&&<div className="card-meta-row">🗳️ <strong>{(a.votes||[]).length} vote{(a.votes||[]).length!==1?"s":""}</strong><span style={{fontSize:11,color:"var(--muted)",marginLeft:6}}>{(a.votes||[]).join(", ")}</span></div>}
               </div>
               {a.notes&&<div className="card-notes">{a.notes}</div>}
             </div>
@@ -1930,7 +1894,7 @@ function CountryTab({trip,setTrip,db}) {
 }
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
-function MembersTab({trip,setTrip,user,db}) {
+function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
   const [emailInput,setEmailInput] = useState("");
   const [emailErr,setEmailErr] = useState("");
   const [invitations,setInvitations] = useState([]);
@@ -1962,16 +1926,35 @@ function MembersTab({trip,setTrip,user,db}) {
         <span className="badge">{members.length}</span>
       </div>
       <div className="members-tab">
-        {members.map(m=>(
-          <div key={m.userId} className="member-row">
-            <div className={`member-avatar ${m.role==="owner"?"owner":m.role==="viewer"?"viewer":""}`}>{(m.name||m.userId||"?")[0].toUpperCase()}</div>
-            <div className="member-info">
-              <div className="member-name">{m.name||m.userId}{(m.name||m.userId)===user&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}</div>
-              <div className="member-meta">Joined {m.joinedAt?fmtDate(m.joinedAt):"recently"}</div>
+        {members.map(m=>{
+          const isMe = m.userId === (authUserId || user);
+          const isOwner = m.role === "owner";
+          const otherCount = members.filter(x => x.userId !== m.userId).length;
+          const canLeave = !isOwner || otherCount === 0;
+          const leaveLabel = isOwner ? "Leave & Delete" : "Leave Trip";
+          const leaveTitle = isOwner && otherCount > 0
+            ? `Remove all ${otherCount} member(s) before leaving`
+            : isOwner ? "You're the only member — leaving will delete this trip"
+            : "Leave this trip";
+          return (
+            <div key={m.userId} className="member-row">
+              <div className={`member-avatar ${m.role==="owner"?"owner":m.role==="viewer"?"viewer":""}`}>{(m.name||m.userId||"?")[0].toUpperCase()}</div>
+              <div className="member-info">
+                <div className="member-name">{m.name||m.userId}{isMe&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}</div>
+                <div className="member-meta">Joined {m.joinedAt?fmtDate(m.joinedAt):"recently"}</div>
+              </div>
+              <span className={`role-badge role-${m.role}`}>{m.role==="owner"?"👑 Owner":m.role==="editor"?"✏️ Editor":"👁 Viewer"}</span>
+              {isMe && (
+                <button
+                  className="btn btn-danger btn-sm"
+                  style={{marginLeft:8,padding:"3px 10px",fontSize:12,opacity:canLeave?1:0.45,cursor:canLeave?"pointer":"not-allowed"}}
+                  title={leaveTitle}
+                  onClick={()=>{ if(!canLeave){ alert(leaveTitle); return; } onLeave && onLeave(); }}
+                >{leaveLabel}</button>
+              )}
             </div>
-            <span className={`role-badge role-${m.role}`}>{m.role==="owner"?"👑 Owner":m.role==="editor"?"✏️ Editor":"👁 Viewer"}</span>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="invite-panel">
         <h5>✉️ Invite Friends</h5>
@@ -2099,9 +2082,9 @@ const DEMO_TRIP = {
   personalBudgets:{Alex:900,Jamie:750,Sam:800,Taylor:950,Morgan:700},
   accommodations:[],
   accommodationOptions:[
-    {id:30,name:"Eixample Design Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Rooftop terrace, sleeps 5, near Sagrada Família. VOTED FAVOURITE ✓",votes:["Alex","Jamie","Sam","Taylor","Morgan"]},
-    {id:31,name:"Gothic Quarter Hostel — Private Room",address:"Carrer dels Escudellers 18, Barcelona",pricePerNight:95,rating:4.3,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Central location, breakfast included, tight on space.",votes:["Morgan"]},
-    {id:32,name:"Barceloneta Beach Hotel",address:"Passeig de Joan de Borbó 80, Barcelona",pricePerNight:185,rating:4.6,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Ocean views, rooftop pool, 5 min walk to beach.",votes:["Taylor","Sam"]},
+    {id:30,name:"Eixample Design Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Rooftop terrace, sleeps 5, near Sagrada Família. VOTED FAVOURITE ✓"},
+    {id:31,name:"Gothic Quarter Hostel — Private Room",address:"Carrer dels Escudellers 18, Barcelona",pricePerNight:95,rating:4.3,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Central location, breakfast included, tight on space."},
+    {id:32,name:"Barceloneta Beach Hotel",address:"Passeig de Joan de Borbó 80, Barcelona",pricePerNight:185,rating:4.6,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Ocean views, rooftop pool, 5 min walk to beach."},
   ],
   calendarItems:[
     // ── Day 1: Arrival — Oct 17 ──
@@ -2366,7 +2349,6 @@ export default function App() {
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
       notes:         a.notes || "",
-      votes:         a.votes || [],
     }));
 
     // Load personal budget for this user from profiles
@@ -2571,6 +2553,45 @@ export default function App() {
     if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
   };
 
+  const leaveTrip = async (tripId) => {
+    // Demo trip — just remove from local state, no DB call needed
+    if(tripId === "demo-barcelona") {
+      setTrips(ts => ts.filter(t => t.id !== tripId));
+      if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
+      return;
+    }
+    const tripToLeave = trips.find(t => t.id === tripId);
+    const myMembership = (tripToLeave?.tripMembers || []).find(m => m.userId === authUser.id);
+    const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
+    const isOwner = myMembership?.role === "owner";
+
+    // Owner trying to leave while others are still in the trip — block it
+    if(isOwner && otherMembers.length > 0) {
+      alert(`You created this trip. You can only leave once all ${otherMembers.length} other member(s) have left.`);
+      return;
+    }
+
+    // Owner leaving an empty trip — delete the whole trip
+    if(isOwner && otherMembers.length === 0) {
+      if(!window.confirm(`You're the only one left. Leaving will permanently delete "${tripToLeave.name}". Continue?`)) return;
+      const { error } = await supabase.from("trips").delete().eq("id", tripId);
+      if(error) { console.error("leaveTrip (delete):", error); return; }
+      setTrips(ts => ts.filter(t => t.id !== tripId));
+      if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
+      return;
+    }
+
+    // Regular member leaving — remove only their trip_members row
+    if(!window.confirm(`Leave "${tripToLeave.name}"? You'll need to be re-invited to rejoin.`)) return;
+    const { error } = await supabase.from("trip_members")
+      .delete()
+      .eq("trip_id", tripId)
+      .eq("user_id", authUser.id);
+    if(error) { console.error("leaveTrip (member):", error); return; }
+    setTrips(ts => ts.filter(t => t.id !== tripId));
+    if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
+  };
+
   if(authLoading) return (
     <>
       <style>{FONT+CSS}</style>
@@ -2764,7 +2785,7 @@ export default function App() {
               {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb}/>}
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
-              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
