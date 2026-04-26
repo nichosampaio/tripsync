@@ -2263,7 +2263,7 @@ export default function App() {
   // ── Load trips for the logged-in user ──
   const loadTrips = async (userId) => {
     const uid = userId || authUserIdRef.current;
-    if(!uid) { console.warn("loadTrips called with no user ID — skipping"); setTripsLoading(false); return; }
+    if(!uid) { setTripsLoading(false); return; }
     setTripsLoading(true);
     const { data, error } = await supabase
       .from("trips")
@@ -2315,7 +2315,7 @@ export default function App() {
       return buildTrip(fresh, prev);
     });
 
-    // After page reload: if sessionStorage has a saved trip ID, restore it fully
+    // Restore previously open trip after page reload
     const savedId  = sessionStorage.getItem("tripsync_active_id");
     const savedTab = sessionStorage.getItem("tripsync_active_tab");
     if(savedId && (data||[]).find(t => t.id === savedId)) {
@@ -2323,11 +2323,11 @@ export default function App() {
       if(savedTab) setTab(savedTab);
       setPage("trip");
       setTimeout(async () => {
-        const uid = userId || authUserIdRef.current;
+        const resolvedUid = uid;
         const [{ data: items }, { data: accoms }, { data: profile }] = await Promise.all([
           supabase.from("activities").select("*").eq("trip_id", savedId).order("created_at", { ascending: true }),
           supabase.from("accommodations").select("*").eq("trip_id", savedId),
-          supabase.from("profiles").select("personal_budget").eq("id", uid).single(),
+          supabase.from("profiles").select("personal_budget").eq("id", resolvedUid).single(),
         ]);
         const calendarItems = (items||[]).map(a => ({
           id: a.id, type: a.type || "activity", title: a.title, day: a.day,
@@ -2347,7 +2347,7 @@ export default function App() {
           notes: a.notes || "", votes: a.votes || [],
         }));
         const restoredTrip = { ...shell, calendarItems, accommodationOptions,
-          personalBudgets: { [uid]: profile?.personal_budget ?? null } };
+          personalBudgets: { [resolvedUid]: profile?.personal_budget ?? null } };
         setActive(restoredTrip);
         setTrips(ts => ts.map(t => t.id === savedId ? restoredTrip : t));
       }, 50);
@@ -2433,7 +2433,6 @@ export default function App() {
     // not when Supabase silently refreshes the token and re-emits the authUser object.
     if(newId === authUserIdRef.current) return;
     authUserIdRef.current = newId;
-    // Pass userId directly so loadTrips never queries with a stale/null ref
     if(newId) loadTrips(newId);
     else { setTrips([]); setActive(null); }
   }, [authUser]);
@@ -2607,6 +2606,8 @@ export default function App() {
     await supabase.from("trip_members").insert({
       trip_id: newTrip.id, user_id: authUser.id, role: "owner",
     });
+    // Build trip locally — never call loadTrips() here as it races with setActive
+    // and was querying with null userId, returning empty results that wiped trip data
     const fullNewTrip = {
       ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [],
       tripMembers: [{ userId: authUser.id, name: user, role: "owner", joinedAt: new Date().toISOString().slice(0,10) }],
