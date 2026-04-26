@@ -336,7 +336,7 @@ const uid = () => ++_id;
 
 function toYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function fromYMD(s) { if(!s)return null; const[y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
-function fmtDate(s) { if(!s)return""; const d=fromYMD(s); return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; }
+function fmtDate(s) { if(!s)return""; try { const d = s.includes("T") ? new Date(s) : fromYMD(s); if(!d||isNaN(d.getTime()))return""; return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; } catch(e) { return ""; } }
 function fmtRange(s,e) {
   if(!s)return"No dates set"; if(!e)return fmtDate(s);
   const sd=fromYMD(s),ed=fromYMD(e);
