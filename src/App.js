@@ -1900,7 +1900,7 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
   const [invitations,setInvitations] = useState([]);
   const [copied,setCopied] = useState(false);
   const [link] = useState(()=>`tripsync.app/join/${Math.random().toString(36).slice(2,8)}`);
-  const members=trip.tripMembers||trip.members.map((name,i)=>({userId:name,name,role:i===0?"owner":"editor",joinedAt:trip.startDate||"2026-01-01"}));
+  const members=trip.tripMembers||trip.members.map((name,i)=>({userId:name,name,role:i===0?"admin":"editor",joinedAt:trip.startDate||"2026-01-01"}));
 
   const sendInvite=async ()=>{
     if(!emailInput.trim()){setEmailErr("Enter email");return;}
@@ -1928,7 +1928,7 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
       <div className="members-tab">
         {members.map(m=>{
           const isMe = m.userId === (authUserId || user);
-          const isOwner = m.role === "owner";
+          const isOwner = m.role === "admin";
           const otherCount = members.filter(x => x.userId !== m.userId).length;
           const canLeave = !isOwner || otherCount === 0;
           const leaveLabel = isOwner ? "Leave & Delete" : "Leave Trip";
@@ -1943,7 +1943,7 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
                 <div className="member-name">{m.name||m.userId}{isMe&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}</div>
                 <div className="member-meta">Joined {m.joinedAt?fmtDate(m.joinedAt):"recently"}</div>
               </div>
-              <span className={`role-badge role-${m.role}`}>{m.role==="owner"?"👑 Owner":m.role==="editor"?"✏️ Editor":"👁 Viewer"}</span>
+              <span className={`role-badge role-${m.role}`}>{m.role==="admin"?"👑 Owner":m.role==="member"?"👤 Member":"👁 Viewer"}</span>
               {isMe && (
                 <button
                   className="btn btn-danger btn-sm"
@@ -2031,7 +2031,7 @@ function NewTripModal({onClose,onCreate,user}) {
         id:uid(),name:form.name.trim(),status:"planning",
         startDate,endDate,budgetLimit:null,
         members:[user],
-        tripMembers:[{userId:user,name:user,role:"owner",joinedAt:toYMD(new Date())}],
+        tripMembers:[{userId:user,name:user,role:"admin",joinedAt:toYMD(new Date())}],
         destinations:dests.length?dests:[{id:1,name:"TBD",votes:[]}],
         budgets:{"$300–500":0,"$500–800":0,"$800+":0},
         accommodations:[],accommodationOptions:[],calendarItems:[],
@@ -2067,7 +2067,7 @@ const DEMO_TRIP = {
   budgetLimit:1500, googleMapsUrl:"https://www.google.com/maps/d/embed?mid=1BwLTXJGSLCYBDaWQFsrJIqX5tFjZGzo",
   members:["Alex","Jamie","Sam","Taylor","Morgan"],
   tripMembers:[
-    {userId:"Alex",name:"Alex",role:"owner",joinedAt:"2025-06-01"},
+    {userId:"Alex",name:"Alex",role:"admin",joinedAt:"2025-06-01"},
     {userId:"Jamie",name:"Jamie",role:"editor",joinedAt:"2025-06-02"},
     {userId:"Sam",name:"Sam",role:"editor",joinedAt:"2025-06-03"},
     {userId:"Taylor",name:"Taylor",role:"editor",joinedAt:"2025-06-04"},
@@ -2323,10 +2323,6 @@ export default function App() {
       const rawRow = (data||[]).find(t => t.id === savedId);
       const shell = buildTrip(rawRow, null);
       if(savedTab) setTab(savedTab);
-      // Set active to the shell IMMEDIATELY so the trip page renders at once.
-      // Without this, setPage("trip") fires before active is set → render sees
-      // safePage==="trip" && active===null → falls back to dashboard.
-      setActive(shell);
       setPage("trip");
       setTimeout(async () => {
         const resolvedUid = uid;
@@ -2336,21 +2332,22 @@ export default function App() {
           supabase.from("profiles").select("personal_budget").eq("id", resolvedUid).single(),
         ]);
         const calendarItems = (items||[]).map(a => ({
-          id: a.id, type: a.type || "activity", title: a.title, day: a.day,
-          startTime: a.start_time, startMin: a.start_min, durationMin: a.duration_min || 60,
-          location: a.location || "", price: a.price || 0, priceType: a.price_type || "flat",
+          id: a.id, type: a.category || "general", title: a.title,
+          day: a.scheduled_date || null, startTime: a.scheduled_time || null,
+          startMin: null, durationMin: 60, location: "",
+          price: parseFloat(a.cost) || 0, priceType: a.price_type || "flat",
           metadata: {
-            description: a.description || "", notes: a.notes || "",
-            upvotes: a.upvotes || [], downvotes: a.downvotes || [],
-            createdBy: a.created_by || "", checkIn: a.check_in || null,
-            checkOut: a.check_out || null, transportationTime: a.transportation_time || "",
+            description: "", notes: "",
+            upvotes: [], downvotes: [],
+            createdBy: a.created_by || "", checkIn: null,
+            checkOut: null, transportationTime: "",
           },
         }));
         const accommodationOptions = (accoms||[]).map(a => ({
           id: a.id, name: a.name, address: a.address || "",
-          pricePerNight: a.price_per_night || 0, rating: a.rating || "",
+          pricePerNight: parseFloat(a.cost_per_night) || 0, rating: "",
           checkIn: a.check_in || "", checkOut: a.check_out || "",
-          notes: a.notes || "", votes: a.votes || [],
+          notes: "", votes: [],
         }));
         const restoredTrip = { ...shell, calendarItems, accommodationOptions,
           tripMembers: shell.tripMembers,
@@ -2382,24 +2379,24 @@ export default function App() {
 
     const calendarItems = (items||[]).map(a => ({
       id:          a.id,
-      type:        a.type || "activity",
+      type:        a.category || "general",
       title:       a.title,
-      day:         a.day,
-      startTime:   a.start_time,
-      startMin:    a.start_min,
-      durationMin: a.duration_min || 60,
-      location:    a.location || "",
-      price:       a.price || 0,
+      day:         a.scheduled_date || null,
+      startTime:   a.scheduled_time || null,
+      startMin:    null,
+      durationMin: 60,
+      location:    "",
+      price:       parseFloat(a.cost) || 0,
       priceType:   a.price_type || "flat",
       metadata: {
-        description: a.description || "",
-        notes:       a.notes || "",
-        upvotes:     a.upvotes || [],
-        downvotes:   a.downvotes || [],
+        description: "",
+        notes:       "",
+        upvotes:     [],
+        downvotes:   [],
         createdBy:   a.created_by || "",
-        checkIn:     a.check_in || null,
-        checkOut:    a.check_out || null,
-        transportationTime: a.transportation_time || "",
+        checkIn:     null,
+        checkOut:    null,
+        transportationTime: "",
       },
     }));
 
@@ -2407,11 +2404,12 @@ export default function App() {
       id:            a.id,
       name:          a.name,
       address:       a.address || "",
-      pricePerNight: a.price_per_night || 0,
-      rating:        a.rating || "",
+      pricePerNight: parseFloat(a.cost_per_night) || 0,
+      rating:        "",
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
-      notes:         a.notes || "",
+      notes:         "",
+      votes:         [],
     }));
 
     // Load personal budget for this user from profiles
@@ -2460,24 +2458,15 @@ export default function App() {
     addItem: async (tripId, item) => {
       if(isMock) return item;
       const { data, error } = await supabase.from("activities").insert({
-        trip_id:            tripId,
-        type:               item.type,
-        title:              item.title,
-        day:                item.day || null,
-        start_time:         item.startTime || null,
-        start_min:          item.startMin  ?? null,
-        duration_min:       item.durationMin || 60,
-        location:           item.location || "",
-        price:              item.price || 0,
-        price_type:         item.priceType || "flat",
-        description:        item.metadata?.description || "",
-        notes:              item.metadata?.notes || "",
-        upvotes:            item.metadata?.upvotes || [],
-        downvotes:          item.metadata?.downvotes || [],
-        created_by:         item.metadata?.createdBy || "",
-        check_in:           item.metadata?.checkIn || null,
-        check_out:          item.metadata?.checkOut || null,
-        transportation_time:item.metadata?.transportationTime || null,
+        trip_id:        tripId,
+        title:          item.title,
+        category:       item.type || "general",
+        scheduled_date: item.day || null,
+        scheduled_time: item.startTime || null,
+        cost:           item.price || 0,
+        price_type:     item.priceType || "flat",
+        status:         "proposed",
+        created_by:     item.metadata?.createdBy || null,
       }).select().single();
       if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
@@ -2486,22 +2475,12 @@ export default function App() {
     updateItem: async (item) => {
       if(isMock) return;
       await supabase.from("activities").update({
-        type:               item.type,
-        title:              item.title,
-        day:                item.day || null,
-        start_time:         item.startTime || null,
-        start_min:          item.startMin  ?? null,
-        duration_min:       item.durationMin || 60,
-        location:           item.location || "",
-        price:              item.price || 0,
-        price_type:         item.priceType || "flat",
-        description:        item.metadata?.description || "",
-        notes:              item.metadata?.notes || "",
-        upvotes:            item.metadata?.upvotes || [],
-        downvotes:          item.metadata?.downvotes || [],
-        check_in:           item.metadata?.checkIn || null,
-        check_out:          item.metadata?.checkOut || null,
-        transportation_time:item.metadata?.transportationTime || null,
+        title:          item.title,
+        category:       item.type || "general",
+        scheduled_date: item.day || null,
+        scheduled_time: item.startTime || null,
+        cost:           item.price || 0,
+        price_type:     item.priceType || "flat",
       }).eq("id", item.id);
     },
 
@@ -2518,24 +2497,25 @@ export default function App() {
     // ── Votes table (destination/budget votes) ──
     upsertVote: async (tripId, itemType, itemId, userId, value) => {
       if(isMock) return;
+      if(itemType !== "activities") return;
       await supabase.from("votes").upsert({
-        trip_id: tripId, item_type: itemType, item_id: String(itemId),
-        user_id: userId, value,
-      }, { onConflict: "trip_id,item_type,item_id,user_id" });
+        activity_id: itemId,
+        user_id:     userId,
+        value,
+      }, { onConflict: "activity_id,user_id" });
     },
 
     // ── Accommodations ──
     addAccom: async (tripId, accom) => {
       if(isMock) return accom;
       const { data, error } = await supabase.from("accommodations").insert({
-        trip_id:         tripId,
-        name:            accom.name,
-        address:         accom.address || "",
-        price_per_night: accom.pricePerNight || null,
-        rating:          accom.rating || null,
-        check_in:        accom.checkIn || null,
-        check_out:       accom.checkOut || null,
-        notes:           accom.notes || "",
+        trip_id:        tripId,
+        name:           accom.name,
+        address:        accom.address || "",
+        cost_per_night: accom.pricePerNight || 0,
+        check_in:       accom.checkIn || null,
+        check_out:      accom.checkOut || null,
+        created_by:     null,
       }).select().single();
       if(error) { console.error("db.addAccom:", error); return accom; }
       return { ...accom, id: data.id };
@@ -2544,13 +2524,11 @@ export default function App() {
     updateAccom: async (accom) => {
       if(isMock) return;
       await supabase.from("accommodations").update({
-        name:            accom.name,
-        address:         accom.address || "",
-        price_per_night: accom.pricePerNight || null,
-        rating:          accom.rating || null,
-        check_in:        accom.checkIn || null,
-        check_out:       accom.checkOut || null,
-        notes:           accom.notes || "",
+        name:           accom.name,
+        address:        accom.address || "",
+        cost_per_night: accom.pricePerNight || 0,
+        check_in:       accom.checkIn || null,
+        check_out:      accom.checkOut || null,
       }).eq("id", accom.id);
     },
 
@@ -2611,13 +2589,13 @@ export default function App() {
     if(error) { console.error("createTrip:", error); throw new Error(error.message); }
     // Add creator as owner in trip_members
     await supabase.from("trip_members").insert({
-      trip_id: newTrip.id, user_id: authUser.id, role: "owner",
+      trip_id: newTrip.id, user_id: authUser.id, role: "admin",
     });
     // Build trip locally — never call loadTrips() here as it races with setActive
     // and was querying with null userId, returning empty results that wiped trip data
     const fullNewTrip = {
       ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [],
-      tripMembers: [{ userId: authUser.id, name: user, role: "owner", joinedAt: new Date().toISOString().slice(0,10) }],
+      tripMembers: [{ userId: authUser.id, name: user, role: "admin", joinedAt: new Date().toISOString().slice(0,10) }],
     };
     setTrips(ts => {
       const exists = ts.find(x => x.id === newTrip.id);
@@ -2633,7 +2611,7 @@ export default function App() {
     }
     const tripToDelete = trips.find(t => t.id === tripId);
     const myMembership = (tripToDelete?.tripMembers || []).find(m => m.userId === authUser.id);
-    if(!myMembership || myMembership.role !== "owner") { alert("Only the trip owner can delete this trip."); return; }
+    if(!myMembership || myMembership.role !== "admin") { alert("Only the trip owner can delete this trip."); return; }
     const otherMembers = (tripToDelete?.tripMembers || []).filter(m => m.userId !== authUser.id);
     if(otherMembers.length > 0) { alert(`You must remove all ${otherMembers.length} member(s) before deleting this trip.`); return; }
     const { error } = await supabase.from("trips").delete().eq("id", tripId);
@@ -2648,11 +2626,15 @@ export default function App() {
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
       return;
     }
-    const tripToLeave = trips.find(t => t.id === tripId) || active;
-    if(!tripToLeave) { alert("Trip not found."); return; }
+    const tripToLeave = trips.find(t => t.id === tripId);
+    // Safety guard: if tripMembers hasn't loaded yet, don't proceed — prevents false "owner alone" deletes
+    if(!tripToLeave?.tripMembers?.length) {
+      alert("Trip membership data is still loading. Please try again in a moment.");
+      return;
+    }
     const myMembership = (tripToLeave?.tripMembers || []).find(m => m.userId === authUser.id);
     const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
-    const isOwner = myMembership?.role === "owner";
+    const isOwner = myMembership?.role === "admin";
     if(isOwner && otherMembers.length > 0) {
       alert(`You created this trip. You can only leave once all ${otherMembers.length} other member(s) have left.`);
       return;
