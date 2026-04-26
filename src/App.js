@@ -2531,16 +2531,9 @@ export default function App() {
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
         status:         "proposed",
-        created_by:     item.metadata?.createdBy || null,
+        created_by:     authUser?.id || null,
       }).select().single();
-      if(error) {
-        const msg = `DB ERROR saving activity: ${error.message} (code: ${error.code})`;
-        console.error("db.addItem FULL ERROR:", JSON.stringify(error));
-        console.error("db.addItem PAYLOAD:", { tripId, title: item.title, category: toDbCategory(item.type), created_by: item.metadata?.createdBy || null });
-        alert(msg);
-        return item;
-      }
-      console.log("db.addItem SUCCESS — saved to Supabase with id:", data.id);
+      if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
     },
 
