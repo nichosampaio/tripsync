@@ -2323,6 +2323,10 @@ export default function App() {
       const rawRow = (data||[]).find(t => t.id === savedId);
       const shell = buildTrip(rawRow, null);
       if(savedTab) setTab(savedTab);
+      // Set active to the shell IMMEDIATELY so the trip page renders at once.
+      // Without this, setPage("trip") fires before active is set → render sees
+      // safePage==="trip" && active===null → falls back to dashboard.
+      setActive(shell);
       setPage("trip");
       setTimeout(async () => {
         const resolvedUid = uid;
@@ -2644,12 +2648,8 @@ export default function App() {
       if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
       return;
     }
-    const tripToLeave = trips.find(t => t.id === tripId);
-    // Safety guard: if tripMembers hasn't loaded yet, don't proceed — prevents false "owner alone" deletes
-    if(!tripToLeave?.tripMembers?.length) {
-      alert("Trip membership data is still loading. Please try again in a moment.");
-      return;
-    }
+    const tripToLeave = trips.find(t => t.id === tripId) || active;
+    if(!tripToLeave) { alert("Trip not found."); return; }
     const myMembership = (tripToLeave?.tripMembers || []).find(m => m.userId === authUser.id);
     const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
     const isOwner = myMembership?.role === "owner";
