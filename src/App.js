@@ -593,6 +593,14 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
             </select>
           </div>
           <div className="form-group">
+            <label className="form-label">Repeat for # of days</label>
+            <input className="form-input" type="number" min="1" max="30"
+              value={form.repeatDays}
+              onChange={e=>setForm(f=>({...f,repeatDays:e.target.value}))}
+              placeholder="1"/>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Set to 2+ to add this activity on consecutive days starting from the selected day above</div>
+          </div>
+          <div className="form-group">
             <label className="form-label">Start Time</label>
             <TimePicker value={form.startTime} onChange={v=>setForm(f=>({...f,startTime:v}))}/>
           </div>
@@ -1209,7 +1217,7 @@ function MapTab({trip,setTrip,db}) {
 function ActivityTab({trip,setTrip,user,db}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
-  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:""});
+  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1"});
   const [errs,setErrs] = useState({});
   const tripDays=useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
   const items=trip.calendarItems||[];
@@ -1224,17 +1232,35 @@ function ActivityTab({trip,setTrip,user,db}) {
   const addItem=async ()=>{
     if(!validate()) return;
     const startMin=timeStrToMin(form.startTime)??null;
-    const newItem={
-      id:uid(),type:form.type,title:form.title.trim(),
-      day:form.day||null,startTime:form.startTime||null,startMin,
-      durationMin:+form.durationMin||60,location:form.location,
+    const repeatCount = Math.max(1, Math.min(30, parseInt(form.repeatDays)||1));
+    const baseItem={
+      type:form.type, title:form.title.trim(),
+      startTime:form.startTime||null, startMin,
+      durationMin:+form.durationMin||60, location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
       metadata:{description:form.description,notes:form.notes,upvotes:[],downvotes:[],createdBy:user}
     };
-    const saved = await db.addItem(trip.id, newItem);
-    setTrip(t=>({...t,calendarItems:[...t.calendarItems,saved]}));
-    setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:""});
+    // Build list of days to repeat across
+    const savedItems = [];
+    if(repeatCount === 1 || !form.day) {
+      // Single item
+      const saved = await db.addItem(trip.id, { id:uid(), ...baseItem, day:form.day||null });
+      savedItems.push(saved);
+    } else {
+      // Repeat across consecutive days starting from selected day
+      const tripDaysList = buildTripDays(trip.startDate, trip.endDate);
+      const startIdx = tripDaysList.findIndex(d => d === form.day);
+      for(let i=0; i<repeatCount; i++) {
+        const dayIdx = startIdx + i;
+        const day = dayIdx >= 0 && dayIdx < tripDaysList.length ? tripDaysList[dayIdx] : null;
+        const label = repeatCount > 1 ? `${baseItem.title} (Day ${i+1})` : baseItem.title;
+        const saved = await db.addItem(trip.id, { id:uid(), ...baseItem, title:label, day });
+        savedItems.push(saved);
+      }
+    }
+    setTrip(t=>({...t,calendarItems:[...t.calendarItems,...savedItems]}));
+    setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1"});
     setShowAdd(false);
   };
 
@@ -1345,14 +1371,7 @@ function ActivityTab({trip,setTrip,user,db}) {
                   {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
                 </div>
                 {ci.metadata?.notes&&<div style={{fontSize:12,color:"var(--muted)",marginTop:8,padding:"7px 10px",background:"rgba(255,255,255,0.03)",borderRadius:7,borderLeft:"2px solid var(--border)"}}>📝 {ci.metadata.notes}</div>}
-                {ci.metadata?.createdBy&&(()=>{
-                  const createdByRaw = ci.metadata.createdBy;
-                  // Resolve UUID to display name if possible
-                  const member = (trip.tripMembers||[]).find(m=>m.userId===createdByRaw);
-                  const displayName = member?.name || createdByRaw;
-                  const initial = displayName[0]?.toUpperCase() || "?";
-                  return <div className="suggested-by"><span className="sugg-avatar">{initial}</span>By {displayName}</div>;
-                })()}
+                {ci.metadata?.createdBy&&<div className="suggested-by"><span className="sugg-avatar">{ci.metadata.createdBy[0]}</span>By {ci.metadata.createdBy}</div>}
               </div>
             );
           })}
@@ -1372,6 +1391,22 @@ function VotingTab({trip,setTrip,user,db}) {
     const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
     if(db) db.upsertVote(trip.id, section, id, user, hasVote?0:1);
     setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
+  };
+
+  const voteVehicle = (id) => {
+    setTrip(t => ({
+      ...t,
+      vehicleRentals: (t.vehicleRentals||[]).map(v => {
+        if(v.id !== id) return v;
+        const votes = v.votes || [];
+        const hasVote = votes.includes(user);
+        const newVotes = hasVote ? votes.filter(x => x !== user) : [...votes, user];
+        if(db && !db.isMock) {
+          supabase.from("vehicle_rentals").update({ votes: newVotes }).eq("id", id);
+        }
+        return { ...v, votes: newVotes };
+      })
+    }));
   };
 
   const voteAccom = (id) => {
@@ -1435,6 +1470,30 @@ function VotingTab({trip,setTrip,user,db}) {
   return (
     <div>
       {renderSection("Destination",trip.destinations,"destinations","📍")}
+      {(trip.vehicleRentals||[]).length > 0 && (
+        <div className="vote-card">
+          <h4>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
+          <div className="vote-options">
+            {[...(trip.vehicleRentals||[])].sort((a,b)=>(b.votes||[]).length-(a.votes||[]).length).map(v => {
+              const votes = v.votes || [];
+              const hasVote = votes.includes(user);
+              const max = Math.max(...(trip.vehicleRentals||[]).map(x=>(x.votes||[]).length), 1);
+              const VTYPE = {car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+              return (
+                <div key={v.id} className={`vote-opt ${hasVote?"voted":""}`} onClick={()=>voteVehicle(v.id)}>
+                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:2}}>
+                    <span style={{fontSize:13,fontWeight:hasVote?600:400}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model&&` — ${v.model}`}</span>
+                    {v.pricePerDay&&v.days&&<span style={{fontSize:11,color:"var(--muted)"}}>💰 ${v.pricePerDay}/day · {v.days}d · ~${(v.pricePerDay*v.days).toFixed(0)} total</span>}
+                  </div>
+                  <div className="vbar-wrap"><div className="vbar-bg"><div className="vbar-fill" style={{width:`${Math.round((votes.length/max)*100)}%`}}/></div></div>
+                  <span className="vote-count">{votes.length} 👍</span>
+                  <button className={`vote-btn ${hasVote?"on":""}`}>{hasVote?"✓":"Vote"}</button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {(trip.accommodationOptions||[]).length > 0 && (
         <div className="vote-card">
           <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
@@ -1744,6 +1803,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
 const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
+const BLANK_V={company:"",model:"",vehicleType:"car",days:"",pricePerDay:"",rating:"",pickupLocation:"",dropoffLocation:"",seats:"",transmission:"automatic",notes:"",votes:[]};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
   const [editId,setEditId] = useState(null);
@@ -1828,6 +1888,147 @@ function AccommodationTab({trip,setTrip,db}) {
             </div>
           ))}
         </div>
+      }
+    </div>
+  );
+}
+
+
+// ─── VEHICLE RENTAL TAB ──────────────────────────────────────────────────────
+function VehicleTab({trip,setTrip,db}) {
+  const [show,setShow]   = useState(false);
+  const [editId,setEditId] = useState(null);
+  const [form,setForm]   = useState(BLANK_V);
+  const [errs,setErrs]   = useState({});
+  const rentals = trip.vehicleRentals || [];
+
+  const validate = () => {
+    const e = {};
+    if(!form.company.trim()) e.company = "Company required";
+    if(form.days && isNaN(+form.days)) e.days = "Numeric";
+    if(form.pricePerDay && isNaN(+form.pricePerDay)) e.pricePerDay = "Numeric";
+    if(form.rating && (isNaN(+form.rating)||+form.rating<1||+form.rating>5)) e.rating = "1–5";
+    if(form.seats && isNaN(+form.seats)) e.seats = "Numeric";
+    setErrs(e); return !Object.keys(e).length;
+  };
+
+  const openAdd  = () => { setForm(BLANK_V); setEditId(null); setErrs({}); setShow(true); };
+  const openEdit = v => {
+    setForm({ company:v.company, model:v.model||"", vehicleType:v.vehicleType||"car",
+      days:String(v.days||""), pricePerDay:String(v.pricePerDay||""),
+      rating:String(v.rating||""), pickupLocation:v.pickupLocation||"",
+      dropoffLocation:v.dropoffLocation||"", seats:String(v.seats||""),
+      transmission:v.transmission||"automatic", notes:v.notes||"", votes:v.votes||[] });
+    setEditId(v.id); setErrs({}); setShow(true);
+  };
+
+  const save = async () => {
+    if(!validate()) return;
+    const fmt = { ...form, days:form.days?+form.days:"", pricePerDay:form.pricePerDay?+form.pricePerDay:"",
+      rating:form.rating?+form.rating:"", seats:form.seats?+form.seats:"" };
+    if(editId) {
+      const updated = { ...rentals.find(v=>v.id===editId), ...fmt };
+      if(db) db.updateVehicle(updated);
+      setTrip(t=>({...t, vehicleRentals:t.vehicleRentals.map(v=>v.id===editId?updated:v)}));
+    } else {
+      const newV = { id:uid(), ...fmt, votes:[] };
+      const saved = db ? await db.addVehicle(trip.id, newV) : newV;
+      setTrip(t=>({...t, vehicleRentals:[...(t.vehicleRentals||[]), saved]}));
+    }
+    setShow(false);
+  };
+
+  const del = id => {
+    if(db) db.deleteVehicle(id);
+    setTrip(t=>({...t, vehicleRentals:t.vehicleRentals.filter(v=>v.id!==id)}));
+  };
+
+  const F = k => ({ value:form[k], onChange:e=>setForm(f=>({...f,[k]:e.target.value})), className:`form-input${errs[k]?" err":""}` });
+
+  const totalCost = v => v.pricePerDay && v.days ? (v.pricePerDay * v.days).toFixed(0) : null;
+
+  return (
+    <div>
+      <div className="section-hdr">
+        <h4>🚗 Vehicle Rentals</h4>
+        <button className="btn btn-accent2 btn-sm" onClick={openAdd}>+ Add Option</button>
+      </div>
+      <p className="text-muted" style={{marginBottom:14}}>Compare rental options — these also appear in voting.</p>
+      {show && (
+        <div className="inline-form">
+          <h5>{editId?"Edit Vehicle":"New Vehicle Rental"}</h5>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Company *</label><input {...F("company")} placeholder="e.g. Hertz, Enterprise"/>{errs.company&&<div className="err-msg">{errs.company}</div>}</div>
+            <div className="form-group"><label className="form-label">Model</label><input {...F("model")} placeholder="e.g. Toyota Corolla"/></div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Vehicle Type</label>
+              <select {...F("vehicleType")} className="form-input">
+                <option value="car">🚗 Car</option>
+                <option value="suv">🚙 SUV</option>
+                <option value="van">🚐 Van</option>
+                <option value="motorcycle">🏍️ Motorcycle</option>
+                <option value="scooter">🛵 Scooter</option>
+                <option value="bus">🚌 Bus/Minibus</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Transmission</label>
+              <select {...F("transmission")} className="form-input">
+                <option value="automatic">Automatic</option>
+                <option value="manual">Manual</option>
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Days</label><input {...F("days")} placeholder="3"/>{errs.days&&<div className="err-msg">{errs.days}</div>}</div>
+            <div className="form-group"><label className="form-label">Price/Day ($)</label><input {...F("pricePerDay")} placeholder="45"/>{errs.pricePerDay&&<div className="err-msg">{errs.pricePerDay}</div>}</div>
+            <div className="form-group"><label className="form-label">Rating (1–5)</label><input {...F("rating")} placeholder="4.5"/>{errs.rating&&<div className="err-msg">{errs.rating}</div>}</div>
+            <div className="form-group"><label className="form-label">Seats</label><input {...F("seats")} placeholder="5"/>{errs.seats&&<div className="err-msg">{errs.seats}</div>}</div>
+          </div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Pickup Location</label><input {...F("pickupLocation")} placeholder="e.g. Airport Terminal 2"/></div>
+            <div className="form-group"><label className="form-label">Drop-off Location</label><input {...F("dropoffLocation")} placeholder="Same or different"/></div>
+          </div>
+          <div className="form-group"><label className="form-label">Notes</label><textarea {...F("notes")} className="form-input form-textarea" placeholder="Unlimited mileage, insurance included, fuel policy…"/></div>
+          <div className="form-actions">
+            <button className="btn btn-ghost btn-sm" onClick={()=>setShow(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={save}>{editId?"Save Changes":"Add Rental"}</button>
+          </div>
+        </div>
+      )}
+      {rentals.length === 0 && !show
+        ? <div className="empty-state"><div>🚗</div>No vehicle options yet. Add your first rental above!</div>
+        : <div className="accom-grid">
+            {rentals.map(v => {
+              const cost = totalCost(v);
+              const VTYPE = {car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+              return (
+                <div key={v.id} className="accom-card">
+                  <div className="card-head">
+                    <div className="card-name">{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model&&` — ${v.model}`}</div>
+                    <div className="card-actions">
+                      <button className="btn btn-ghost btn-sm" style={{padding:"4px 9px"}} onClick={()=>openEdit(v)}>✏️</button>
+                      <button className="btn btn-danger btn-sm" style={{padding:"4px 9px"}} onClick={()=>del(v.id)}>🗑</button>
+                    </div>
+                  </div>
+                  <div className="card-meta">
+                    {v.pickupLocation&&<div className="card-meta-row">📍 <strong>{v.pickupLocation}</strong>{v.dropoffLocation&&v.dropoffLocation!==v.pickupLocation&&<> → <strong>{v.dropoffLocation}</strong></>}</div>}
+                    <div className="card-meta-row" style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                      {v.days&&<span>📅 <strong>{v.days} day{v.days!==1?"s":""}</strong></span>}
+                      {v.pricePerDay&&<span>💰 <strong>${v.pricePerDay}/day</strong></span>}
+                      {cost&&<span>🧾 <strong>~${cost} total</strong></span>}
+                    </div>
+                    {v.seats&&<div className="card-meta-row">💺 <strong>{v.seats} seats</strong> · {v.transmission}</div>}
+                    {v.rating&&<div className="card-meta-row"><span className="stars">{renderStars(v.rating)}</span></div>}
+                    {(v.votes||[]).length>0&&<div className="card-meta-row">🗳️ <strong>{(v.votes||[]).length} vote{(v.votes||[]).length!==1?"s":""}</strong></div>}
+                  </div>
+                  {v.notes&&<div className="card-notes">{v.notes}</div>}
+                </div>
+              );
+            })}
+          </div>
       }
     </div>
   );
@@ -2343,8 +2544,7 @@ export default function App() {
       .select(`
         id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info,
-        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
-        activities ( id )
+        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) )
       `)
       .eq("trip_members.user_id", uid)
       .order("created_at", { ascending: false });
@@ -2365,10 +2565,9 @@ export default function App() {
         joinedAt: m.joined_at,
       })),
       destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
-      // Use activity count from joined data for dashboard display
-      activityCount:       (t.activities||[]).length,
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       calendarItems:       existing?.calendarItems      ?? [],
+      vehicleRentals:      existing?.vehicleRentals     ?? [],
       accommodationOptions:existing?.accommodationOptions ?? [],
       availability:        existing?.availability        ?? {},
       personalBudgets:     existing?.personalBudgets     ?? {},
@@ -2469,10 +2668,33 @@ export default function App() {
       .eq("id", currentUserId)
       .single() : { data: null };
 
+    // Load vehicle rentals
+    const { data: vehicles } = await supabase
+      .from("vehicle_rentals")
+      .select("*")
+      .eq("trip_id", trip.id);
+
+    const vehicleRentals = (vehicles||[]).map(v => ({
+      id:              v.id,
+      company:         v.company,
+      model:           v.model || "",
+      vehicleType:     v.vehicle_type || "car",
+      days:            v.days || 1,
+      pricePerDay:     parseFloat(v.price_per_day) || 0,
+      rating:          v.rating || "",
+      pickupLocation:  v.pickup_location || "",
+      dropoffLocation: v.dropoff_location || "",
+      seats:           v.seats || "",
+      transmission:    v.transmission || "automatic",
+      notes:           v.notes || "",
+      votes:           v.votes || [],
+    }));
+
     const fullTrip = {
       ...trip,
       calendarItems,
       accommodationOptions,
+      vehicleRentals,
       personalBudgets: { [user]: profile?.personal_budget ?? null },
     };
 
@@ -2612,6 +2834,48 @@ export default function App() {
       await supabase.from("accommodations").delete().eq("id", id);
     },
 
+    // ── Vehicle Rentals ──
+    addVehicle: async (tripId, v) => {
+      if(isMock) return v;
+      const { data, error } = await supabase.from("vehicle_rentals").insert({
+        trip_id:          tripId,
+        company:          v.company,
+        model:            v.model || "",
+        vehicle_type:     v.vehicleType || "car",
+        days:             parseInt(v.days) || 1,
+        price_per_day:    parseFloat(v.pricePerDay) || 0,
+        rating:           parseFloat(v.rating) || null,
+        pickup_location:  v.pickupLocation || "",
+        dropoff_location: v.dropoffLocation || "",
+        seats:            parseInt(v.seats) || null,
+        transmission:     v.transmission || "automatic",
+        notes:            v.notes || "",
+        created_by:       authUser?.id || null,
+      }).select().single();
+      if(error) { console.error("db.addVehicle:", error.message, error.code); return v; }
+      return { ...v, id: data.id };
+    },
+    updateVehicle: async (v) => {
+      if(isMock) return;
+      await supabase.from("vehicle_rentals").update({
+        company:          v.company,
+        model:            v.model || "",
+        vehicle_type:     v.vehicleType || "car",
+        days:             parseInt(v.days) || 1,
+        price_per_day:    parseFloat(v.pricePerDay) || 0,
+        rating:           parseFloat(v.rating) || null,
+        pickup_location:  v.pickupLocation || "",
+        dropoff_location: v.dropoffLocation || "",
+        seats:            parseInt(v.seats) || null,
+        transmission:     v.transmission || "automatic",
+        notes:            v.notes || "",
+      }).eq("id", v.id);
+    },
+    deleteVehicle: async (id) => {
+      if(isMock) return;
+      await supabase.from("vehicle_rentals").delete().eq("id", id);
+    },
+
     // ── Trip metadata (name, dates, status, destination, map URL, country info) ──
     updateTrip: async (tripId, fields) => {
       if(isMock) return;
@@ -2680,7 +2944,7 @@ export default function App() {
     // Build trip locally — never call loadTrips() here as it races with setActive
     // and was querying with null userId, returning empty results that wiped trip data
     const fullNewTrip = {
-      ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [],
+      ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [], vehicleRentals: [],
       tripMembers: [{ userId: authUser.id, name: user, role: "admin", joinedAt: new Date().toISOString().slice(0,10) }],
     };
     setTrips(ts => {
@@ -2811,7 +3075,7 @@ export default function App() {
   const TABS = [
     {id:"info",l:"ℹ️ Trip Info"},{id:"schedule",l:"📅 Schedule"},{id:"map",l:"🗺️ Map"},
     {id:"voting",l:"🗳️ Vote"},{id:"budget",l:"💰 Budget"},{id:"accommodations",l:"🏨 Stays"},
-    {id:"activities",l:"🎯 Items"},{id:"members",l:"👥 Members"},{id:"country",l:"🌍 Entry"},
+    {id:"activities",l:"🎯 Items"},{id:"vehicles",l:"🚗 Vehicles"},{id:"members",l:"👥 Members"},{id:"country",l:"🌍 Entry"},
     {id:"summary",l:"✅ Summary"},
   ];
 
@@ -2901,7 +3165,7 @@ export default function App() {
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
                     <div className="trip-meta-item">📅 <strong>{fmtRange(trip.startDate,trip.endDate)}</strong></div>
-                    <div className="trip-meta-item">🎯 <strong>{trip.activityCount ?? (trip.calendarItems||[]).length} item{(trip.activityCount ?? (trip.calendarItems||[]).length)!==1?"s":""}</strong></div>
+                    <div className="trip-meta-item">🎯 <strong>{(trip.calendarItems||[]).length} item{(trip.calendarItems||[]).length!==1?"s":""}</strong></div>
                     <div className="trip-meta-item">👥 <strong>{trip.members.length} members</strong></div>
                   </div>
                   <div className="members-row">
@@ -2945,6 +3209,7 @@ export default function App() {
               {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb}/>}
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
