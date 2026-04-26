@@ -2242,13 +2242,21 @@ export default function App() {
     if(loginForm.password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
     if(loginForm.password !== loginForm.confirmPassword) { setAuthError("Passwords do not match."); return; }
     setAuthBusy(true);
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email: loginForm.email.trim(),
       password: loginForm.password,
       options: { data: { full_name: loginForm.name.trim() } },
     });
     setAuthBusy(false);
     if(error) { setAuthError(error.message); return; }
+    // Insert profile row — required because activities/trips/trip_members all FK to profiles(id)
+    if(signUpData?.user) {
+      await supabase.from("profiles").upsert({
+        id:        signUpData.user.id,
+        full_name: loginForm.name.trim(),
+        email:     loginForm.email.trim(),
+      }, { onConflict: "id" });
+    }
     // Sign out immediately so the user is not auto-logged in after signup.
     // They must sign in manually after account creation.
     await supabase.auth.signOut();
@@ -2264,12 +2272,20 @@ export default function App() {
     if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
     if(!loginForm.password) { setAuthError("Please enter your password."); return; }
     setAuthBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({
       email: loginForm.email.trim(),
       password: loginForm.password,
     });
     setAuthBusy(false);
     if(error) { setAuthError(error.message); return; }
+    // Ensure profile row exists — upsert on every login as a safety net
+    if(signInData?.user) {
+      await supabase.from("profiles").upsert({
+        id:        signInData.user.id,
+        full_name: signInData.user.user_metadata?.full_name || loginForm.email.split("@")[0],
+        email:     signInData.user.email,
+      }, { onConflict: "id" });
+    }
     // onAuthStateChange will fire and set authUser — no manual setAuthUser needed here
     setShowLogin(false);
     setLoginForm({name:"",email:"",password:"",confirmPassword:""});
