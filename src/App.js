@@ -2402,7 +2402,7 @@ export default function App() {
 
     const calendarItems = (items||[]).map(a => ({
       id:          a.id,
-      type:        a.category || "general",
+      type:        fromDbCategory(a.category),
       title:       a.title,
       day:         a.scheduled_date || null,
       startTime:   a.scheduled_time || null,
@@ -2477,6 +2477,31 @@ export default function App() {
   // ── Centralized DB write helpers — passed as `db` prop to all tabs ──
   const isMock = trips.length > 0 && typeof trips[0].id === "number";
 
+  // Map app activity types to valid DB category enum values
+  const toDbCategory = (type) => ({
+    activity:  "sightseeing",
+    meal:      "food",
+    transport: "transport",
+    hotel:     "accommodation",
+    note:      "general",
+    food:      "food",
+    sightseeing: "sightseeing",
+    entertainment: "entertainment",
+    shopping:  "shopping",
+    general:   "general",
+  }[type] || "general");
+
+  // Map DB category back to app type
+  const fromDbCategory = (cat) => ({
+    food:          "meal",
+    transport:     "transport",
+    accommodation: "hotel",
+    sightseeing:   "activity",
+    entertainment: "activity",
+    shopping:      "activity",
+    general:       "note",
+  }[cat] || "activity");
+
   const db = {
     // ── Activities (calendar items) ──
     addItem: async (tripId, item) => {
@@ -2484,7 +2509,7 @@ export default function App() {
       const { data, error } = await supabase.from("activities").insert({
         trip_id:        tripId,
         title:          item.title,
-        category:       item.type || "general",
+        category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
         cost:           item.price || 0,
@@ -2500,7 +2525,7 @@ export default function App() {
       if(isMock) return;
       await supabase.from("activities").update({
         title:          item.title,
-        category:       item.type || "general",
+        category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
         cost:           item.price || 0,
