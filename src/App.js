@@ -2501,7 +2501,7 @@ export default function App() {
       await supabase.from("votes").upsert({
         activity_id: itemId,
         user_id:     userId,
-        value,
+        value:       value ? 1 : -1,
       }, { onConflict: "activity_id,user_id" });
     },
 
@@ -2513,8 +2513,8 @@ export default function App() {
         name:           accom.name,
         address:        accom.address || "",
         cost_per_night: accom.pricePerNight || 0,
-        check_in:       accom.checkIn || null,
-        check_out:      accom.checkOut || null,
+        check_in:       accom.checkIn || new Date().toISOString().slice(0,10),
+        check_out:      accom.checkOut || new Date().toISOString().slice(0,10),
         created_by:     null,
       }).select().single();
       if(error) { console.error("db.addAccom:", error); return accom; }
@@ -2583,7 +2583,7 @@ export default function App() {
     // Insert into Supabase
     const { data: newTrip, error } = await supabase
       .from("trips")
-      .insert({ title: t.name, destination: t.destinations?.[0]?.name || null, status: "planning", start_date: t.startDate, end_date: t.endDate, created_by: authUser.id })
+      .insert({ title: t.name, destination: t.destinations?.[0]?.name || t.name || "TBD", status: "planning", start_date: t.startDate || null, end_date: t.endDate || null, created_by: authUser.id })
       .select()
       .single();
     if(error) { console.error("createTrip:", error); throw new Error(error.message); }
