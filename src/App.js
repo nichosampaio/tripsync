@@ -2161,18 +2161,18 @@ export default function App() {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
-      // If a session exists, go straight to the dashboard
-      if(session?.user) setPage("dashboard");
+      // Only send to dashboard if the user is on the landing page — never interrupt an active trip view
+      if(session?.user) setPage(p => p === "landing" ? "dashboard" : p);
       setAuthLoading(false);
     });
 
     // Listen for future login / logout events.
-    // We check the event type so that silent token refreshes (TOKEN_REFRESHED, INITIAL_SESSION)
-    // don't reset the page — that was wiping trip state whenever the user switched browser tabs.
+    // SIGNED_IN fires on interactive logins AND sometimes on tab-focus token refresh in some browsers.
+    // We guard with a page check so re-authentication never kicks someone out of a trip they're in.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setAuthUser(session?.user ?? null);
       setAuthLoading(false);
-      if(event === "SIGNED_IN")  setPage("dashboard");
+      if(event === "SIGNED_IN")  setPage(p => p === "landing" ? "dashboard" : p);
       else if(event === "SIGNED_OUT") { setPage("landing"); setActive(null); }
       // TOKEN_REFRESHED, INITIAL_SESSION, USER_UPDATED → update authUser only, never touch page/state
     });
