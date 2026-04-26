@@ -2580,14 +2580,25 @@ export default function App() {
       setShowNew(false); setActive(t); setTab("schedule"); setPage("trip");
       return;
     }
-    // Insert into Supabase
-    const { data: newTrip, error } = await supabase
+    // Insert into Supabase — do NOT chain .select() here because the SELECT policy
+    // requires trip_members to exist first, which causes a 403 before we can add ourselves
+    const { error: insertError } = await supabase
       .from("trips")
-      .insert({ title: t.name, destination: t.destinations?.[0]?.name || t.name || "TBD", status: "planning", start_date: t.startDate || null, end_date: t.endDate || null, created_by: authUser.id })
-      .select()
+      .insert({ title: t.name, destination: t.destinations?.[0]?.name || t.name || "TBD", status: "planning", start_date: t.startDate || null, end_date: t.endDate || null, created_by: authUser.id });
+    if(insertError) { console.error("createTrip insert:", insertError); throw new Error(insertError.message); }
+
+    // Fetch the trip we just created by matching created_by + title + created_at order
+    const { data: newTrip, error: fetchError } = await supabase
+      .from("trips")
+      .select("id")
+      .eq("created_by", authUser.id)
+      .eq("title", t.name)
+      .order("created_at", { ascending: false })
+      .limit(1)
       .single();
-    if(error) { console.error("createTrip:", error); throw new Error(error.message); }
-    // Add creator as owner in trip_members
+    if(fetchError) { console.error("createTrip fetch:", fetchError); throw new Error(fetchError.message); }
+
+    // Add creator as member — this makes the SELECT policy work for future fetches
     await supabase.from("trip_members").insert({
       trip_id: newTrip.id, user_id: authUser.id, role: "admin",
     });
