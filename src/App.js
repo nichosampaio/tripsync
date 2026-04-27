@@ -1596,9 +1596,10 @@ function calcVehicleDays(v) {
   return Math.max(nightsBetween(v.pickupDate, v.returnDate), 0);
 }
 function calcVehicleTotal(v) {
+  const p = parseFloat(v.price || v.pricePerDay) || 0;
+  if(v.priceType === "full") return p;
   const days = calcVehicleDays(v);
-  const ppd  = parseFloat(v.pricePerDay) || 0;
-  return ppd * days;
+  return p * days;
 }
 function calcAllVehicleTotal(vehicleRentals) {
   return (vehicleRentals||[]).reduce((s,v) => s + calcVehicleTotal(v), 0);
@@ -1854,10 +1855,14 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                   </div>
                   {total > 0 ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:12,background:"rgba(249,115,22,0.12)",color:"#f97316",border:"1px solid rgba(249,115,22,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppd.toLocaleString()}/day</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
-                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{days} day{days!==1?"s":""}</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      {v.priceType==="full" ? (
+                        <span style={{fontSize:12,background:"rgba(249,115,22,0.12)",color:"#f97316",border:"1px solid rgba(249,115,22,0.25)",borderRadius:20,padding:"3px 10px"}}>🧾 Full price</span>
+                      ) : (<>
+                        <span style={{fontSize:12,background:"rgba(249,115,22,0.12)",color:"#f97316",border:"1px solid rgba(249,115,22,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppd.toLocaleString()}/day</span>
+                        <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                        <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{days} day{days!==1?"s":""}</span>
+                        <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      </>)}
                       <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
                       {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
@@ -1880,7 +1885,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
 const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
-const BLANK_V={company:"",model:"",vehicleType:"car",pickupDate:"",returnDate:"",pricePerDay:"",rating:"",pickupLocation:"",dropoffLocation:"",seats:"",transmission:"automatic",notes:"",votes:[]};
+const BLANK_V={company:"",model:"",vehicleType:"car",pickupDate:"",returnDate:"",priceType:"daily",price:"",rating:"",pickupLocation:"",dropoffLocation:"",seats:"",transmission:"automatic",notes:"",votes:[]};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
   const [editId,setEditId] = useState(null);
@@ -1993,7 +1998,7 @@ function VehicleTab({trip,setTrip,db}) {
   const openEdit = v => {
     setForm({ company:v.company, model:v.model||"", vehicleType:v.vehicleType||"car",
       pickupDate:v.pickupDate||"", returnDate:v.returnDate||"",
-      pricePerDay:String(v.pricePerDay||""),
+      priceType:v.priceType||"daily", price:String(v.price||v.pricePerDay||""),
       rating:String(v.rating||""), pickupLocation:v.pickupLocation||"",
       dropoffLocation:v.dropoffLocation||"", seats:String(v.seats||""),
       transmission:v.transmission||"automatic", notes:v.notes||"", votes:v.votes||[] });
@@ -2002,7 +2007,7 @@ function VehicleTab({trip,setTrip,db}) {
 
   const save = async () => {
     if(!validate()) return;
-    const fmt = { ...form, pricePerDay:form.pricePerDay?+form.pricePerDay:"",
+    const fmt = { ...form, price:form.price?+form.price:"", pricePerDay:form.price?+form.price:"",
       rating:form.rating?+form.rating:"", seats:form.seats?+form.seats:"" };
     if(editId) {
       const updated = { ...rentals.find(v=>v.id===editId), ...fmt };
@@ -2071,7 +2076,32 @@ function VehicleTab({trip,setTrip,db}) {
             </div>
           </div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Price/Day ($)</label><input {...F("pricePerDay")} placeholder="45"/>{errs.pricePerDay&&<div className="err-msg">{errs.pricePerDay}</div>}</div>
+            <div className="form-group">
+              <label className="form-label">Pricing</label>
+              <div style={{display:"flex",gap:8}}>
+                <button type="button"
+                  className={`btn btn-sm ${form.priceType==="daily"?"btn-primary":"btn-ghost"}`}
+                  style={{flex:1}}
+                  onClick={()=>setForm(f=>({...f,priceType:"daily"}))}>
+                  💰 Daily Rate
+                </button>
+                <button type="button"
+                  className={`btn btn-sm ${form.priceType==="full"?"btn-primary":"btn-ghost"}`}
+                  style={{flex:1}}
+                  onClick={()=>setForm(f=>({...f,priceType:"full"}))}>
+                  🧾 Full Price
+                </button>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">{form.priceType==="full"?"Total Price ($)":"Price/Day ($)"}</label>
+              <input {...F("price")} placeholder={form.priceType==="full"?"e.g. 350":"e.g. 45"}/>
+              {form.priceType==="daily"&&calcVehicleDays({pickupDate:form.pickupDate,returnDate:form.returnDate})>0&&(
+                <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>
+                  ~${(+(form.price||0)*calcVehicleDays({pickupDate:form.pickupDate,returnDate:form.returnDate})).toLocaleString()} total for {calcVehicleDays({pickupDate:form.pickupDate,returnDate:form.returnDate})} days
+                </div>
+              )}
+            </div>
             <div className="form-group"><label className="form-label">Rating (1–5)</label><input {...F("rating")} placeholder="4.5"/>{errs.rating&&<div className="err-msg">{errs.rating}</div>}</div>
             <div className="form-group"><label className="form-label">Seats</label><input {...F("seats")} placeholder="5"/>{errs.seats&&<div className="err-msg">{errs.seats}</div>}</div>
           </div>
@@ -2106,8 +2136,8 @@ function VehicleTab({trip,setTrip,db}) {
                     {(v.pickupDate||v.returnDate)&&<div className="card-meta-row">📅 <strong>{v.pickupDate?fmtDate(v.pickupDate):"?"}</strong> → <strong>{v.returnDate?fmtDate(v.returnDate):"?"}</strong></div>}
                   <div className="card-meta-row" style={{display:"flex",gap:16,flexWrap:"wrap"}}>
                       {calcVehicleDays(v)>0&&<span>📆 <strong>{calcVehicleDays(v)} day{calcVehicleDays(v)!==1?"s":""}</strong></span>}
-                      {v.pricePerDay&&<span>💰 <strong>${v.pricePerDay}/day</strong></span>}
-                      {calcVehicleTotal(v)>0&&<span>🧾 <strong>~${calcVehicleTotal(v).toLocaleString()} total</strong></span>}
+                      {(v.price||v.pricePerDay)>0&&<span>💰 <strong>${v.price||v.pricePerDay}{v.priceType==="full"?" total":"/day"}</strong></span>}
+                      {v.priceType==="daily"&&calcVehicleTotal(v)>0&&<span>🧾 <strong>~${calcVehicleTotal(v).toLocaleString()} total</strong></span>}
                     </div>
                     {v.seats&&<div className="card-meta-row">💺 <strong>{v.seats} seats</strong> · {v.transmission}</div>}
                     {v.rating&&<div className="card-meta-row"><span className="stars">{renderStars(v.rating)}</span></div>}
@@ -2773,6 +2803,8 @@ export default function App() {
       pickupDate:      v.pickup_date || "",
       returnDate:      v.return_date || "",
       pricePerDay:     parseFloat(v.price_per_day) || 0,
+      price:           parseFloat(v.price_per_day) || 0,
+      priceType:       v.price_type || "daily",
       rating:          v.rating || "",
       pickupLocation:  v.pickup_location || "",
       dropoffLocation: v.dropoff_location || "",
@@ -2936,7 +2968,8 @@ export default function App() {
         vehicle_type:     v.vehicleType || "car",
         pickup_date:      v.pickupDate || null,
         return_date:      v.returnDate || null,
-        price_per_day:    parseFloat(v.pricePerDay) || 0,
+        price_per_day:    parseFloat(v.price || v.pricePerDay) || 0,
+        price_type:       v.priceType || "daily",
         rating:           parseFloat(v.rating) || null,
         pickup_location:  v.pickupLocation || "",
         dropoff_location: v.dropoffLocation || "",
@@ -2956,7 +2989,8 @@ export default function App() {
         vehicle_type:     v.vehicleType || "car",
         pickup_date:      v.pickupDate || null,
         return_date:      v.returnDate || null,
-        price_per_day:    parseFloat(v.pricePerDay) || 0,
+        price_per_day:    parseFloat(v.price || v.pricePerDay) || 0,
+        price_type:       v.priceType || "daily",
         rating:           parseFloat(v.rating) || null,
         pickup_location:  v.pickupLocation || "",
         dropoff_location: v.dropoffLocation || "",
