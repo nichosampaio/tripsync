@@ -774,7 +774,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     const newItem={
       id:uid(),type:newType,title:newTitle.trim(),day:dayYMD,
       startTime:newTime||null,startMin,durationMin:60,
-      location:"",price:0,priceType:"flat",metadata:{notes:"",description:"",upvotes:[],downvotes:[],createdBy:""}
+      location:"",price:0,priceType:"flat",metadata:{notes:"",description:"",upvotes:[],downvotes:[],createdBy:trip.tripMembers?.[0]?.userId||""}
     };
     const saved = db ? await db.addItem(trip.id, newItem) : newItem;
     setTrip(t=>({...t,calendarItems:[...t.calendarItems,saved]}));
@@ -785,11 +785,15 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
   const handleDayDragLeave=()=>setDayDragOver(false);
   const handleDayDrop=e=>{
     e.preventDefault();setDayDragOver(false);setSlotDragOver(null);
-    const id=parseInt(e.dataTransfer.getData("ciId"));
+    const id=e.dataTransfer.getData("ciId");
     if(!id) return;
     setTrip(t=>{
       const ci=t.calendarItems.find(c=>c.id===id);
-      if(ci&&db) db.updateItem({...ci,day:dayYMD});
+      if(!ci) return t;
+      if(ci.day!==dayYMD) {
+        // Update Supabase directly with the correct column name
+        supabase.from("activities").update({ scheduled_date: dayYMD }).eq("id", id);
+      }
       return {...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD})};
     });
   };
@@ -798,12 +802,16 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
   const handleSlotDragLeave=()=>setSlotDragOver(null);
   const handleSlotDrop=(e,hour)=>{
     e.preventDefault();e.stopPropagation();setSlotDragOver(null);
-    const id=parseInt(e.dataTransfer.getData("ciId"));
+    const id=e.dataTransfer.getData("ciId");
     if(!id) return;
     const newStartMin=hour*60;
+    const newTime=minToTimeStr(newStartMin);
     setTrip(t=>{
       const ci=t.calendarItems.find(c=>c.id===id);
-      if(ci&&db) db.updateItem({...ci,day:dayYMD,startMin:newStartMin,startTime:minToTimeStr(newStartMin)});
+      if(!ci) return t;
+      // Update Supabase directly with correct column names
+      supabase.from("activities").update({ scheduled_date: dayYMD, scheduled_time: newTime }).eq("id", id);
+      if(ci&&db) db.updateItem({...ci,day:dayYMD,startMin:newStartMin,startTime:newTime});
       return {...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD,startMin:newStartMin,startTime:minToTimeStr(newStartMin)})};
     });
   };
@@ -949,7 +957,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
                     onDragStart={e=>{e.dataTransfer.setData("ciId",String(ci.id));e.dataTransfer.effectAllowed="move";}}
                     onDragOver={e=>{e.preventDefault();setListDragOverId(ci.id);}}
                     onDragLeave={()=>setListDragOverId(null)}
-                    onDrop={e=>{e.preventDefault();setListDragOverId(null);const srcId=parseInt(e.dataTransfer.getData("ciId"));if(srcId&&srcId!==ci.id){setTrip(t=>{const src=t.calendarItems.find(c=>c.id===srcId);if(src&&db)db.updateItem({...src,day:dayYMD});return{...t,calendarItems:t.calendarItems.map(c=>c.id!==srcId?c:{...c,day:dayYMD})};});}}}
+                    onDrop={e=>{e.preventDefault();setListDragOverId(null);const srcId=e.dataTransfer.getData("ciId");if(srcId&&srcId!==ci.id){setTrip(t=>{const src=t.calendarItems.find(c=>c.id===srcId);if(src&&db)db.updateItem({...src,day:dayYMD});return{...t,calendarItems:t.calendarItems.map(c=>c.id!==srcId?c:{...c,day:dayYMD})};});}}}
 
                     onClick={()=>onEditItem(ci)}>
                     <span className="ci-drag">⠿</span>
