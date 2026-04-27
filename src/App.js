@@ -787,11 +787,9 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     e.preventDefault();setDayDragOver(false);setSlotDragOver(null);
     const id=e.dataTransfer.getData("ciId");
     if(!id) return;
-    // Read current state first, THEN update — never call Supabase inside setTrip updater
     const ci=trip.calendarItems.find(c=>c.id===id);
     if(!ci) return;
     if(ci.day!==dayYMD) {
-      // Persist to Supabase outside of state updater so it always fires
       supabase.from("activities")
         .update({ scheduled_date: dayYMD })
         .eq("id", id)
@@ -808,15 +806,13 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     if(!id) return;
     const newStartMin=hour*60;
     const newTime=minToTimeStr(newStartMin);
-    // Read state first, then update Supabase outside the setTrip updater
     const ci=trip.calendarItems.find(c=>c.id===id);
     if(!ci) return;
     supabase.from("activities")
       .update({ scheduled_date: dayYMD, scheduled_time: newTime })
       .eq("id", id)
       .then(({error}) => { if(error) console.error("handleSlotDrop:", error.message); });
-    setTrip(t=>({...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD,startMin:newStartMin,startTime:minToTimeStr(newStartMin)})});
-    });
+    setTrip(t=>({...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD,startMin:newStartMin,startTime:newTime})}));
   };
 
   const timed=dayItems.filter(c=>c.startMin!=null);
