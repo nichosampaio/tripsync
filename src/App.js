@@ -2752,7 +2752,7 @@ export default function App() {
       title:       a.title,
       day:         a.scheduled_date || null,
       startTime:   a.scheduled_time || null,
-      startMin:    null,
+      startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
       durationMin: 60,
       location:    "",
       price:       parseFloat(a.cost) || 0,
