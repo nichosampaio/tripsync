@@ -92,7 +92,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 
 /* ── Section tabs ── */
 .section-tabs { display:flex; gap:0; margin:24px 0 20px; border-bottom:1px solid var(--border); flex-wrap:wrap; overflow-x:auto; }
-.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'Inter',sans-serif; font-size:13px; font-weight:400; background:transparent; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; white-space:nowrap; }
+.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'Inter',sans-serif; font-size:15px; font-weight:400; background:transparent; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; white-space:nowrap; }
 .section-tab:hover { color:var(--text); }
 .section-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:500; }
 .section-content { animation:fadeIn 0.18s ease; }
@@ -1838,26 +1838,26 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                 <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                     <div>
-                      <div style={{fontWeight:600,fontSize:16}}>{a.name}</div>
-                      {a.address && <div style={{fontSize:14,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
+                      <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
+                      {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:18,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:14,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
-                      <span style={{fontSize:14,color:"var(--muted)"}}>×</span>
-                      <span style={{fontSize:14,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
-                      <span style={{fontSize:14,color:"var(--muted)"}}>→</span>
-                      <span style={{fontSize:14,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
-                      {memberCount > 1 && <span style={{fontSize:14,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
+                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
+                      {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
                   ) : (
-                    <div style={{fontSize:14,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{fontSize:12,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
                       ⚠️ {!a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab
                     </div>
                   )}
-                  {(a.checkIn||a.checkOut) && <div style={{fontSize:13,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
+                  {(a.checkIn||a.checkOut) && <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
                 </div>
               );
             })}
