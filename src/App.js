@@ -279,12 +279,12 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .budget-card { background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:20px; }
 .budget-card h4 { font-size:15px; font-weight:600; margin-bottom:14px; }
 .cat-row { display:flex; align-items:center; gap:11px; margin-bottom:10px; }
-.cat-icon { font-size:18px; width:26px; flex-shrink:0; text-align:center; }
-.cat-label { min-width:110px; font-size:15px; color:var(--muted); }
+.cat-icon { font-size:16px; width:24px; flex-shrink:0; text-align:center; }
+.cat-label { min-width:110px; font-size:13px; color:var(--muted); }
 .cat-bar-wrap { flex:1; }
 .cat-bar-bg { height:6px; background:var(--surface2); border-radius:3px; overflow:hidden; border:1px solid var(--border); }
 .cat-bar-fill { height:100%; border-radius:3px; transition:width 0.5s; }
-.cat-amount { min-width:64px; text-align:right; font-size:15px; font-weight:500; }
+.cat-amount { min-width:64px; text-align:right; font-size:13px; font-weight:500; }
 .budget-total-row { display:flex; justify-content:space-between; align-items:center; padding:12px 0 0; border-top:1px solid var(--border); }
 .budget-total-label { font-size:15px; font-weight:600; }
 .budget-total-val { font-size:22px; font-weight:700; color:var(--accent); }
@@ -1792,20 +1792,20 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
               const tm        = TYPE_META[ci.type];
               return (
                 <div key={ci.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"var(--surface2)",borderRadius:10,border:"1px solid var(--border)"}}>
-                  <span style={{fontSize:18,flexShrink:0}}>{tm?.icon}</span>
-                  <span style={{flex:1,fontSize:15,fontWeight:500}}>{ci.title}</span>
+                  <span style={{fontSize:16,flexShrink:0}}>{tm?.icon}</span>
+                  <span style={{flex:1,fontSize:13,fontWeight:500}}>{ci.title}</span>
                   <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
                     {ci.priceType==="per_person" ? (
-                      <span style={{fontSize:13,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
+                      <span style={{fontSize:11,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
                         🧍 ${ci.price}/person
                       </span>
                     ) : (
-                      <span style={{fontSize:13,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
+                      <span style={{fontSize:11,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
                         👥 ${ci.price} flat
                       </span>
                     )}
-                    <span style={{fontSize:15,fontWeight:700,color:"var(--green)",minWidth:60,textAlign:"right"}}>
-                      ${Math.ceil(myPart).toLocaleString()}<span style={{fontSize:13,fontWeight:400,color:"var(--muted)"}}> /me</span>
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--green)",minWidth:60,textAlign:"right"}}>
+                      ${Math.ceil(myPart).toLocaleString()}<span style={{fontSize:11,fontWeight:400,color:"var(--muted)"}}> /me</span>
                     </span>
                   </div>
                 </div>
@@ -1838,26 +1838,26 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                 <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
                     <div>
-                      <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
-                      {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
+                      <div style={{fontWeight:600,fontSize:16}}>{a.name}</div>
+                      {a.address && <div style={{fontSize:14,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:18,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
-                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
-                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
-                      {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
+                      <span style={{fontSize:14,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
+                      <span style={{fontSize:14,color:"var(--muted)"}}>×</span>
+                      <span style={{fontSize:14,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
+                      <span style={{fontSize:14,color:"var(--muted)"}}>→</span>
+                      <span style={{fontSize:14,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
+                      {memberCount > 1 && <span style={{fontSize:14,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
                   ) : (
-                    <div style={{fontSize:12,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
+                    <div style={{fontSize:14,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
                       ⚠️ {!a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab
                     </div>
                   )}
-                  {(a.checkIn||a.checkOut) && <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
+                  {(a.checkIn||a.checkOut) && <div style={{fontSize:13,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
                 </div>
               );
             })}
