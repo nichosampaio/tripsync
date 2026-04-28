@@ -327,7 +327,7 @@ const TYPE_META = {
   activity:  { icon:"🎯", label:"Activity",  color:"#38bdf8", tlClass:"tl-activity" },
   meal:      { icon:"🍽️", label:"Meal",       color:"#fbbf24", tlClass:"tl-meal" },
   transport: { icon:"🚌", label:"Transport",  color:"#34d399", tlClass:"tl-transport" },
-  hotel:     { icon:"🏨", label:"Hotel/Stay", color:"#818cf8", tlClass:"tl-hotel" },
+  hotel:     { icon:"🏨", label:"Check In/Out", color:"#818cf8", tlClass:"tl-hotel" },
   note:      { icon:"📝", label:"Note",       color:"#6b7fa3", tlClass:"tl-note" },
 };
 
