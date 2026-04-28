@@ -9,7 +9,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 :root {
   --bg: #f5f5f7; --surface: #ffffff; --surface2: #f5f5f7; --border: #d2d2d7;
   --accent: #0071e3; --accent2: #6e6e73; --green: #1d8348; --red: #ff3b30;
-  --yellow: #ff9f0a; --text: #1d1d1f; --muted: #6e6e73; --accent-hover: #0077ed;
+  --yellow: #ff9f0a; --text: #1d1d1f; --muted: #3d3d42; --accent-hover: #0077ed;
 }
 .app { min-height: 100vh; background: var(--bg); }
 
@@ -1683,10 +1683,10 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
   const myShare     = memberCount > 0 ? grandTotal / memberCount : 0;
 
   const cats = [
-    {icon:"🎯", label:"Activities",    total:actTotal,       color:"#38bdf8"},
-    {icon:"🚌", label:"Transport",     total:transportTotal, color:"#34d399"},
-    {icon:"🍽️", label:"Meals",         total:mealTotal,      color:"#fbbf24"},
-    {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#818cf8"},
+    {icon:"🎯", label:"Activities",    total:actTotal,       color:"#0284c7"},
+    {icon:"🚌", label:"Transport",     total:transportTotal, color:"#059669"},
+    {icon:"🍽️", label:"Meals",         total:mealTotal,      color:"#d97706"},
+    {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#4f46e5"},
     {icon:"🚗", label:"Vehicles",       total:vehicleTotal,  color:"#f97316"},
   ];
   const maxCat = Math.max(...cats.map(c=>c.total), 1);
