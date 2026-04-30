@@ -389,6 +389,25 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 .ampm-btn { padding:7px 10px; background:transparent; border:none; color:var(--muted); font-size:12px; font-weight:600; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s; }
 .ampm-btn.active { background:var(--accent); color:#fff; }
 .sched-legend { display:flex; gap:13px; align-items:center; flex-wrap:wrap; font-size:12px; color:var(--muted); font-weight:500; }
+
+/* ─── NOTIFICATIONS / INVITE ──────────────────────────── */
+.notif-badge { position:absolute; top:-4px; right:-4px; width:16px; height:16px; border-radius:50%; background:var(--red); color:#fff; font-size:9px; font-weight:700; display:flex; align-items:center; justify-content:center; border:2px solid var(--bg); pointer-events:none; }
+.notif-tab-wrap { position:relative; display:inline-block; }
+.join-request-card { display:flex; align-items:center; gap:12px; padding:14px 17px; background:linear-gradient(135deg,rgba(0,113,227,0.04),rgba(52,170,220,0.03)); border:1px solid rgba(0,113,227,0.18); border-radius:var(--r-md); margin-bottom:10px; }
+.join-request-avatar { width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,#6e6e73,#8e8e93); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:#fff; flex-shrink:0; }
+.join-request-info { flex:1; min-width:0; }
+.join-request-name { font-size:14px; font-weight:600; letter-spacing:-0.1px; }
+.join-request-meta { font-size:12px; color:var(--muted); margin-top:2px; }
+.join-request-actions { display:flex; gap:7px; flex-shrink:0; }
+.invite-sent-row { display:flex; align-items:center; justify-content:space-between; padding:9px 13px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; margin-top:7px; }
+.invite-sent-email { font-size:13px; color:var(--text-secondary); display:flex; align-items:center; gap:7px; }
+.invite-sent-status { font-size:11px; font-weight:600; padding:2px 8px; border-radius:var(--r-full); }
+.invite-status-pending { background:var(--yellow-soft); color:var(--yellow); }
+.invite-status-joined { background:var(--green-soft); color:var(--green); }
+.join-banner { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:calc(100vh - 58px); text-align:center; padding:60px 24px; gap:20px; }
+.join-banner-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-xl); padding:48px 40px; max-width:420px; width:100%; box-shadow:var(--shadow-lg); }
+.join-banner-card h2 { font-family:'Sora',sans-serif; font-size:24px; font-weight:800; letter-spacing:-0.5px; margin-bottom:10px; }
+.join-banner-card p { font-size:15px; color:var(--muted); line-height:1.6; margin-bottom:28px; }
 @media(max-width:768px){
   .features,.summary-grid,.form-row{grid-template-columns:1fr}
   .nav{padding:0 20px} .nav-tabs{display:none}
@@ -2341,15 +2360,17 @@ function CountryTab({trip,setTrip,db}) {
 }
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
-function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
+function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest}) {
   const [emailInput,setEmailInput] = useState("");
   const [emailErr,setEmailErr] = useState("");
-  const [invitations,setInvitations] = useState([]);
+  const [invitedEmails,setInvitedEmails] = useState([]);
   const [copied,setCopied] = useState(false);
-  const [link] = useState(()=>`tripsync.app/join/${Math.random().toString(36).slice(2,8)}`);
-  // Safely build members list — tripMembers is the authoritative source from DB.
-  // Fall back to trip.members (plain name strings) only for demo/mock trips.
-  // Never crash if both are missing — just show empty list.
+  const [sendingInvite,setSendingInvite] = useState(false);
+  const [inviteSuccess,setInviteSuccess] = useState("");
+
+  const tripLink = `${window.location.origin}/join/${trip.id}`;
+
+  // Safely build members list
   const members = (trip.tripMembers && trip.tripMembers.length > 0)
     ? trip.tripMembers
     : (trip.members || []).map((name, i) => ({
@@ -2357,79 +2378,157 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId}) {
         joinedAt: trip.startDate || "2026-01-01"
       }));
 
+  const isOwner = members.find(m => m.userId === authUserId)?.role === "admin";
+
   const sendInvite = async () => {
-    if(!emailInput.trim()) { setEmailErr("Enter email"); return; }
-    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailInput.trim())) { setEmailErr("Invalid email"); return; }
-    setEmailErr("");
-    const email = emailInput.trim();
-    // Store invite as a member_joined notification (uses allowed enum value)
-    if(db && !db.isMock) {
-      await supabase.from("notifications").insert({
+    const email = emailInput.trim().toLowerCase();
+    if(!email) { setEmailErr("Enter an email address"); return; }
+    if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailErr("Enter a valid email address"); return; }
+    if(invitedEmails.find(i => i.email === email)) { setEmailErr("Already invited"); return; }
+    setEmailErr(""); setSendingInvite(true); setInviteSuccess("");
+
+    if(!db?.isMock) {
+      // Insert invite notification — the invited user will see this when they log in
+      const { error } = await supabase.from("notifications").insert({
         user_id:  authUserId,
         trip_id:  trip.id,
         type:     "member_joined",
         message:  `Invite sent to ${email} for "${trip.name}"`,
-        metadata: { invited_email: email, invited_by: user },
+        metadata: { invited_email: email, invited_by: user, invite_type: "email", trip_name: trip.name, status: "pending" },
       });
+      if(error) { setEmailErr("Failed to send invite. Try again."); setSendingInvite(false); return; }
     }
-    setInvitations(prev => [...prev, { id: uid(), email }]);
+
+    setInvitedEmails(prev => [...prev, { id: uid(), email, status: "pending" }]);
     setEmailInput("");
+    setInviteSuccess(`Invite sent to ${email}!`);
+    setTimeout(() => setInviteSuccess(""), 3000);
+    setSendingInvite(false);
   };
+
+  const removeInvite = (id) => setInvitedEmails(prev => prev.filter(i => i.id !== id));
+
+  const copyLink = () => {
+    navigator.clipboard.writeText(tripLink).catch(() => {});
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
+  const pendingRequests = (joinRequests || []).filter(r => r.tripId === trip.id);
+
   return (
     <div>
+      {/* ── Join Requests (owner only) ── */}
+      {isOwner && pendingRequests.length > 0 && (
+        <div style={{marginBottom:24}}>
+          <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:12}}>
+            <h4 style={{fontFamily:"'Sora',sans-serif",fontSize:16,fontWeight:700,margin:0}}>🔔 Join Requests</h4>
+            <span style={{padding:"2px 8px",borderRadius:"var(--r-full)",background:"var(--red-soft)",color:"var(--red)",fontSize:11,fontWeight:700,border:"1px solid rgba(255,59,48,0.18)"}}>{pendingRequests.length}</span>
+          </div>
+          {pendingRequests.map(req => (
+            <div key={req.id} className="join-request-card">
+              <div className="join-request-avatar">{(req.requesterName||req.requesterEmail||"?")[0].toUpperCase()}</div>
+              <div className="join-request-info">
+                <div className="join-request-name">{req.requesterName || req.requesterEmail}</div>
+                <div className="join-request-meta">{req.requesterEmail} · Requested {fmtDate(req.requestedAt)}</div>
+              </div>
+              <div className="join-request-actions">
+                <button className="btn btn-sm" style={{background:"var(--green-soft)",color:"var(--green)",border:"1px solid rgba(36,138,61,0.22)",fontWeight:600}}
+                  onClick={() => onAcceptRequest(req)}>✓ Accept</button>
+                <button className="btn btn-sm" style={{background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(255,59,48,0.18)",fontWeight:600}}
+                  onClick={() => onRejectRequest(req)}>✕ Reject</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ── Members List ── */}
       <div className="section-hdr" style={{marginBottom:14}}>
         <h4>👥 Trip Members</h4>
         <span className="badge">{members.length}</span>
       </div>
       <div className="members-tab">
-        {members.map(m=>{
+        {members.map(m => {
           const isMe = m.userId === (authUserId || user);
-          const isOwner = m.role === "admin";
+          const isOwnerMember = m.role === "admin";
           const otherCount = members.filter(x => x.userId !== m.userId).length;
-          const canLeave = !isOwner || otherCount === 0;
-          const leaveLabel = isOwner ? "Leave & Delete" : "Leave Trip";
-          const leaveTitle = isOwner && otherCount > 0
+          const canLeave = !isOwnerMember || otherCount === 0;
+          const leaveLabel = isOwnerMember ? "Leave & Delete" : "Leave Trip";
+          const leaveTitle = isOwnerMember && otherCount > 0
             ? `Remove all ${otherCount} member(s) before leaving`
-            : isOwner ? "Leaving will delete this trip (you're the only member)"
+            : isOwnerMember ? "Leaving will delete this trip"
             : "Leave this trip";
           return (
             <div key={m.userId} className="member-row">
-              <div className={`member-avatar ${m.role==="owner"?"owner":m.role==="viewer"?"viewer":""}`}>{(m.name||m.userId||"?")[0].toUpperCase()}</div>
+              <div className={`member-avatar ${m.role==="admin"?"owner":m.role==="viewer"?"viewer":""}`}>{(m.name||m.userId||"?")[0].toUpperCase()}</div>
               <div className="member-info">
                 <div className="member-name">{m.name||m.userId}{isMe&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}</div>
                 <div className="member-meta">Joined {m.joinedAt?fmtDate(m.joinedAt):"recently"}</div>
               </div>
               <span className={`role-badge role-${m.role}`}>{m.role==="admin"?"👑 Owner":m.role==="member"?"👤 Member":"👁 Viewer"}</span>
               {isMe && (
-                <button
-                  className="btn btn-danger btn-sm"
+                <button className="btn btn-danger btn-sm"
                   style={{marginLeft:8,padding:"3px 10px",fontSize:12,opacity:canLeave?1:0.45,cursor:canLeave?"pointer":"not-allowed"}}
                   title={leaveTitle}
-                  onClick={()=>{ if(!canLeave){ alert(leaveTitle); return; } onLeave && onLeave(); }}
-                >{leaveLabel}</button>
+                  onClick={() => { if(!canLeave){alert(leaveTitle);return;} onLeave&&onLeave(); }}>
+                  {leaveLabel}
+                </button>
               )}
             </div>
           );
         })}
       </div>
-      <div className="invite-panel">
-        <h5>✉️ Invite Friends</h5>
+
+      {/* ── Invite by Email ── */}
+      <div className="invite-panel" style={{marginTop:22}}>
+        <h5>✉️ Invite by Email</h5>
+        <p style={{fontSize:13,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>Invited members can join the trip immediately from their home page.</p>
         <div style={{display:"flex",gap:8,marginBottom:4}}>
-          <input className={`form-input${emailErr?" err":""}`} style={{flex:1}} placeholder="friend@email.com" value={emailInput} onChange={e=>{setEmailInput(e.target.value);setEmailErr("");}} onKeyDown={e=>e.key==="Enter"&&sendInvite()}/>
-          <button className="btn btn-accent2 btn-sm" onClick={sendInvite}>Send</button>
+          <input
+            className={`form-input${emailErr?" err":""}`}
+            style={{flex:1}}
+            placeholder="friend@email.com"
+            value={emailInput}
+            onChange={e=>{setEmailInput(e.target.value);setEmailErr("");}}
+            onKeyDown={e=>e.key==="Enter"&&sendInvite()}
+          />
+          <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={sendingInvite}>
+            {sendingInvite?"Sending…":"Send Invite"}
+          </button>
         </div>
-        {emailErr&&<div className="err-msg">{emailErr}</div>}
-        {invitations.map(inv=>(
-          <div key={inv.id} className="pending-invite">
-            <span><span className="pending-dot"/>{inv.email}</span>
-            <button className="btn btn-danger btn-sm" style={{padding:"3px 9px",fontSize:11}} onClick={()=>setInvitations(p=>p.filter(i=>i.id!==inv.id))}>✕</button>
+        {emailErr && <div className="err-msg">{emailErr}</div>}
+        {inviteSuccess && <div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>✓ {inviteSuccess}</div>}
+        {invitedEmails.length > 0 && (
+          <div style={{marginTop:12}}>
+            {invitedEmails.map(inv => (
+              <div key={inv.id} className="invite-sent-row">
+                <span className="invite-sent-email">
+                  <span style={{fontSize:14}}>✉️</span> {inv.email}
+                </span>
+                <div style={{display:"flex",alignItems:"center",gap:8}}>
+                  <span className={`invite-sent-status ${inv.status==="joined"?"invite-status-joined":"invite-status-pending"}`}>
+                    {inv.status==="joined"?"✓ Joined":"Pending"}
+                  </span>
+                  {inv.status!=="joined" && (
+                    <button className="ci-btn del" onClick={()=>removeInvite(inv.id)} title="Cancel invite">✕</button>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-        <div style={{marginTop:16,paddingTop:14,borderTop:"1px solid var(--border)"}}>
-          <div className="invite-box">
-            <span className="invite-link">🔗 {link}</span>
-            <button className="btn btn-ghost btn-sm" onClick={()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"Copy"}</button>
-          </div>
+        )}
+      </div>
+
+      {/* ── Share Link ── */}
+      <div className="invite-panel" style={{marginTop:12}}>
+        <h5>🔗 Share Trip Link</h5>
+        <p style={{fontSize:13,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>Anyone with the link can request to join. You'll see their request above and can accept or reject it.</p>
+        <div className="invite-box">
+          <span className="invite-link">{tripLink}</span>
+          <button className="btn btn-ghost btn-sm" onClick={copyLink}>
+            {copied?"✓ Copied!":"Copy Link"}
+          </button>
         </div>
       </div>
     </div>
@@ -2612,6 +2711,15 @@ export default function App() {
   const [resetBusy,setResetBusy]                   = useState(false);
   const [resetDone,setResetDone]                   = useState(false);
 
+  // ── Join request state ──
+  const [joinRequests,setJoinRequests] = useState([]);      // pending requests for trips I own
+  const isJoinPage = window.location.pathname.startsWith("/join/");
+  const joinTripId  = isJoinPage ? window.location.pathname.split("/join/")[1] : null;
+  const [joinTripInfo,setJoinTripInfo]   = useState(null);  // trip info for the join page
+  const [joinRequesting,setJoinRequesting] = useState(false);
+  const [joinDone,setJoinDone]           = useState(false);
+  const [joinError,setJoinError]         = useState("");
+
   // ── On mount: restore session + listen for auth changes ──
   useEffect(() => {
     // Check if there's already a session stored in the browser (e.g. returning user)
@@ -2703,7 +2811,170 @@ export default function App() {
     await supabase.auth.signOut();
     setPage("landing");
     setActive(null);
+    setJoinRequests([]);
   };
+
+  // ── Process pending email invites for the logged-in user ──
+  // When a user logs in, check if anyone invited their email — if so, auto-add them as trip member
+  const processPendingInvites = async (userId, userEmail) => {
+    if(!userId || !userEmail) return;
+    // Fetch all member_joined notifications and filter by email in JS
+    // (Supabase JSONB deep-key filtering is unreliable across all versions)
+    const { data: invites } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("type", "member_joined");
+
+    if(!invites?.length) return;
+
+    // Filter to invites addressed to this user's email that are still pending
+    const myInvites = invites.filter(n =>
+      n.metadata?.invite_type === "email" &&
+      n.metadata?.invited_email?.toLowerCase() === userEmail.toLowerCase() &&
+      n.metadata?.status === "pending"
+    );
+
+    if(!myInvites.length) return;
+
+    for(const invite of myInvites) {
+      // Check not already a member first
+      const { data: existing } = await supabase
+        .from("trip_members")
+        .select("id")
+        .eq("trip_id", invite.trip_id)
+        .eq("user_id", userId)
+        .maybeSingle();
+      if(existing) continue;
+
+      // Add user to trip_members
+      const { error } = await supabase.from("trip_members").insert({
+        trip_id:   invite.trip_id,
+        user_id:   userId,
+        role:      "member",
+        joined_at: new Date().toISOString().slice(0,10),
+      });
+      if(!error) {
+        // Mark invite as processed — update full metadata to preserve all fields
+        await supabase.from("notifications").update({
+          metadata: { ...invite.metadata, status: "joined" }
+        }).eq("id", invite.id);
+      }
+    }
+    // Reload trips to show newly joined trips
+    loadTrips(userId);
+  };
+
+  // ── Load pending join requests for trips I own ──
+  const loadJoinRequests = async (userId) => {
+    if(!userId) return;
+    // Get trips I own
+    const { data: myTrips } = await supabase
+      .from("trip_members")
+      .select("trip_id")
+      .eq("user_id", userId)
+      .eq("role", "admin");
+
+    if(!myTrips?.length) { setJoinRequests([]); return; }
+    const tripIds = myTrips.map(t => t.trip_id);
+
+    // Get all trip_invite notifications for those trips, filter pending in JS
+    const { data: requests } = await supabase
+      .from("notifications")
+      .select("*")
+      .eq("type", "trip_invite")
+      .in("trip_id", tripIds);
+
+    if(!requests?.length) { setJoinRequests([]); return; }
+
+    const pending = requests.filter(r => r.metadata?.status === "pending");
+    if(!pending.length) { setJoinRequests([]); return; }
+
+    setJoinRequests(pending.map(r => ({
+      id:             r.id,
+      tripId:         r.trip_id,
+      requesterId:    r.metadata?.requester_id || "",
+      requesterEmail: r.metadata?.requester_email || "",
+      requesterName:  r.metadata?.requester_name || r.metadata?.requester_email || "",
+      requestedAt:    r.created_at,
+    })));
+  };
+
+  // ── Accept a join request ──
+  const handleAcceptRequest = async (req) => {
+    // Add to trip_members
+    const { error } = await supabase.from("trip_members").insert({
+      trip_id:   req.tripId,
+      user_id:   req.requesterId,
+      role:      "member",
+      joined_at: new Date().toISOString().slice(0,10),
+    });
+    if(error) { console.error("acceptRequest:", error); return; }
+    // Mark notification as accepted
+    await supabase.from("notifications").update({
+      metadata: { status: "accepted" }
+    }).eq("id", req.id);
+    // Remove from local state
+    setJoinRequests(prev => prev.filter(r => r.id !== req.id));
+    // Reload current trip members
+    if(active?.id === req.tripId) loadTripDetails(active);
+    loadTrips(authUser.id);
+  };
+
+  // ── Reject a join request ──
+  const handleRejectRequest = async (req) => {
+    await supabase.from("notifications").update({
+      metadata: { status: "rejected" }
+    }).eq("id", req.id);
+    setJoinRequests(prev => prev.filter(r => r.id !== req.id));
+  };
+
+  // ── Submit a join request (from the /join/:tripId page) ──
+  const handleRequestJoin = async () => {
+    if(!authUser || !joinTripId) return;
+    setJoinRequesting(true); setJoinError("");
+    // Check not already a member
+    const { data: existing } = await supabase
+      .from("trip_members")
+      .select("id")
+      .eq("trip_id", joinTripId)
+      .eq("user_id", authUser.id)
+      .single();
+    if(existing) { setJoinDone(true); setJoinRequesting(false); loadTrips(authUser.id); return; }
+    // Insert join request notification — trip_id + type:"trip_invite" + requester info
+    const { error } = await supabase.from("notifications").insert({
+      user_id:  authUser.id,
+      trip_id:  joinTripId,
+      type:     "trip_invite",
+      message:  `${user} requested to join your trip`,
+      metadata: {
+        requester_id:    authUser.id,
+        requester_email: authUser.email,
+        requester_name:  user,
+        status:          "pending",
+      },
+    });
+    setJoinRequesting(false);
+    if(error) { setJoinError("Failed to send request. Try again."); return; }
+    setJoinDone(true);
+  };
+
+  // ── Load join page trip info ──
+  useEffect(() => {
+    if(!isJoinPage || !joinTripId) return;
+    supabase.from("trips").select("id,title,destination").eq("id", joinTripId).single()
+      .then(({ data }) => { if(data) setJoinTripInfo(data); });
+  }, [joinTripId]);
+
+  // ── Poll for join requests + process invites when user logs in ──
+  useEffect(() => {
+    if(!authUser) return;
+    const email = authUser.email?.toLowerCase();
+    processPendingInvites(authUser.id, email);
+    loadJoinRequests(authUser.id);
+    // Poll every 30s for new join requests
+    const interval = setInterval(() => loadJoinRequests(authUser.id), 30000);
+    return () => clearInterval(interval);
+  }, [authUser?.id]);
 
   // ── Forgot Password — sends reset email ──
   const handleForgotPassword = async () => {
@@ -3286,8 +3557,79 @@ export default function App() {
     {id:"summary",l:"✅ Summary"},
   ];
 
+  // Count join requests for the active trip
+  const activeRequestCount = active ? (joinRequests||[]).filter(r => r.tripId === active.id).length : 0;
+
   // ── Route protection: if not logged in, only the landing page is accessible ──
   const safePage = loggedIn ? page : "landing";
+
+  // ── /join/:tripId page — shown when user arrives from a shared link ──
+  if(isJoinPage) return (
+    <>
+      <style>{FONT+CSS}</style>
+      <div className="app">
+        <nav className="nav">
+          <div className="nav-logo" onClick={()=>setPage(loggedIn?"dashboard":"landing")}>Trip<span>Sync</span></div>
+          <div className="nav-user">
+            {loggedIn
+              ? <><div className="avatar">{user[0].toUpperCase()}</div><span style={{fontSize:14,fontWeight:500}}>{user}</span><button className="btn btn-ghost btn-sm" onClick={handleSignOut}>Sign Out</button></>
+              : <button className="btn btn-primary btn-sm" onClick={()=>{setAuthMode("login");setAuthError("");setShowLogin(true);}}>Sign In</button>
+            }
+          </div>
+        </nav>
+        <div className="join-banner">
+          <div className="join-banner-card">
+            <div style={{fontSize:40,marginBottom:16}}>✈️</div>
+            <h2>{joinTripInfo?.title || "You've been invited!"}</h2>
+            <p>
+              {joinTripInfo?.destination ? `Join the trip to ${joinTripInfo.destination}` : "You've been invited to join a trip on TripSync"}.
+              {!loggedIn && " Sign in or create an account first to request access."}
+            </p>
+            {!loggedIn ? (
+              <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap"}}>
+                <button className="btn btn-primary" onClick={()=>{setAuthMode("signup");setAuthError("");setShowLogin(true);}}>Create Account</button>
+                <button className="btn btn-ghost" onClick={()=>{setAuthMode("login");setAuthError("");setShowLogin(true);}}>Sign In</button>
+              </div>
+            ) : joinDone ? (
+              <div style={{background:"var(--green-soft)",border:"1px solid rgba(36,138,61,0.22)",borderRadius:"var(--r-md)",padding:"14px 18px",textAlign:"center"}}>
+                <div style={{fontSize:24,marginBottom:8}}>✅</div>
+                <p style={{color:"var(--green)",fontWeight:600,fontSize:15,margin:0}}>Request sent!</p>
+                <p style={{color:"var(--muted)",fontSize:13,marginTop:4}}>The trip owner will review your request.</p>
+                <button className="btn btn-ghost btn-sm" style={{marginTop:12}} onClick={()=>{ window.location.href="/"; }}>Go to My Trips</button>
+              </div>
+            ) : (
+              <>
+                {joinError && <div className="err-msg" style={{marginBottom:12}}>{joinError}</div>}
+                <button className="btn btn-primary" style={{width:"100%",justifyContent:"center"}} onClick={handleRequestJoin} disabled={joinRequesting}>
+                  {joinRequesting ? "Sending request…" : "Request to Join Trip →"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+        {showLogin && (
+          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");}}>
+            <div className="modal" onClick={e=>e.stopPropagation()}>
+              <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
+              </div>
+              <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
+              {authMode==="signup"&&<div className="form-group"><label className="form-label">Your Name</label><input className="form-input" placeholder="e.g. Maria" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/></div>}
+              <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email} onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}/></div>
+              <div className="form-group"><label className="form-label">Password</label><input className="form-input" type="password" placeholder="••••••••" value={loginForm.password} onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}/></div>
+              {authMode==="signup"&&<div className="form-group"><label className="form-label">Confirm Password</label><input className="form-input" type="password" placeholder="••••••••" value={loginForm.confirmPassword} onChange={e=>setLoginForm(f=>({...f,confirmPassword:e.target.value}))}/></div>}
+              {authError&&<div style={{padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,background:authError.startsWith("✅")?"rgba(52,211,153,0.1)":"rgba(248,113,113,0.1)",border:authError.startsWith("✅")?"1px solid rgba(52,211,153,0.3)":"1px solid rgba(248,113,113,0.3)",color:authError.startsWith("✅")?"var(--green)":"var(--red)"}}>{authError}</div>}
+              <div className="form-actions">
+                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");}}>Cancel</button>
+                <button className="btn btn-primary" disabled={authBusy} onClick={authMode==="login"?handleSignIn:handleSignUp}>{authBusy?"Please wait…":authMode==="login"?"Sign In →":"Create Account →"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
 
   return (
     <>
@@ -3410,7 +3752,13 @@ export default function App() {
             ) : (
             <>
             <div className="section-tabs">
-              {TABS.map(t=><button key={t.id} className={`section-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>{t.l}</button>)}
+              {TABS.map(t=>(
+                <button key={t.id} className={`section-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>
+                  {t.id==="members" && activeRequestCount>0
+                    ? <span className="notif-tab-wrap">{t.l}<span className="notif-badge">{activeRequestCount}</span></span>
+                    : t.l}
+                </button>
+              ))}
             </div>
             <div className="section-content">
               {tab==="info"           && <TripInfoTab trip={active} setTrip={updateTrip} db={db}/>}
@@ -3421,7 +3769,7 @@ export default function App() {
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
-              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id}/>}
+              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
