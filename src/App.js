@@ -43,7 +43,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 .nav-logo { font-family:'Sora',sans-serif; font-size:17px; font-weight:700; color:var(--text); letter-spacing:-0.5px; cursor:pointer; display:flex; align-items:center; gap:2px; }
 .nav-logo span { background:linear-gradient(135deg,#0071e3,#34aadc); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; }
 .nav-tabs { display:flex; gap:2px; background:rgba(0,0,0,0.05); padding:4px; border-radius:13px; }
-.nav-tab { padding:5px 17px; border-radius:9px; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:var(--muted); transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1); letter-spacing:-0.1px; }
+.nav-tab { padding:5px 17px; border-radius:9px; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:#3a3a3c; transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1); letter-spacing:-0.1px; }
 .nav-tab:hover { color:var(--text); background:rgba(0,0,0,0.04); }
 .nav-tab.active { background:var(--surface); color:var(--text); font-weight:600; box-shadow:var(--shadow-sm); }
 .nav-user { display:flex; align-items:center; gap:10px; }
