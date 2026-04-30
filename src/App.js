@@ -1495,7 +1495,7 @@ function ActivityTab({trip,setTrip,user,db}) {
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db}) {
-  // Destination votes — persisted in trips table as destinations JSONB array
+  // Destination votes — persisted in trips.country_info as destinations array
   const voteItem=(section,id)=>{
     const items=trip[section];
     const item=items.find(i=>i.id===id);
@@ -1503,9 +1503,11 @@ function VotingTab({trip,setTrip,user,db}) {
     const hasVote=item.votes.includes(user);
     const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
     const updatedSection = trip[section].map(i=>i.id!==id?i:{...i,votes:newVotes});
-    // Persist destinations array to trips table
+    // Persist destinations votes inside country_info JSONB (avoids needing a new column)
     if(db && !db.isMock && section==="destinations") {
-      supabase.from("trips").update({ destinations: updatedSection }).eq("id", trip.id);
+      supabase.from("trips").update({
+        country_info: { ...(trip.country || {}), destinations: updatedSection }
+      }).eq("id", trip.id);
     }
     setTrip(t=>({...t,[section]:updatedSection}));
   };
@@ -3015,7 +3017,7 @@ export default function App() {
     const { data, error } = await supabase
       .from("trips")
       .select(`
-        id, title, destination, destinations, status, start_date, end_date, description,
+        id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
@@ -3038,9 +3040,12 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      // Prefer the destinations JSONB column (persisted votes), fall back to plain destination text
-      destinations: Array.isArray(t.destinations) && t.destinations.length > 0
-        ? t.destinations
+      // Use existing destinations if already loaded (preserves votes), otherwise build from destination text
+      // Also check country_info.destinations where we persist votes
+      destinations: existing?.destinations?.length > 0
+        ? existing.destinations
+        : Array.isArray(t.country_info?.destinations) && t.country_info.destinations.length > 0
+        ? t.country_info.destinations
         : t.destination ? [{id:1,name:t.destination,votes:[]}]
         : [{id:1,name:"TBD",votes:[]}],
       activityCount:       (t.activities||[]).length,
