@@ -129,7 +129,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 
 /* ─── SECTION TABS ────────────────────────────────────── */
 .section-tabs { display:flex; gap:0; margin:28px 0 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; overflow-x:auto; }
-.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:var(--muted); border-bottom:2.5px solid transparent; margin-bottom:-1px; transition:all 0.16s; white-space:nowrap; }
+.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:#1d1d1f; border-bottom:2.5px solid transparent; margin-bottom:-1px; transition:all 0.16s; white-space:nowrap; }
 .section-tab:hover { color:var(--text-secondary); }
 .section-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
 .section-content { animation:fadeIn 0.2s ease; }
