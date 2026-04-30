@@ -1495,14 +1495,19 @@ function ActivityTab({trip,setTrip,user,db}) {
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db}) {
+  // Destination votes — persisted in trips table as destinations JSONB array
   const voteItem=(section,id)=>{
     const items=trip[section];
     const item=items.find(i=>i.id===id);
     if(!item) return;
     const hasVote=item.votes.includes(user);
     const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
-    if(db) db.upsertVote(trip.id, section, id, user, hasVote?0:1);
-    setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
+    const updatedSection = trip[section].map(i=>i.id!==id?i:{...i,votes:newVotes});
+    // Persist destinations array to trips table
+    if(db && !db.isMock && section==="destinations") {
+      supabase.from("trips").update({ destinations: updatedSection }).eq("id", trip.id);
+    }
+    setTrip(t=>({...t,[section]:updatedSection}));
   };
 
   const voteVehicle = (id) => {
@@ -1529,7 +1534,6 @@ function VotingTab({trip,setTrip,user,db}) {
         const votes = a.votes || [];
         const hasVote = votes.includes(user);
         const newVotes = hasVote ? votes.filter(v => v !== user) : [...votes, user];
-        // Persist to Supabase — store votes as a JSON array in the votes column
         if(db && !db.isMock) {
           supabase.from("accommodations").update({ votes: newVotes }).eq("id", id);
         }
@@ -1546,7 +1550,7 @@ function VotingTab({trip,setTrip,user,db}) {
         let newUp,newDown;
         if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user];newDown=down.filter(u=>u!==user);}
         else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user];newUp=up.filter(u=>u!==user);}
-        if(db) db.updateVotes(id, newUp, newDown);
+        if(db && !db.isMock) db.updateVotes(id, newUp, newDown);
         return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
       })
     }));
@@ -2256,7 +2260,6 @@ function TripInfoTab({trip,setTrip,db}) {
   const [editing,setEditing] = useState(false);
   const [form,setForm] = useState({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});
   const [errs,setErrs] = useState({});
-  const [togglingStatus,setTogglingStatus] = useState(false);
   useMemo(()=>setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""}),[trip.id]);
 
   const validate=()=>{
@@ -2284,37 +2287,13 @@ function TripInfoTab({trip,setTrip,db}) {
   };
   const cancel=()=>{setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});setErrs({});setEditing(false);};
 
-  const toggleStatus = async () => {
-    const newStatus = trip.status === "confirmed" ? "planning" : "confirmed";
-    setTogglingStatus(true);
-    if(db) await db.updateTrip(trip.id, { status: newStatus });
-    setTrip(t => ({ ...t, status: newStatus }));
-    setTogglingStatus(false);
-  };
-
   return (
     <div>
       <div className="info-panel">
         <div className="info-panel-header">
           <h4>ℹ️ Trip Information</h4>
           {!editing
-            ?<div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <button
-                className="btn btn-sm"
-                style={{
-                  background: trip.status==="confirmed" ? "var(--yellow-soft)" : "var(--green-soft)",
-                  color: trip.status==="confirmed" ? "var(--yellow)" : "var(--green)",
-                  border: `1px solid ${trip.status==="confirmed" ? "rgba(196,124,10,0.22)" : "rgba(36,138,61,0.22)"}`,
-                  fontWeight:600, opacity: togglingStatus ? 0.6 : 1,
-                }}
-                onClick={toggleStatus}
-                disabled={togglingStatus || trip.isDemo}
-                title={trip.isDemo ? "Cannot change status of demo trip" : trip.status==="confirmed" ? "Mark as Planning" : "Mark as Confirmed"}
-              >
-                {togglingStatus ? "Saving…" : trip.status==="confirmed" ? "↩ Mark as Planning" : "✓ Mark as Confirmed"}
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>
-            </div>
+            ?<button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>
             :<div style={{display:"flex",gap:8}}>
               <button className="btn btn-ghost btn-sm" onClick={cancel}>Cancel</button>
               <button className="btn btn-primary btn-sm" onClick={save}>Save Changes</button>
@@ -3036,7 +3015,7 @@ export default function App() {
     const { data, error } = await supabase
       .from("trips")
       .select(`
-        id, title, destination, status, start_date, end_date, description,
+        id, title, destination, destinations, status, start_date, end_date, description,
         google_maps_url, country_info,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
@@ -3059,8 +3038,11 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
-      // Preserve full loaded data if this trip is already open — never overwrite with empty shells
+      // Prefer the destinations JSONB column (persisted votes), fall back to plain destination text
+      destinations: Array.isArray(t.destinations) && t.destinations.length > 0
+        ? t.destinations
+        : t.destination ? [{id:1,name:t.destination,votes:[]}]
+        : [{id:1,name:"TBD",votes:[]}],
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
       vehicleRentals:      existing?.vehicleRentals     ?? [],
@@ -3128,15 +3110,15 @@ export default function App() {
       day:         a.scheduled_date || null,
       startTime:   a.scheduled_time || null,
       startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: 60,
-      location:    "",
+      durationMin: a.duration_min || 60,
+      location:    a.location || "",
       price:       parseFloat(a.cost) || 0,
       priceType:   a.price_type || "flat",
       metadata: {
-        description: "",
-        notes:       "",
-        upvotes:     [],
-        downvotes:   [],
+        description: a.description || "",
+        notes:       a.notes || "",
+        upvotes:     Array.isArray(a.upvotes) ? a.upvotes : [],
+        downvotes:   Array.isArray(a.downvotes) ? a.downvotes : [],
         createdBy:   a.created_by || "",
         checkIn:     null,
         checkOut:    null,
@@ -3149,11 +3131,11 @@ export default function App() {
       name:          a.name,
       address:       a.address || "",
       pricePerNight: parseFloat(a.cost_per_night) || 0,
-      rating:        "",
+      rating:        a.rating ? String(a.rating) : "",
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
-      notes:         "",
-      votes:         [],
+      notes:         a.notes || "",
+      votes:         Array.isArray(a.votes) ? a.votes : [],
     }));
 
     // Load personal budget — guard against authUser being null during restore
@@ -3186,7 +3168,7 @@ export default function App() {
       seats:           v.seats || "",
       transmission:    v.transmission || "automatic",
       notes:           v.notes || "",
-      votes:           v.votes || [],
+      votes:           Array.isArray(v.votes) ? v.votes : [],
     }));
 
     const fullTrip = {
@@ -3250,6 +3232,7 @@ export default function App() {
   }[cat] || "activity");
 
   const db = {
+    isMock,
     // ── Activities (calendar items) ──
     addItem: async (tripId, item) => {
       if(isMock) return item;
@@ -3259,10 +3242,16 @@ export default function App() {
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
+        duration_min:   item.durationMin || 60,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
+        location:       item.location || "",
+        description:    item.metadata?.description || "",
+        notes:          item.metadata?.notes || "",
         status:         "proposed",
         created_by:     item.metadata?.createdBy || null,
+        upvotes:        item.metadata?.upvotes || [],
+        downvotes:      item.metadata?.downvotes || [],
       }).select().single();
       if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
@@ -3275,8 +3264,12 @@ export default function App() {
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
+        duration_min:   item.durationMin || 60,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
+        location:       item.location || "",
+        description:    item.metadata?.description || "",
+        notes:          item.metadata?.notes || "",
       }).eq("id", item.id);
     },
 
@@ -3311,7 +3304,10 @@ export default function App() {
         cost_per_night: accom.pricePerNight || 0,
         check_in:       accom.checkIn || new Date().toISOString().slice(0,10),
         check_out:      accom.checkOut || new Date().toISOString().slice(0,10),
-        created_by:     null,
+        rating:         accom.rating ? parseFloat(accom.rating) : null,
+        notes:          accom.notes || "",
+        votes:          [],
+        created_by:     authUser?.id || null,
       }).select().single();
       if(error) { console.error("db.addAccom:", error); return accom; }
       return { ...accom, id: data.id };
@@ -3325,6 +3321,8 @@ export default function App() {
         cost_per_night: accom.pricePerNight || 0,
         check_in:       accom.checkIn || null,
         check_out:      accom.checkOut || null,
+        rating:         accom.rating ? parseFloat(accom.rating) : null,
+        notes:          accom.notes || "",
       }).eq("id", accom.id);
     },
 
