@@ -1829,10 +1829,17 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
             <span className="cat-label">{cat.label}</span>
             <div className="cat-bar-wrap">
               <div className="cat-bar-bg">
-                <div className="cat-bar-fill" style={{width:`${Math.round((cat.total/maxCat)*100)}%`,background:cat.color}}/>
+                <div className="cat-bar-fill" style={{width:`${grandTotal > 0 ? Math.round((cat.total/grandTotal)*100) : 0}%`,background:cat.color}}/>
               </div>
             </div>
-            <span className="cat-amount" style={{color:cat.color}}>${cat.total.toLocaleString()}</span>
+            <span className="cat-amount" style={{color:cat.color}}>
+              ${cat.total.toLocaleString()}
+              {grandTotal > 0 && cat.total > 0 && (
+                <span style={{fontSize:10,fontWeight:500,color:"var(--muted)",marginLeft:4}}>
+                  {Math.round((cat.total/grandTotal)*100)}%
+                </span>
+              )}
+            </span>
           </div>
         ))}
         <div className="budget-total-row">
