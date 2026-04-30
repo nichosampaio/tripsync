@@ -26,8 +26,8 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
   --yellow-soft: rgba(196,124,10,0.10);
   --text: #1d1d1f;
   --text-secondary: #3a3a3c;
-  --muted: #6e6e73;
-  --muted-light: #8e8e93;
+  --muted: #3d3d3f;
+  --muted-light: #525254;
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 6px 20px rgba(0,0,0,0.09), 0 2px 6px rgba(0,0,0,0.05);
