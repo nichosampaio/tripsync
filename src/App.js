@@ -129,7 +129,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 
 /* ─── SECTION TABS ────────────────────────────────────── */
 .section-tabs { display:flex; gap:0; margin:28px 0 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; overflow-x:auto; }
-.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:#1d1d1f; border-bottom:2.5px solid transparent; margin-bottom:-1px; transition:all 0.16s; white-space:nowrap; }
+.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:var(--muted); border-bottom:2.5px solid transparent; margin-bottom:-1px; transition:all 0.16s; white-space:nowrap; }
 .section-tab:hover { color:var(--text-secondary); }
 .section-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
 .section-content { animation:fadeIn 0.2s ease; }
@@ -2256,6 +2256,7 @@ function TripInfoTab({trip,setTrip,db}) {
   const [editing,setEditing] = useState(false);
   const [form,setForm] = useState({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});
   const [errs,setErrs] = useState({});
+  const [togglingStatus,setTogglingStatus] = useState(false);
   useMemo(()=>setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""}),[trip.id]);
 
   const validate=()=>{
@@ -2283,13 +2284,37 @@ function TripInfoTab({trip,setTrip,db}) {
   };
   const cancel=()=>{setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});setErrs({});setEditing(false);};
 
+  const toggleStatus = async () => {
+    const newStatus = trip.status === "confirmed" ? "planning" : "confirmed";
+    setTogglingStatus(true);
+    if(db) await db.updateTrip(trip.id, { status: newStatus });
+    setTrip(t => ({ ...t, status: newStatus }));
+    setTogglingStatus(false);
+  };
+
   return (
     <div>
       <div className="info-panel">
         <div className="info-panel-header">
           <h4>ℹ️ Trip Information</h4>
           {!editing
-            ?<button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>
+            ?<div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <button
+                className="btn btn-sm"
+                style={{
+                  background: trip.status==="confirmed" ? "var(--yellow-soft)" : "var(--green-soft)",
+                  color: trip.status==="confirmed" ? "var(--yellow)" : "var(--green)",
+                  border: `1px solid ${trip.status==="confirmed" ? "rgba(196,124,10,0.22)" : "rgba(36,138,61,0.22)"}`,
+                  fontWeight:600, opacity: togglingStatus ? 0.6 : 1,
+                }}
+                onClick={toggleStatus}
+                disabled={togglingStatus || trip.isDemo}
+                title={trip.isDemo ? "Cannot change status of demo trip" : trip.status==="confirmed" ? "Mark as Planning" : "Mark as Confirmed"}
+              >
+                {togglingStatus ? "Saving…" : trip.status==="confirmed" ? "↩ Mark as Planning" : "✓ Mark as Confirmed"}
+              </button>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>
+            </div>
             :<div style={{display:"flex",gap:8}}>
               <button className="btn btn-ghost btn-sm" onClick={cancel}>Cancel</button>
               <button className="btn btn-primary btn-sm" onClick={save}>Save Changes</button>
