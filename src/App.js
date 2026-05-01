@@ -1498,78 +1498,81 @@ function ActivityTab({trip,setTrip,user,db}) {
 }
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
-function VotingTab({trip,setTrip,user,db}) {
+function VotingTab({trip,setTrip,user,userId,db}) {
+  // Use UUID for DB storage, fall back to display name for demo
+  const voteUserId = userId || user;
 
   // ── Destination yes/no vote — persists to trips.country_info.destination_votes ──
   const voteSection=(section,id,dir)=>{
-    setTrip(t=>{
-      const updated=t[section].map(item=>{
-        if(item.id!==id) return item;
-        const up=item.upvotes||[],down=item.downvotes||[];
-        let newUp,newDown;
-        if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up,user];newDown=down.filter(u=>u!==user);}
-        else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down,user];newUp=up.filter(u=>u!==user);}
-        return {...item,upvotes:newUp,downvotes:newDown};
-      });
-      if(!db?.isMock){
-        const destVotes=updated.map(d=>({id:d.id,name:d.name,upvotes:d.upvotes||[],downvotes:d.downvotes||[]}));
-        supabase.from("trips").update({country_info:{...(t.country||{}),destination_votes:destVotes}}).eq("id",t.id);
-      }
-      return {...t,[section]:updated};
+    const updated=trip[section].map(item=>{
+      if(item.id!==id) return item;
+      const up=item.upvotes||[],down=item.downvotes||[];
+      let newUp,newDown;
+      if(dir==="up"){const has=up.includes(voteUserId);newUp=has?up.filter(u=>u!==voteUserId):[...up,voteUserId];newDown=down.filter(u=>u!==voteUserId);}
+      else{const has=down.includes(voteUserId);newDown=has?down.filter(u=>u!==voteUserId):[...down,voteUserId];newUp=up.filter(u=>u!==voteUserId);}
+      return {...item,upvotes:newUp,downvotes:newDown};
     });
+    const newTrip={...trip,[section]:updated};
+    setTrip(newTrip);
+    if(!db?.isMock){
+      const destVotes=updated.map(d=>({id:d.id,name:d.name,upvotes:d.upvotes||[],downvotes:d.downvotes||[]}));
+      supabase.from("trips").update({country_info:{...(trip.country||{}),destination_votes:destVotes}}).eq("id",trip.id)
+        .then(({error})=>{ if(error) console.error("voteSection supabase error:",error); });
+    }
   };
 
   // ── Vehicle yes/no vote ──
   const voteVehicle=(id,dir)=>{
-    setTrip(t=>({
-      ...t,
-      vehicleRentals:(t.vehicleRentals||[]).map(v=>{
-        if(v.id!==id) return v;
-        const up=v.upvotes||[],down=v.downvotes||[];
-        let newUp,newDown;
-        if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up,user];newDown=down.filter(u=>u!==user);}
-        else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down,user];newUp=up.filter(u=>u!==user);}
-        if(!db?.isMock){
-          supabase.from("vehicle_rentals").update({upvotes:newUp,downvotes:newDown}).eq("id",id);
-        }
-        return {...v,upvotes:newUp,downvotes:newDown};
-      })
-    }));
+    const newRentals=(trip.vehicleRentals||[]).map(v=>{
+      if(v.id!==id) return v;
+      const up=v.upvotes||[],down=v.downvotes||[];
+      let newUp,newDown;
+      if(dir==="up"){const has=up.includes(voteUserId);newUp=has?up.filter(u=>u!==voteUserId):[...up,voteUserId];newDown=down.filter(u=>u!==voteUserId);}
+      else{const has=down.includes(voteUserId);newDown=has?down.filter(u=>u!==voteUserId):[...down,voteUserId];newUp=up.filter(u=>u!==voteUserId);}
+      return {...v,upvotes:newUp,downvotes:newDown};
+    });
+    setTrip({...trip,vehicleRentals:newRentals});
+    if(!db?.isMock){
+      const v=newRentals.find(x=>x.id===id);
+      if(v) supabase.from("vehicle_rentals").update({upvotes:v.upvotes,downvotes:v.downvotes}).eq("id",id)
+        .then(({error})=>{ if(error) console.error("voteVehicle supabase error:",error); });
+    }
   };
 
   // ── Accommodation yes/no vote ──
   const voteAccom=(id,dir)=>{
-    setTrip(t=>({
-      ...t,
-      accommodationOptions:t.accommodationOptions.map(a=>{
-        if(a.id!==id) return a;
-        const up=a.upvotes||[],down=a.downvotes||[];
-        let newUp,newDown;
-        if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up,user];newDown=down.filter(u=>u!==user);}
-        else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down,user];newUp=up.filter(u=>u!==user);}
-        if(!db?.isMock){
-          supabase.from("accommodations").update({upvotes:newUp,downvotes:newDown}).eq("id",id);
-        }
-        return {...a,upvotes:newUp,downvotes:newDown};
-      })
-    }));
+    const newAccoms=trip.accommodationOptions.map(a=>{
+      if(a.id!==id) return a;
+      const up=a.upvotes||[],down=a.downvotes||[];
+      let newUp,newDown;
+      if(dir==="up"){const has=up.includes(voteUserId);newUp=has?up.filter(u=>u!==voteUserId):[...up,voteUserId];newDown=down.filter(u=>u!==voteUserId);}
+      else{const has=down.includes(voteUserId);newDown=has?down.filter(u=>u!==voteUserId):[...down,voteUserId];newUp=up.filter(u=>u!==voteUserId);}
+      return {...a,upvotes:newUp,downvotes:newDown};
+    });
+    setTrip({...trip,accommodationOptions:newAccoms});
+    if(!db?.isMock){
+      const a=newAccoms.find(x=>x.id===id);
+      if(a) supabase.from("accommodations").update({upvotes:a.upvotes,downvotes:a.downvotes}).eq("id",id)
+        .then(({error})=>{ if(error) console.error("voteAccom supabase error:",error); });
+    }
   };
 
   // ── Activity yes/no vote ──
   const voteCI=(id,dir)=>{
-    setTrip(t=>({
-      ...t,calendarItems:t.calendarItems.map(ci=>{
-        if(ci.id!==id) return ci;
-        const up=ci.metadata?.upvotes||[],down=ci.metadata?.downvotes||[];
-        let newUp,newDown;
-        if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up,user];newDown=down.filter(u=>u!==user);}
-        else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down,user];newUp=up.filter(u=>u!==user);}
-        if(!db?.isMock){
-          supabase.from("activities").update({upvotes:newUp,downvotes:newDown}).eq("id",id);
-        }
-        return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
-      })
-    }));
+    const newItems=trip.calendarItems.map(ci=>{
+      if(ci.id!==id) return ci;
+      const up=ci.metadata?.upvotes||[],down=ci.metadata?.downvotes||[];
+      let newUp,newDown;
+      if(dir==="up"){const has=up.includes(voteUserId);newUp=has?up.filter(u=>u!==voteUserId):[...up,voteUserId];newDown=down.filter(u=>u!==voteUserId);}
+      else{const has=down.includes(voteUserId);newDown=has?down.filter(u=>u!==voteUserId):[...down,voteUserId];newUp=up.filter(u=>u!==voteUserId);}
+      return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
+    });
+    setTrip({...trip,calendarItems:newItems});
+    if(!db?.isMock){
+      const ci=newItems.find(x=>x.id===id);
+      if(ci) supabase.from("activities").update({upvotes:ci.metadata.upvotes,downvotes:ci.metadata.downvotes}).eq("id",id)
+        .then(({error})=>{ if(error) console.error("voteCI supabase error:",error); });
+    }
   };
 
   // ── Shared Yes/No card renderer ──
@@ -1613,7 +1616,7 @@ function VotingTab({trip,setTrip,user,db}) {
           <h4>📍 Destination</h4>
           {sortByNet(trip.destinations).map(dest=>{
             const up=(dest.upvotes||[]).length, down=(dest.downvotes||[]).length;
-            const hasUp=(dest.upvotes||[]).includes(user), hasDown=(dest.downvotes||[]).includes(user);
+            const hasUp=(dest.upvotes||[]).includes(voteUserId), hasDown=(dest.downvotes||[]).includes(voteUserId);
             return(
               <YesNoCard key={dest.id} up={up} down={down} hasUp={hasUp} hasDown={hasDown}
                 onUp={()=>voteSection("destinations",dest.id,"up")}
@@ -1631,7 +1634,7 @@ function VotingTab({trip,setTrip,user,db}) {
           <h4>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
           {sortByNet(trip.vehicleRentals||[]).map(v=>{
             const up=(v.upvotes||[]).length, down=(v.downvotes||[]).length;
-            const hasUp=(v.upvotes||[]).includes(user), hasDown=(v.downvotes||[]).includes(user);
+            const hasUp=(v.upvotes||[]).includes(voteUserId), hasDown=(v.downvotes||[]).includes(voteUserId);
             const ppd=parseFloat(v.price||v.pricePerDay)||0;
             const days=calcVehicleDays(v);
             const total=calcVehicleTotal(v);
@@ -1665,7 +1668,7 @@ function VotingTab({trip,setTrip,user,db}) {
           <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
           {sortByNet(trip.accommodationOptions||[]).map(a=>{
             const up=(a.upvotes||[]).length, down=(a.downvotes||[]).length;
-            const hasUp=(a.upvotes||[]).includes(user), hasDown=(a.downvotes||[]).includes(user);
+            const hasUp=(a.upvotes||[]).includes(voteUserId), hasDown=(a.downvotes||[]).includes(voteUserId);
             const ppn=parseFloat(a.pricePerNight)||0;
             const nights=calcAccomNights(a);
             const total=calcAccomTotal(a);
@@ -1704,7 +1707,7 @@ function VotingTab({trip,setTrip,user,db}) {
           :votable.map(ci=>{
             const tm=TYPE_META[ci.type]||TYPE_META.activity;
             const up=(ci.metadata?.upvotes||[]).length,down=(ci.metadata?.downvotes||[]).length;
-            const hasUp=(ci.metadata?.upvotes||[]).includes(user),hasDown=(ci.metadata?.downvotes||[]).includes(user);
+            const hasUp=(ci.metadata?.upvotes||[]).includes(voteUserId),hasDown=(ci.metadata?.downvotes||[]).includes(voteUserId);
             return(
               <YesNoCard key={ci.id} up={up} down={down} hasUp={hasUp} hasDown={hasDown}
                 onUp={()=>voteCI(ci.id,"up")}
@@ -3898,7 +3901,7 @@ export default function App() {
               {tab==="info"           && <TripInfoTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="map"            && <MapTab trip={active} setTrip={updateTrip} db={db}/>}
-              {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user} userId={authUser?.id} db={db}/>}
               {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb}/>}
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
