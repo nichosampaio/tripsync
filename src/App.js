@@ -1605,7 +1605,13 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
           {[...(trip.vehicleRentals||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(v=>{
             const days=calcVehicleDays(v),total=calcVehicleTotal(v);
             return <VCard key={v.id} icon={VTYPE[v.vehicleType]||"🚗"} name={`${v.company}${v.model?` — ${v.model}`:""}`} subtitle={v.pickupLocation?`📍 ${v.pickupLocation}`:null}
-              pills={<>{v.pricePerDay>0&&<span className="pill pill-y">💰 ${v.pricePerDay}/day</span>}{days>0&&<span className="pill pill-b">× {days} day{days!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total} total</span>}</>}
+              pills={(()=>{
+                const ppd = v.pricePerDay||0;
+                const isDaily = v.priceType!=="full";
+                const derivedDailyRate = (!isDaily && days>0 && total>0) ? Math.round(total/days) : null;
+                const displayRate = isDaily ? ppd : derivedDailyRate;
+                return <>{displayRate>0&&<span className="pill pill-y">💰 ${displayRate}/day</span>}{days>0&&<span className="pill pill-b">× {days} day{days!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total.toLocaleString()} total</span>}{!isDaily&&<span className="pill pill-p">🧾 Full price</span>}</>;
+              })()}
               up={v.upvotes} dn={v.downvotes} onUp={()=>voteVehicle(v.id,"up")} onDn={()=>voteVehicle(v.id,"down")}/>;
           })}
         </div>
@@ -1616,7 +1622,13 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
           {[...(trip.accommodationOptions||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(a=>{
             const nights=calcAccomNights(a);
             return <VCard key={a.id} icon="🏨" name={a.name} subtitle={a.address?`📍 ${a.address}`:null}
-              pills={<>{a.pricePerNight>0&&<span className="pill pill-y">💰 ${a.pricePerNight}/night</span>}{nights>0&&<span className="pill pill-b">× {nights} night{nights!==1?"s":""}</span>}{a.pricePerNight>0&&nights>0&&<span className="pill pill-g">= ${(a.pricePerNight*nights).toLocaleString()} total</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>}
+              pills={(()=>{
+                const ppn = parseFloat(a.pricePerNight)||0;
+                const total = ppn>0&&nights>0 ? ppn*nights : parseFloat(a.price)||0;
+                const derivedRate = (ppn===0 && nights>0 && total>0) ? Math.round(total/nights) : null;
+                const displayRate = ppn>0 ? ppn : derivedRate;
+                return <>{displayRate>0&&<span className="pill pill-y">💰 ${displayRate}/night</span>}{nights>0&&<span className="pill pill-b">× {nights} night{nights!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total.toLocaleString()} total</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>;
+              })()}
               up={a.upvotes} dn={a.downvotes} onUp={()=>voteAccom(a.id,"up")} onDn={()=>voteAccom(a.id,"down")}/>;
           })}
         </div>
