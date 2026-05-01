@@ -1937,6 +1937,12 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
             {items.filter(ci=>ci.price>0).length === 0 && (
               <p className="text-muted" style={{fontSize:13}}>No priced items yet.</p>
             )}
+            {items.filter(ci=>ci.price>0).length > 0 && (
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:12,marginTop:4,borderTop:"1px solid var(--border)"}}>
+                <span style={{fontSize:15,fontWeight:700,color:"#1d1d1f"}}>Total</span>
+                <span style={{fontFamily:"Inter",fontSize:18,fontWeight:800,color:"#248a3d"}}>${(actTotal+mealTotal+transportTotal+noteTotal).toLocaleString()}</span>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1945,7 +1951,10 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"#818cf8"}}>Total: ${accomTotal.toLocaleString()}</span>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total:</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#248a3d"}}>${accomTotal.toLocaleString()}</span>
+          </div>
         </div>
         {accomOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
@@ -1998,7 +2007,10 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🚗 Vehicle Rental Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"#f97316"}}>Total: ${vehicleTotal.toLocaleString()}</span>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total:</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#248a3d"}}>${vehicleTotal.toLocaleString()}</span>
+          </div>
         </div>
         {vehicleOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No vehicle rentals added yet — go to <strong>🚗 Vehicles</strong> to add options.</p>
@@ -2668,7 +2680,7 @@ function SummaryTab({trip}) {
         <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
         <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
       </div>
-      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag tag-b">{a.name}{a.pricePerNight?` · $${a.pricePerNight}/night`:""}{calcAccomNights(a)>0?` × ${calcAccomNights(a)}n`:""}{calcAccomTotal(a)>0?` = $${calcAccomTotal(a).toLocaleString()}`:""}</span>)}</div></div>}
+      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag" style={{background:"rgba(129,140,248,0.08)",borderColor:"rgba(129,140,248,0.25)",color:"#818cf8"}}>{a.name}{a.priceType==="full"&&a.totalPrice?` · $${parseFloat(a.totalPrice).toLocaleString()} full`:a.pricePerNight?` · $${a.pricePerNight}/night`:""}{a.priceType!=="full"&&calcAccomNights(a)>0?` × ${calcAccomNights(a)}n`:""}{calcAccomTotal(a)>0?` = $${calcAccomTotal(a).toLocaleString()}`:""}</span>)}</div></div>}
       {(trip.vehicleRentals||[]).length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label><div className="tag-wrap">{(trip.vehicleRentals||[]).map(v=>{const ppd=parseFloat(v.price||v.pricePerDay)||0;const days=calcVehicleDays(v);const tot=calcVehicleTotal(v);return(<span key={v.id} className="tag" style={{borderColor:"rgba(249,115,22,0.25)",color:"#f97316",background:"rgba(249,115,22,0.08)"}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model?` — ${v.model}`:""}{v.priceType==="full"&&ppd>0?` · $${ppd} full`:ppd>0&&days>0?` · $${ppd}/day × ${days}d = $${tot.toLocaleString()}`:ppd>0?` · $${ppd}/day`:""}</span>);})}</div></div>}
       {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}${c.priceType==="per_person"?"/person":" total"}`:""}</span>)}</div></div>}
       <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
