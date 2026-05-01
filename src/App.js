@@ -62,7 +62,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 .btn-group { display:flex; gap:13px; flex-wrap:wrap; justify-content:center; position:relative; }
 
 /* ─── BUTTONS ─────────────────────────────────────────── */
-.btn { padding:11px 22px; border-radius:var(--r-full); border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1); display:inline-flex; align-items:center; justify-content:center; gap:7px; letter-spacing:-0.1px; }
+.btn { padding:11px 22px; border-radius:var(--r-full); border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1); display:inline-flex; align-items:center; gap:7px; letter-spacing:-0.1px; }
 .btn-primary { background:var(--accent); color:#fff; box-shadow:0 2px 12px rgba(0,113,227,0.30); }
 .btn-primary:hover { background:var(--accent-hover); box-shadow:0 6px 20px rgba(0,113,227,0.40); transform:translateY(-1px); }
 .btn-primary:active { transform:translateY(0); box-shadow:0 2px 8px rgba(0,113,227,0.22); }
@@ -1495,58 +1495,78 @@ function ActivityTab({trip,setTrip,user,db}) {
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db}) {
+
+  // ── Destination votes — persisted in trips.country_info ──
   const voteItem=(section,id)=>{
     const items=trip[section];
     const item=items.find(i=>i.id===id);
     if(!item) return;
-    const hasVote=item.votes.includes(user);
-    const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
-    if(db) db.upsertVote(trip.id, section, id, user, hasVote?0:1);
-    setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
+    const hasVote=(item.votes||[]).includes(user);
+    const newVotes=hasVote?item.votes.filter(v=>v!==user):[...(item.votes||[]),user];
+    const updatedSection=trip[section].map(i=>i.id!==id?i:{...i,votes:newVotes});
+    if(db && !db.isMock) {
+      supabase.from("trips").update({
+        country_info:{ ...(trip.country||{}), destinations: updatedSection }
+      }).eq("id", trip.id);
+    }
+    setTrip(t=>({...t,[section]:updatedSection}));
   };
 
-  const voteVehicle = (id) => {
-    setTrip(t => ({
+  // ── Vehicle votes — persisted in vehicle_rentals.votes ──
+  const voteVehicle=(id)=>{
+    setTrip(t=>({
       ...t,
-      vehicleRentals: (t.vehicleRentals||[]).map(v => {
-        if(v.id !== id) return v;
-        const votes = v.votes || [];
-        const hasVote = votes.includes(user);
-        const newVotes = hasVote ? votes.filter(x => x !== user) : [...votes, user];
+      vehicleRentals:(t.vehicleRentals||[]).map(v=>{
+        if(v.id!==id) return v;
+        const votes=v.votes||[];
+        const hasVote=votes.includes(user);
+        const newVotes=hasVote?votes.filter(x=>x!==user):[...votes,user];
         if(db && !db.isMock) {
-          supabase.from("vehicle_rentals").update({ votes: newVotes }).eq("id", id);
+          supabase.from("vehicle_rentals").update({votes:newVotes}).eq("id",id);
         }
-        return { ...v, votes: newVotes };
+        return{...v,votes:newVotes};
       })
     }));
   };
 
-  const voteAccom = (id) => {
-    setTrip(t => ({
+  // ── Accommodation votes — persisted in accommodations.votes ──
+  const voteAccom=(id)=>{
+    setTrip(t=>({
       ...t,
-      accommodationOptions: t.accommodationOptions.map(a => {
-        if(a.id !== id) return a;
-        const votes = a.votes || [];
-        const hasVote = votes.includes(user);
-        const newVotes = hasVote ? votes.filter(v => v !== user) : [...votes, user];
-        // Persist to Supabase — store votes as a JSON array in the votes column
+      accommodationOptions:t.accommodationOptions.map(a=>{
+        if(a.id!==id) return a;
+        const votes=a.votes||[];
+        const hasVote=votes.includes(user);
+        const newVotes=hasVote?votes.filter(v=>v!==user):[...votes,user];
         if(db && !db.isMock) {
-          supabase.from("accommodations").update({ votes: newVotes }).eq("id", id);
+          supabase.from("accommodations").update({votes:newVotes}).eq("id",id);
         }
-        return { ...a, votes: newVotes };
+        return{...a,votes:newVotes};
       })
     }));
   };
 
+  // ── Activity up/down votes — persisted in activities.upvotes / activities.downvotes ──
   const voteCI=(id,dir)=>{
     setTrip(t=>({
-      ...t,calendarItems:t.calendarItems.map(ci=>{
+      ...t,
+      calendarItems:t.calendarItems.map(ci=>{
         if(ci.id!==id) return ci;
-        const up=ci.metadata?.upvotes||[],down=ci.metadata?.downvotes||[];
+        const up=ci.metadata?.upvotes||[];
+        const down=ci.metadata?.downvotes||[];
         let newUp,newDown;
-        if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user];newDown=down.filter(u=>u!==user);}
-        else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user];newUp=up.filter(u=>u!==user);}
-        if(db) db.updateVotes(id, newUp, newDown);
+        if(dir==="up"){
+          const has=up.includes(user);
+          newUp=has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user];
+          newDown=down.filter(u=>u!==user);
+        } else {
+          const has=down.includes(user);
+          newDown=has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user];
+          newUp=up.filter(u=>u!==user);
+        }
+        if(db && !db.isMock) {
+          supabase.from("activities").update({upvotes:newUp,downvotes:newDown}).eq("id",id);
+        }
         return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
       })
     }));
@@ -2965,15 +2985,82 @@ export default function App() {
       .then(({ data }) => { if(data) setJoinTripInfo(data); });
   }, [joinTripId]);
 
-  // ── Poll for join requests + process invites when user logs in ──
+  // ── Realtime subscriptions — live updates for all members ──
   useEffect(() => {
     if(!authUser) return;
     const email = authUser.email?.toLowerCase();
     processPendingInvites(authUser.id, email);
     loadJoinRequests(authUser.id);
-    // Poll every 30s for new join requests
-    const interval = setInterval(() => loadJoinRequests(authUser.id), 30000);
-    return () => clearInterval(interval);
+
+    // New trip membership (email invite or join request accepted)
+    const memberChannel = supabase
+      .channel(`trip_members:${authUser.id}`)
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"trip_members", filter:`user_id=eq.${authUser.id}` },
+        () => loadTrips(authUser.id))
+      .subscribe();
+
+    // New join requests for trips this user owns
+    const requestChannel = supabase
+      .channel(`join_requests:${authUser.id}`)
+      .on("postgres_changes", { event:"INSERT", schema:"public", table:"notifications" },
+        () => loadJoinRequests(authUser.id))
+      .subscribe();
+
+    // Activity vote updates — upvotes/downvotes changed by any member
+    const activityVoteChannel = supabase
+      .channel(`activity_votes:${authUser.id}`)
+      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"activities" },
+        (payload) => {
+          const u = payload.new;
+          setActive(prev => {
+            if(!prev || prev.id !== u.trip_id) return prev;
+            return { ...prev, calendarItems: prev.calendarItems.map(ci =>
+              ci.id !== u.id ? ci : { ...ci, metadata: { ...ci.metadata,
+                upvotes:   Array.isArray(u.upvotes)   ? u.upvotes   : ci.metadata?.upvotes   || [],
+                downvotes: Array.isArray(u.downvotes) ? u.downvotes : ci.metadata?.downvotes || [],
+              }}
+            )};
+          });
+        })
+      .subscribe();
+
+    // Accommodation vote updates
+    const accomVoteChannel = supabase
+      .channel(`accom_votes:${authUser.id}`)
+      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"accommodations" },
+        (payload) => {
+          const u = payload.new;
+          setActive(prev => {
+            if(!prev) return prev;
+            return { ...prev, accommodationOptions: prev.accommodationOptions.map(a =>
+              a.id !== u.id ? a : { ...a, votes: Array.isArray(u.votes) ? u.votes : a.votes || [] }
+            )};
+          });
+        })
+      .subscribe();
+
+    // Vehicle rental vote updates
+    const vehicleVoteChannel = supabase
+      .channel(`vehicle_votes:${authUser.id}`)
+      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"vehicle_rentals" },
+        (payload) => {
+          const u = payload.new;
+          setActive(prev => {
+            if(!prev) return prev;
+            return { ...prev, vehicleRentals: prev.vehicleRentals.map(v =>
+              v.id !== u.id ? v : { ...v, votes: Array.isArray(u.votes) ? u.votes : v.votes || [] }
+            )};
+          });
+        })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(memberChannel);
+      supabase.removeChannel(requestChannel);
+      supabase.removeChannel(activityVoteChannel);
+      supabase.removeChannel(accomVoteChannel);
+      supabase.removeChannel(vehicleVoteChannel);
+    };
   }, [authUser?.id]);
 
   // ── Forgot Password — sends reset email ──
@@ -3250,8 +3337,13 @@ export default function App() {
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
+        duration_min:   item.durationMin || 60,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
+        location:       item.location || "",
+        description:    item.metadata?.description || "",
+        notes:          item.metadata?.notes || "",
+        // Never overwrite votes on a regular edit — only updateVotes should touch these
       }).eq("id", item.id);
     },
 
