@@ -1500,26 +1500,23 @@ function ActivityTab({trip,setTrip,user,db}) {
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db}) {
 
-  // ── Generic yes/no vote for destinations (upvotes/downvotes on the destination object) ──
+  // ── Destination yes/no vote — persists to trips.country_info.destination_votes ──
   const voteSection=(section,id,dir)=>{
-    setTrip(t=>({
-      ...t,
-      [section]:t[section].map(item=>{
+    setTrip(t=>{
+      const updated=t[section].map(item=>{
         if(item.id!==id) return item;
         const up=item.upvotes||[],down=item.downvotes||[];
         let newUp,newDown;
         if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up,user];newDown=down.filter(u=>u!==user);}
         else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down,user];newUp=up.filter(u=>u!==user);}
-        if(!db?.isMock){
-          supabase.from("votes").upsert({
-            activity_id: id,
-            user_id: user,
-            value: dir==="up" ? 1 : -1,
-          },{ onConflict:"activity_id,user_id" });
-        }
         return {...item,upvotes:newUp,downvotes:newDown};
-      })
-    }));
+      });
+      if(!db?.isMock){
+        const destVotes=updated.map(d=>({id:d.id,name:d.name,upvotes:d.upvotes||[],downvotes:d.downvotes||[]}));
+        supabase.from("trips").update({country_info:{...(t.country||{}),destination_votes:destVotes}}).eq("id",t.id);
+      }
+      return {...t,[section]:updated};
+    });
   };
 
   // ── Vehicle yes/no vote ──
@@ -3157,7 +3154,12 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations:        t.destination ? [{id:1,name:t.destination,upvotes:[],downvotes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,upvotes:[],downvotes:[]}] : []),
+      destinations:        (()=>{
+        const savedVotes = t.country_info?.destination_votes;
+        const baseName = t.destination || t.country_info?.destination;
+        if(savedVotes && Array.isArray(savedVotes) && savedVotes.length>0) return savedVotes.map(d=>({id:d.id,name:d.name,upvotes:Array.isArray(d.upvotes)?d.upvotes:[],downvotes:Array.isArray(d.downvotes)?d.downvotes:[]}));
+        return baseName ? [{id:1,name:baseName,upvotes:[],downvotes:[]}] : [];
+      })(),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
