@@ -3112,7 +3112,11 @@ export default function App() {
       .select("*")
       .eq("trip_id", trip.id);
 
-    // Load votes from votes table for all item types
+    // Load vehicle rentals
+    const { data: vehicles } = await supabase
+      .from("vehicle_rentals")
+      .select("*")
+      .eq("trip_id", trip.id);
     const actIds = (items||[]).map(a=>a.id);
     const acIds  = (accoms||[]).map(a=>a.id);
     const vIds   = (vehicles||[]).map(v=>v.id);
@@ -3155,12 +3159,6 @@ export default function App() {
       .select("personal_budget")
       .eq("id", currentUserId)
       .single() : { data: null };
-
-    // Load vehicle rentals
-    const { data: vehicles } = await supabase
-      .from("vehicle_rentals")
-      .select("*")
-      .eq("trip_id", trip.id);
 
     const vehicleRentals = (vehicles||[]).map(v => ({
       id:              v.id,
