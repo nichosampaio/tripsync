@@ -53,7 +53,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 .landing { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:calc(100vh - 58px); text-align:center; padding:80px 24px 100px; position:relative; overflow:hidden; background:linear-gradient(180deg, #f2f2f7 0%, #ffffff 60%, #f2f2f7 100%); }
 .landing::before { content:""; position:absolute; top:-120px; left:50%; transform:translateX(-50%); width:1100px; height:700px; background:radial-gradient(ellipse 60% 55% at 50% 30%, rgba(0,113,227,0.11) 0%, rgba(52,170,220,0.07) 45%, transparent 75%); pointer-events:none; }
 .landing::after { content:""; position:absolute; bottom:0; left:0; right:0; height:200px; background:linear-gradient(to top, #f2f2f7, transparent); pointer-events:none; }
-.landing-eyebrow { display:inline-flex; align-items:center; gap:7px; padding:6px 14px; border-radius:var(--r-full); background:rgba(0,113,227,0.07); border:1px solid rgba(0,113,227,0.15); color:var(--accent); font-size:12px; font-weight:600; letter-spacing:0.2px; margin-bottom:28px; position:relative; }
+.landing-eyebrow { display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:6px 14px; border-radius:var(--r-full); background:rgba(0,113,227,0.07); border:1px solid rgba(0,113,227,0.15); color:var(--accent); font-size:12px; font-weight:600; letter-spacing:0.2px; margin-bottom:28px; position:relative; }
 .landing-eyebrow-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulse-dot 2s ease infinite; }
 @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
 .landing h1 { font-family:'Sora',sans-serif; font-size:clamp(44px,6.5vw,80px); font-weight:800; line-height:1.03; letter-spacing:-3px; color:var(--text); margin-bottom:22px; position:relative; }
@@ -1503,16 +1503,11 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     const { data: ex, error: selErr } = await supabase.from("votes").select("id,value").eq(col,itemId).eq("user_id",uid).maybeSingle();
     if(selErr) { console.error("writeVote select:", selErr); return; }
     if(ex) {
-      if(ex.value===val) {
-        const { error } = await supabase.from("votes").delete().eq("id",ex.id);
-        if(error) console.error("writeVote delete:", error);
-      } else {
-        const { error } = await supabase.from("votes").update({value:val}).eq("id",ex.id);
-        if(error) console.error("writeVote update:", error);
-      }
+      if(ex.value===val) { const {error}=await supabase.from("votes").delete().eq("id",ex.id); if(error) console.error("writeVote delete:",error); }
+      else { const {error}=await supabase.from("votes").update({value:val}).eq("id",ex.id); if(error) console.error("writeVote update:",error); }
     } else {
-      const { error } = await supabase.from("votes").insert({[col]:itemId, user_id:uid, value:val});
-      if(error) console.error("writeVote insert:", col, itemId, error);
+      const {error}=await supabase.from("votes").insert({[col]:itemId, user_id:uid, value:val});
+      if(error) console.error("writeVote insert:",col,itemId,error);
     }
   };
 
@@ -1523,17 +1518,14 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
       let nu,nd;
       if(dir==="up"){const h=up.includes(uid);nu=h?up.filter(x=>x!==uid):[...up.filter(x=>x!==uid),uid];nd=dn.filter(x=>x!==uid);}
       else{const h=dn.includes(uid);nd=h?dn.filter(x=>x!==uid):[...dn.filter(x=>x!==uid),uid];nu=up.filter(x=>x!==uid);}
-      return {...d, upvotes:nu, downvotes:nd};
+      return {...d,upvotes:nu,downvotes:nd};
     });
-    if(db&&!db.isMock) {
-      // Merge updated destinations into existing country_info, preserving all other fields
-      const existingCountryInfo = trip.country || trip.country_info || {};
-      supabase.from("trips")
-        .update({ country_info: {...existingCountryInfo, destinations: updated} })
-        .eq("id", trip.id)
-        .then(({error}) => { if(error) console.error("voteDest save:", error); });
+    if(db&&!db.isMock){
+      const existing=trip.country||trip.country_info||{};
+      supabase.from("trips").update({country_info:{...existing,destinations:updated}}).eq("id",trip.id)
+        .then(({error})=>{ if(error) console.error("voteDest save:",error); });
     }
-    setTrip(t=>({...t, destinations:updated}));
+    setTrip(t=>({...t,destinations:updated}));
   };
 
   const voteAct = (id,dir) => setTrip(t=>({...t,calendarItems:t.calendarItems.map(ci=>{
@@ -1593,55 +1585,68 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
 
   return (
     <div>
+      {/* Destinations */}
       {(trip.destinations||[]).length>0&&(
         <div className="vote-card">
           <h4>📍 Destinations</h4>
           {trip.destinations.map(d=><VCard key={d.id} icon="📍" name={d.name} up={d.upvotes} dn={d.downvotes} onUp={()=>voteDest(d.id,"up")} onDn={()=>voteDest(d.id,"down")}/>)}
         </div>
       )}
+
+      {/* Vehicle Rentals */}
       {(trip.vehicleRentals||[]).length>0&&(
         <div className="vote-card">
           <h4>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
           {[...(trip.vehicleRentals||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(v=>{
             const days=calcVehicleDays(v),total=calcVehicleTotal(v);
-            return <VCard key={v.id} icon={VTYPE[v.vehicleType]||"🚗"} name={`${v.company}${v.model?` — ${v.model}`:""}`} subtitle={v.pickupLocation?`📍 ${v.pickupLocation}`:null}
-              pills={(()=>{
-                const ppd = v.pricePerDay||0;
-                const isDaily = v.priceType!=="full";
-                const derivedDailyRate = (!isDaily && days>0 && total>0) ? Math.round(total/days) : null;
-                const displayRate = isDaily ? ppd : derivedDailyRate;
-                return <>{displayRate>0&&<span className="pill pill-y">💰 ${displayRate}/day</span>}{days>0&&<span className="pill pill-b">× {days} day{days!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total.toLocaleString()} total</span>}{!isDaily&&<span className="pill pill-p">🧾 Full price</span>}</>;
-              })()}
-              up={v.upvotes} dn={v.downvotes} onUp={()=>voteVehicle(v.id,"up")} onDn={()=>voteVehicle(v.id,"down")}/>;
+            const isDaily=v.priceType!=="full";
+            const ppd=v.pricePerDay||0;
+            const derivedRate=(!isDaily&&days>0&&total>0)?Math.round(total/days):null;
+            const displayRate=isDaily?ppd:derivedRate;
+            return <VCard key={v.id}
+              icon={VTYPE[v.vehicleType]||"🚗"}
+              name={`${v.company}${v.model?` — ${v.model}`:""}`}
+              subtitle={v.pickupLocation?`📍 ${v.pickupLocation}`:null}
+              pills={<>{displayRate>0&&<span className="pill pill-y">💰 ${displayRate}/day</span>}{days>0&&<span className="pill pill-b">× {days} day{days!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total.toLocaleString()} total</span>}{!isDaily&&<span className="pill pill-p">🧾 Full price</span>}</>}
+              up={v.upvotes} dn={v.downvotes}
+              onUp={()=>voteVehicle(v.id,"up")} onDn={()=>voteVehicle(v.id,"down")}/>;
           })}
         </div>
       )}
+
+      {/* Accommodations */}
       {(trip.accommodationOptions||[]).length>0&&(
         <div className="vote-card">
           <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
           {[...(trip.accommodationOptions||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(a=>{
             const nights=calcAccomNights(a);
-            return <VCard key={a.id} icon="🏨" name={a.name} subtitle={a.address?`📍 ${a.address}`:null}
-              pills={(()=>{
-                const ppn = parseFloat(a.pricePerNight)||0;
-                const total = ppn>0&&nights>0 ? ppn*nights : parseFloat(a.price)||0;
-                const derivedRate = (ppn===0 && nights>0 && total>0) ? Math.round(total/nights) : null;
-                const displayRate = ppn>0 ? ppn : derivedRate;
-                return <>{displayRate>0&&<span className="pill pill-y">💰 ${displayRate}/night</span>}{nights>0&&<span className="pill pill-b">× {nights} night{nights!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total.toLocaleString()} total</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>;
-              })()}
-              up={a.upvotes} dn={a.downvotes} onUp={()=>voteAccom(a.id,"up")} onDn={()=>voteAccom(a.id,"down")}/>;
+            const ppn=parseFloat(a.pricePerNight)||0;
+            const isTotal=a.priceType==="total";
+            const totalAmt=isTotal?ppn:(ppn>0&&nights>0?ppn*nights:0);
+            const nightlyRate=isTotal?(nights>0&&ppn>0?Math.round(ppn/nights):null):ppn;
+            return <VCard key={a.id} icon="🏨" name={a.name}
+              subtitle={a.address?`📍 ${a.address}`:null}
+              pills={<>{nightlyRate>0&&<span className="pill pill-y">💰 ${nightlyRate}/night</span>}{nights>0&&<span className="pill pill-b">× {nights} night{nights!==1?"s":""}</span>}{totalAmt>0&&<span className="pill pill-g">= ${totalAmt.toLocaleString()} total</span>}{isTotal&&<span className="pill pill-p">🧾 Total stay</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>}
+              up={a.upvotes} dn={a.downvotes}
+              onUp={()=>voteAccom(a.id,"up")} onDn={()=>voteAccom(a.id,"down")}/>;
           })}
         </div>
       )}
+
+      {/* Activities & Items */}
       <div className="vote-card">
         <h4>🗳️ Activities & Items ({(trip.calendarItems||[]).length})</h4>
         {(trip.calendarItems||[]).length===0
           ?<div style={{textAlign:"center",padding:"20px 0",color:"var(--muted)",fontSize:14}}>No items yet — add some in the <strong>🎯 Items</strong> tab.</div>
           :[...(trip.calendarItems||[])].sort((a,b)=>((b.metadata?.upvotes||[]).length-(b.metadata?.downvotes||[]).length)-((a.metadata?.upvotes||[]).length-(a.metadata?.downvotes||[]).length)).map(ci=>{
             const tm=TYPE_META[ci.type]||TYPE_META.activity;
-            return <VCard key={ci.id} icon={tm.icon} name={ci.title} subtitle={ci.location?`📍 ${ci.location}`:null} desc={ci.metadata?.description||null}
+            return <VCard key={ci.id}
+              icon={tm.icon} name={ci.title}
+              subtitle={ci.location?`📍 ${ci.location}`:null}
+              desc={ci.metadata?.description||null}
               pills={<>{ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}{ci.price>0&&<span className="pill pill-g">💵 ${ci.price} {ci.priceType==="per_person"?"per person":"total"}</span>}<span className={`type-badge type-${ci.type}`}>{tm.icon} {tm.label}</span></>}
-              up={ci.metadata?.upvotes} dn={ci.metadata?.downvotes} onUp={()=>voteAct(ci.id,"up")} onDn={()=>voteAct(ci.id,"down")}/>;
+              up={ci.metadata?.upvotes} dn={ci.metadata?.downvotes}
+              onUp={()=>voteAct(ci.id,"up")} onDn={()=>voteAct(ci.id,"down")}/>;
           })
         }
       </div>
@@ -1657,8 +1662,10 @@ function calcAccomNights(a) {
   return Math.max(n, 0);
 }
 function calcAccomTotal(a) {
-  const nights = calcAccomNights(a);
   const ppn = parseFloat(a.pricePerNight) || 0;
+  if(!ppn) return 0;
+  if(a.priceType === "total") return ppn; // already the full stay total
+  const nights = calcAccomNights(a);
   return ppn * nights;
 }
 function calcAllAccomTotal(accommodationOptions) {
@@ -1857,7 +1864,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total: <span style={{color:"#248a3d"}}>${accomTotal.toLocaleString()}</span></span>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>Total: ${accomTotal.toLocaleString()}</span>
         </div>
         {accomOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
@@ -1876,7 +1883,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12,minWidth:"fit-content"}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -1904,7 +1911,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🚗 Vehicle Rental Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total: <span style={{color:"#248a3d"}}>${vehicleTotal.toLocaleString()}</span></span>
+          <span style={{fontSize:13,fontWeight:700,color:"#f97316"}}>Total: ${vehicleTotal.toLocaleString()}</span>
         </div>
         {vehicleOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No vehicle rentals added yet — go to <strong>🚗 Vehicles</strong> to add options.</p>
@@ -1924,7 +1931,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       {v.pickupLocation && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
                       {(v.pickupDate||v.returnDate)&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📅 {v.pickupDate?fmtDate(v.pickupDate):"?"} → {v.returnDate?fmtDate(v.returnDate):"?"}</div>}
                     </div>
-                    {total > 0 && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12,minWidth:"fit-content"}}>${total.toLocaleString()}</div>}
+                    {total > 0 && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {total > 0 ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -1957,7 +1964,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 }
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
-const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
+const BLANK_A={name:"",address:"",pricePerNight:"",priceType:"per_night",rating:"",checkIn:"",checkOut:"",notes:""};
 const BLANK_V={company:"",model:"",vehicleType:"car",pickupDate:"",returnDate:"",priceType:"daily",price:"",rating:"",pickupLocation:"",dropoffLocation:"",seats:"",transmission:"automatic",notes:"",votes:[]};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
@@ -1968,17 +1975,17 @@ function AccommodationTab({trip,setTrip,db}) {
   const validate=()=>{
     const e={};
     if(!form.name.trim()) e.name="Name required";
-    if(form.pricePerNight&&isNaN(Number(form.pricePerNight))) e.pricePerNight="Numeric";
+    if(form.pricePerNight&&isNaN(Number(form.pricePerNight))) e.pricePerNight="Must be a number";
     if(form.rating&&(isNaN(Number(form.rating))||+form.rating<1||+form.rating>5)) e.rating="1–5";
     setErrs(e); return !Object.keys(e).length;
   };
 
   const openAdd=()=>{setForm(BLANK_A);setEditId(null);setErrs({});setShow(true);};
-  const openEdit=a=>{setForm({name:a.name,address:a.address||"",pricePerNight:String(a.pricePerNight||""),rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
+  const openEdit=a=>{setForm({name:a.name,address:a.address||"",pricePerNight:String(a.pricePerNight||""),priceType:a.priceType||"per_night",rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
 
   const save=async ()=>{
     if(!validate()) return;
-    const formatted={...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",rating:form.rating?+form.rating:""};
+    const formatted={...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",priceType:form.priceType||"per_night",rating:form.rating?+form.rating:""};
     if(editId){
       const updated={...trip.accommodationOptions.find(a=>a.id===editId),...formatted};
       if(db) db.updateAccom(updated);
@@ -2006,8 +2013,22 @@ function AccommodationTab({trip,setTrip,db}) {
           <h5>{editId?"Edit Accommodation":"New Accommodation"}</h5>
           <div className="form-group"><label className="form-label">Name *</label><input {...F("name")} placeholder="e.g. Beachside Airbnb"/>{errs.name&&<div className="err-msg">{errs.name}</div>}</div>
           <div className="form-group"><label className="form-label">Address</label><input {...F("address")} placeholder="e.g. Zona Hotelera, Cancun"/></div>
+          <div className="form-group">
+            <label className="form-label">Pricing Type</label>
+            <div className="type-tab-row">
+              <button type="button" className={`type-tab ${form.priceType==="per_night"?"active":""}`} onClick={()=>setForm(f=>({...f,priceType:"per_night"}))}>💰 Per Night</button>
+              <button type="button" className={`type-tab ${form.priceType==="total"?"active":""}`} onClick={()=>setForm(f=>({...f,priceType:"total"}))}>🧾 Total Stay</button>
+            </div>
+            <p style={{fontSize:12,color:"var(--muted)",marginTop:5}}>
+              {form.priceType==="per_night"?"Enter the nightly rate — total will be calculated from your dates.":"Enter the full cost of the entire stay — nightly rate will be derived from your dates."}
+            </p>
+          </div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Price/Night ($)</label><input {...F("pricePerNight")} placeholder="180"/>{errs.pricePerNight&&<div className="err-msg">{errs.pricePerNight}</div>}</div>
+            <div className="form-group">
+              <label className="form-label">{form.priceType==="per_night"?"Price/Night ($)":"Total Stay Price ($)"}</label>
+              <input {...F("pricePerNight")} placeholder={form.priceType==="per_night"?"180":"750"}/>
+              {errs.pricePerNight&&<div className="err-msg">{errs.pricePerNight}</div>}
+            </div>
             <div className="form-group"><label className="form-label">Rating (1–5)</label><input {...F("rating")} placeholder="4.5"/>{errs.rating&&<div className="err-msg">{errs.rating}</div>}</div>
           </div>
           <div className="form-row">
@@ -2035,7 +2056,7 @@ function AccommodationTab({trip,setTrip,db}) {
               </div>
               <div className="card-meta">
                 {a.address&&<div className="card-meta-row">📍 <strong>{a.address}</strong></div>}
-                {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong></div>}
+                {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}{a.priceType==="total"?" total stay":" /night"}</strong></div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
               </div>
@@ -3029,16 +3050,7 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations: (()=>{
-        // First priority: already-loaded destinations with votes in memory
-        if(existing?.destinations?.length > 0) return existing.destinations;
-        // Second priority: destinations saved in country_info with votes
-        if(Array.isArray(t.country_info?.destinations) && t.country_info.destinations.length > 0)
-          return t.country_info.destinations.map(d=>({...d, upvotes:d.upvotes||[], downvotes:d.downvotes||[], votes:d.votes||[]}));
-        // Fallback: build from plain destination text
-        if(t.destination) return [{id:1, name:t.destination, votes:[], upvotes:[], downvotes:[]}];
-        return [{id:1, name:"TBD", votes:[], upvotes:[], downvotes:[]}];
-      })(),
+      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
@@ -3086,52 +3098,99 @@ export default function App() {
   // ── Load full trip details when a trip is opened ──
   const loadTripDetails = async (trip) => {
     setTripLoading(true);
-    const [{ data: items },{ data: accoms },{ data: vehicles }] = await Promise.all([
+    const [{data:items},{data:accoms},{data:vehicles}] = await Promise.all([
       supabase.from("activities").select("*").eq("trip_id",trip.id).order("created_at",{ascending:true}),
       supabase.from("accommodations").select("*").eq("trip_id",trip.id),
       supabase.from("vehicle_rentals").select("*").eq("trip_id",trip.id),
     ]);
-    const actIds=(items||[]).map(a=>a.id), acIds=(accoms||[]).map(a=>a.id), vIds=(vehicles||[]).map(v=>v.id);
+
+    // Load votes
+    const actIds=(items||[]).map(a=>a.id),acIds=(accoms||[]).map(a=>a.id),vIds=(vehicles||[]).map(v=>v.id);
     const filters=[...actIds.map(id=>`activity_id.eq.${id}`),...acIds.map(id=>`accommodation_id.eq.${id}`),...vIds.map(id=>`vehicle_id.eq.${id}`)];
     let allVotes=[];
-    if(filters.length>0){ const {data:vd}=await supabase.from("votes").select("*").or(filters.join(",")); allVotes=vd||[]; }
+    if(filters.length>0){const{data:vd}=await supabase.from("votes").select("*").or(filters.join(","));allVotes=vd||[];}
     const aV={},acV={},vhV={};
     for(const v of allVotes){
       if(v.activity_id){if(!aV[v.activity_id])aV[v.activity_id]={up:[],dn:[]};v.value===1?aV[v.activity_id].up.push(v.user_id):aV[v.activity_id].dn.push(v.user_id);}
       if(v.accommodation_id){if(!acV[v.accommodation_id])acV[v.accommodation_id]={up:[],dn:[]};v.value===1?acV[v.accommodation_id].up.push(v.user_id):acV[v.accommodation_id].dn.push(v.user_id);}
       if(v.vehicle_id){if(!vhV[v.vehicle_id])vhV[v.vehicle_id]={up:[],dn:[]};v.value===1?vhV[v.vehicle_id].up.push(v.user_id):vhV[v.vehicle_id].dn.push(v.user_id);}
     }
-    const calendarItems=(items||[]).map(a=>({
-      id:a.id,type:fromDbCategory(a.category),title:a.title,
-      day:a.scheduled_date||null,startTime:a.scheduled_time||null,
-      startMin:a.scheduled_time?timeStrToMin(a.scheduled_time):null,
-      durationMin:a.duration_min||60,location:a.location||"",
-      price:parseFloat(a.cost)||0,priceType:a.price_type||"flat",
-      metadata:{description:a.description||"",notes:a.notes||"",
-        upvotes:aV[a.id]?.up||[],downvotes:aV[a.id]?.dn||[],
-        createdBy:a.created_by||"",checkIn:null,checkOut:null,transportationTime:""},
+
+        const calendarItems = (items||[]).map(a => ({
+      id:          a.id,
+      type:        fromDbCategory(a.category),
+      title:       a.title,
+      day:         a.scheduled_date || null,
+      startTime:   a.scheduled_time || null,
+      startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
+      durationMin: 60,
+      location:    "",
+      price:       parseFloat(a.cost) || 0,
+      priceType:   a.price_type || "flat",
+      metadata: {
+        description: "",
+        notes:       "",
+        upvotes:     [],
+        downvotes:   [],
+        createdBy:   a.created_by || "",
+        checkIn:     null,
+        checkOut:    null,
+        transportationTime: "",
+      },
     }));
-    const accommodationOptions=(accoms||[]).map(a=>({
-      id:a.id,name:a.name,address:a.address||"",
+
+    const accommodationOptions = (accoms||[]).map(a => ({
+      id:a.id, name:a.name, address:a.address||"",
       pricePerNight:parseFloat(a.cost_per_night)||0,
+      priceType:a.price_type||"per_night",
       rating:a.rating?String(a.rating):"",
-      checkIn:a.check_in||"",checkOut:a.check_out||"",notes:a.notes||"",
-      votes:[],upvotes:acV[a.id]?.up||[],downvotes:acV[a.id]?.dn||[],
+      checkIn:a.check_in||"", checkOut:a.check_out||"", notes:a.notes||"",
+      votes:[], upvotes:acV[a.id]?.up||[], downvotes:acV[a.id]?.dn||[],
     }));
-    const vehicleRentals=(vehicles||[]).map(v=>({
-      id:v.id,company:v.company,model:v.model||"",vehicleType:v.vehicle_type||"car",
-      pickupDate:v.pickup_date||"",returnDate:v.return_date||"",
-      pricePerDay:parseFloat(v.price_per_day)||0,price:parseFloat(v.price_per_day)||0,
-      priceType:v.price_type||"daily",rating:v.rating||"",
-      pickupLocation:v.pickup_location||"",dropoffLocation:v.dropoff_location||"",
-      seats:v.seats||"",transmission:v.transmission||"automatic",notes:v.notes||"",
-      votes:[],upvotes:vhV[v.id]?.up||[],downvotes:vhV[v.id]?.dn||[],
+
+    // Load personal budget — guard against authUser being null during restore
+    const currentUserId = authUser?.id || authUserIdRef.current;
+    const { data: profile } = currentUserId ? await supabase
+      .from("profiles")
+      .select("personal_budget")
+      .eq("id", currentUserId)
+      .single() : { data: null };
+
+    // Load vehicle rentals
+    const { data: vehicles } = await supabase
+      .from("vehicle_rentals")
+      .select("*")
+      .eq("trip_id", trip.id);
+
+    const vehicleRentals = (vehicles||[]).map(v => ({
+      id:              v.id,
+      company:         v.company,
+      model:           v.model || "",
+      vehicleType:     v.vehicle_type || "car",
+      pickupDate:      v.pickup_date || "",
+      returnDate:      v.return_date || "",
+      pricePerDay:     parseFloat(v.price_per_day) || 0,
+      price:           parseFloat(v.price_per_day) || 0,
+      priceType:       v.price_type || "daily",
+      rating:          v.rating || "",
+      pickupLocation:  v.pickup_location || "",
+      dropoffLocation: v.dropoff_location || "",
+      seats:           v.seats || "",
+      transmission:    v.transmission || "automatic",
+      notes:           v.notes || "",
+      votes:[], upvotes:vhV[v.id]?.up||[], downvotes:vhV[v.id]?.dn||[],
     }));
-    const currentUserId=authUser?.id||authUserIdRef.current;
-    const {data:profile}=currentUserId?await supabase.from("profiles").select("personal_budget").eq("id",currentUserId).single():{data:null};
-    const fullTrip={...trip,calendarItems,accommodationOptions,vehicleRentals,personalBudgets:{[user]:profile?.personal_budget??null}};
+
+    const fullTrip = {
+      ...trip,
+      calendarItems,
+      accommodationOptions,
+      vehicleRentals,
+      personalBudgets: { [user]: profile?.personal_budget ?? null },
+    };
+
     setActive(fullTrip);
-    setTrips(ts=>ts.map(t=>t.id===trip.id?fullTrip:t));
+    setTrips(ts => ts.map(t => t.id === trip.id ? fullTrip : t));
     setTripLoading(false);
   };
 
@@ -3243,6 +3302,7 @@ export default function App() {
         name:           accom.name,
         address:        accom.address || "",
         cost_per_night: accom.pricePerNight || 0,
+        price_type:     accom.priceType || "per_night",
         check_in:       accom.checkIn || new Date().toISOString().slice(0,10),
         check_out:      accom.checkOut || new Date().toISOString().slice(0,10),
         created_by:     null,
@@ -3257,6 +3317,7 @@ export default function App() {
         name:           accom.name,
         address:        accom.address || "",
         cost_per_night: accom.pricePerNight || 0,
+        price_type:     accom.priceType || "per_night",
         check_in:       accom.checkIn || null,
         check_out:      accom.checkOut || null,
       }).eq("id", accom.id);
@@ -3570,8 +3631,8 @@ export default function App() {
           <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
-                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
-                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
               </div>
               <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
               {authMode==="signup"&&<div className="form-group"><label className="form-label">Your Name</label><input className="form-input" placeholder="e.g. Maria" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/></div>}
@@ -3746,7 +3807,7 @@ export default function App() {
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
                 <button
                   className="btn"
-                  style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",
+                  style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,
                     background:authMode==="login"?"var(--accent)":"transparent",
                     color:authMode==="login"?"#fff":"var(--muted)"}}
                   onClick={()=>{setAuthMode("login");setAuthError("");}}>
@@ -3754,7 +3815,7 @@ export default function App() {
                 </button>
                 <button
                   className="btn"
-                  style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",
+                  style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,
                     background:authMode==="signup"?"var(--accent)":"transparent",
                     color:authMode==="signup"?"#fff":"var(--muted)"}}
                   onClick={()=>{setAuthMode("signup");setAuthError("");}}>
