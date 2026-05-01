@@ -62,7 +62,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 .btn-group { display:flex; gap:13px; flex-wrap:wrap; justify-content:center; position:relative; }
 
 /* ─── BUTTONS ─────────────────────────────────────────── */
-.btn { padding:11px 22px; border-radius:var(--r-full); border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1); display:inline-flex; align-items:center; gap:7px; letter-spacing:-0.1px; }
+.btn { padding:11px 22px; border-radius:var(--r-full); border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600; transition:all 0.2s cubic-bezier(0.25,0.1,0.25,1); display:inline-flex; align-items:center; justify-content:center; gap:7px; letter-spacing:-0.1px; }
 .btn-primary { background:var(--accent); color:#fff; box-shadow:0 2px 12px rgba(0,113,227,0.30); }
 .btn-primary:hover { background:var(--accent-hover); box-shadow:0 6px 20px rgba(0,113,227,0.40); transform:translateY(-1px); }
 .btn-primary:active { transform:translateY(0); box-shadow:0 2px 8px rgba(0,113,227,0.22); }
@@ -3611,8 +3611,8 @@ export default function App() {
           <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
-                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
-                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
               </div>
               <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
               {authMode==="signup"&&<div className="form-group"><label className="form-label">Your Name</label><input className="form-input" placeholder="e.g. Maria" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/></div>}
