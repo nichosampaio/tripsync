@@ -1495,77 +1495,76 @@ function ActivityTab({trip,setTrip,user,db}) {
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db}) {
-
-  // ── Destination votes — persisted in trips.country_info ──
   const voteItem=(section,id)=>{
     const items=trip[section];
     const item=items.find(i=>i.id===id);
     if(!item) return;
-    const hasVote=(item.votes||[]).includes(user);
-    const newVotes=hasVote?item.votes.filter(v=>v!==user):[...(item.votes||[]),user];
-    const updatedSection=trip[section].map(i=>i.id!==id?i:{...i,votes:newVotes});
-    if(db && !db.isMock) {
-      supabase.from("trips").update({
-        country_info:{ ...(trip.country||{}), destinations: updatedSection }
-      }).eq("id", trip.id);
-    }
-    setTrip(t=>({...t,[section]:updatedSection}));
+    const hasVote=item.votes.includes(user);
+    const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
+    if(db) db.upsertVote(trip.id, section, id, user, hasVote?0:1);
+    setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
   };
 
-  // ── Vehicle votes — persisted in vehicle_rentals.votes ──
-  const voteVehicle=(id)=>{
-    setTrip(t=>({
+  const voteVehicle = (id) => {
+    setTrip(t => ({
       ...t,
-      vehicleRentals:(t.vehicleRentals||[]).map(v=>{
-        if(v.id!==id) return v;
-        const votes=v.votes||[];
-        const hasVote=votes.includes(user);
-        const newVotes=hasVote?votes.filter(x=>x!==user):[...votes,user];
+      vehicleRentals: (t.vehicleRentals||[]).map(v => {
+        if(v.id !== id) return v;
+        const votes = v.votes || [];
+        const hasVote = votes.includes(user);
+        const newVotes = hasVote ? votes.filter(x => x !== user) : [...votes, user];
         if(db && !db.isMock) {
-          supabase.from("vehicle_rentals").update({votes:newVotes}).eq("id",id);
+          supabase.from("vehicle_rentals").update({ votes: newVotes }).eq("id", id);
         }
-        return{...v,votes:newVotes};
+        return { ...v, votes: newVotes };
       })
     }));
   };
 
-  // ── Accommodation votes — persisted in accommodations.votes ──
-  const voteAccom=(id)=>{
-    setTrip(t=>({
+  const voteAccom = (id) => {
+    setTrip(t => ({
       ...t,
-      accommodationOptions:t.accommodationOptions.map(a=>{
-        if(a.id!==id) return a;
-        const votes=a.votes||[];
-        const hasVote=votes.includes(user);
-        const newVotes=hasVote?votes.filter(v=>v!==user):[...votes,user];
+      accommodationOptions: t.accommodationOptions.map(a => {
+        if(a.id !== id) return a;
+        const votes = a.votes || [];
+        const hasVote = votes.includes(user);
+        const newVotes = hasVote ? votes.filter(v => v !== user) : [...votes, user];
+        // Persist to Supabase — store votes as a JSON array in the votes column
         if(db && !db.isMock) {
-          supabase.from("accommodations").update({votes:newVotes}).eq("id",id);
+          supabase.from("accommodations").update({ votes: newVotes }).eq("id", id);
         }
-        return{...a,votes:newVotes};
+        return { ...a, votes: newVotes };
       })
     }));
   };
 
-  // ── Activity up/down votes — persisted in activities.upvotes / activities.downvotes ──
   const voteCI=(id,dir)=>{
+    const userId = authUser?.id || user;
     setTrip(t=>({
-      ...t,
-      calendarItems:t.calendarItems.map(ci=>{
+      ...t,calendarItems:t.calendarItems.map(ci=>{
         if(ci.id!==id) return ci;
-        const up=ci.metadata?.upvotes||[];
-        const down=ci.metadata?.downvotes||[];
-        let newUp,newDown;
+        const up=ci.metadata?.upvotes||[],down=ci.metadata?.downvotes||[];
+        let newUp,newDown,voteValue;
         if(dir==="up"){
-          const has=up.includes(user);
-          newUp=has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user];
-          newDown=down.filter(u=>u!==user);
+          const has=up.includes(userId);
+          newUp=has?up.filter(u=>u!==userId):[...up.filter(u=>u!==userId),userId];
+          newDown=down.filter(u=>u!==userId);
+          voteValue=has?0:1;
         } else {
-          const has=down.includes(user);
-          newDown=has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user];
-          newUp=up.filter(u=>u!==user);
+          const has=down.includes(userId);
+          newDown=has?down.filter(u=>u!==userId):[...down.filter(u=>u!==userId),userId];
+          newUp=up.filter(u=>u!==userId);
+          voteValue=has?0:-1;
         }
         if(db && !db.isMock) {
-          supabase.from("activities").update({upvotes:newUp,downvotes:newDown}).eq("id",id);
+          if(voteValue===0) {
+            supabase.from("votes").delete().eq("activity_id",id).eq("user_id",userId);
+          } else {
+            supabase.from("votes").upsert(
+              { activity_id:id, user_id:userId, value:voteValue },
+              { onConflict:"activity_id,user_id" }
+            );
+          }
         }
         return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
       })
@@ -2985,71 +2984,82 @@ export default function App() {
       .then(({ data }) => { if(data) setJoinTripInfo(data); });
   }, [joinTripId]);
 
-  // ── Realtime subscriptions — live updates for all members ──
+  // ── Poll for join requests + process invites when user logs in ──
   useEffect(() => {
     if(!authUser) return;
     const email = authUser.email?.toLowerCase();
     processPendingInvites(authUser.id, email);
     loadJoinRequests(authUser.id);
 
-    // New trip membership (email invite or join request accepted)
+    // ── New trip membership ──
     const memberChannel = supabase
       .channel(`trip_members:${authUser.id}`)
       .on("postgres_changes", { event:"INSERT", schema:"public", table:"trip_members", filter:`user_id=eq.${authUser.id}` },
         () => loadTrips(authUser.id))
       .subscribe();
 
-    // New join requests for trips this user owns
+    // ── New join requests ──
     const requestChannel = supabase
       .channel(`join_requests:${authUser.id}`)
       .on("postgres_changes", { event:"INSERT", schema:"public", table:"notifications" },
         () => loadJoinRequests(authUser.id))
       .subscribe();
 
-    // Activity vote updates — upvotes/downvotes changed by any member
-    const activityVoteChannel = supabase
-      .channel(`activity_votes:${authUser.id}`)
-      .on("postgres_changes", { event:"UPDATE", schema:"public", table:"activities" },
-        (payload) => {
-          const u = payload.new;
+    // ── Activity votes (votes table) ──
+    const votesChannel = supabase
+      .channel(`votes:${authUser.id}`)
+      .on("postgres_changes", { event:"*", schema:"public", table:"votes" },
+        async (payload) => {
+          const activityId = payload.new?.activity_id || payload.old?.activity_id;
+          if(!activityId) return;
           setActive(prev => {
-            if(!prev || prev.id !== u.trip_id) return prev;
-            return { ...prev, calendarItems: prev.calendarItems.map(ci =>
-              ci.id !== u.id ? ci : { ...ci, metadata: { ...ci.metadata,
-                upvotes:   Array.isArray(u.upvotes)   ? u.upvotes   : ci.metadata?.upvotes   || [],
-                downvotes: Array.isArray(u.downvotes) ? u.downvotes : ci.metadata?.downvotes || [],
-              }}
-            )};
+            if(!prev) return prev;
+            const inTrip = prev.calendarItems.some(ci => ci.id === activityId);
+            if(!inTrip) return prev;
+            const ids = prev.calendarItems.map(ci => ci.id);
+            supabase.from("votes").select("*").in("activity_id", ids).then(({ data: vd }) => {
+              const byId = {};
+              for(const v of (vd||[])) {
+                if(!byId[v.activity_id]) byId[v.activity_id] = { upvotes:[], downvotes:[] };
+                if(v.value === 1)  byId[v.activity_id].upvotes.push(v.user_id);
+                if(v.value === -1) byId[v.activity_id].downvotes.push(v.user_id);
+              }
+              setActive(p => p ? { ...p, calendarItems: p.calendarItems.map(ci => ({
+                ...ci, metadata: { ...ci.metadata,
+                  upvotes:   byId[ci.id]?.upvotes   || [],
+                  downvotes: byId[ci.id]?.downvotes || [],
+                }
+              }))} : p);
+            });
+            return prev;
           });
         })
       .subscribe();
 
-    // Accommodation vote updates
+    // ── Accommodation votes ──
     const accomVoteChannel = supabase
       .channel(`accom_votes:${authUser.id}`)
       .on("postgres_changes", { event:"UPDATE", schema:"public", table:"accommodations" },
         (payload) => {
           const u = payload.new;
-          setActive(prev => {
-            if(!prev) return prev;
-            return { ...prev, accommodationOptions: prev.accommodationOptions.map(a =>
-              a.id !== u.id ? a : { ...a, votes: Array.isArray(u.votes) ? u.votes : a.votes || [] }
-            )};
+          setActive(prev => !prev ? prev : { ...prev,
+            accommodationOptions: prev.accommodationOptions.map(a =>
+              a.id !== u.id ? a : { ...a, votes: Array.isArray(u.votes) ? u.votes : a.votes||[] }
+            )
           });
         })
       .subscribe();
 
-    // Vehicle rental vote updates
+    // ── Vehicle votes ──
     const vehicleVoteChannel = supabase
       .channel(`vehicle_votes:${authUser.id}`)
       .on("postgres_changes", { event:"UPDATE", schema:"public", table:"vehicle_rentals" },
         (payload) => {
           const u = payload.new;
-          setActive(prev => {
-            if(!prev) return prev;
-            return { ...prev, vehicleRentals: prev.vehicleRentals.map(v =>
-              v.id !== u.id ? v : { ...v, votes: Array.isArray(u.votes) ? u.votes : v.votes || [] }
-            )};
+          setActive(prev => !prev ? prev : { ...prev,
+            vehicleRentals: prev.vehicleRentals.map(v =>
+              v.id !== u.id ? v : { ...v, votes: Array.isArray(u.votes) ? u.votes : v.votes||[] }
+            )
           });
         })
       .subscribe();
@@ -3057,7 +3067,7 @@ export default function App() {
     return () => {
       supabase.removeChannel(memberChannel);
       supabase.removeChannel(requestChannel);
-      supabase.removeChannel(activityVoteChannel);
+      supabase.removeChannel(votesChannel);
       supabase.removeChannel(accomVoteChannel);
       supabase.removeChannel(vehicleVoteChannel);
     };
@@ -3177,6 +3187,21 @@ export default function App() {
       .eq("trip_id", trip.id)
       .order("created_at", { ascending: true });
 
+    // Load votes from the votes table for all activities in this trip
+    const activityIds = (items||[]).map(a => a.id);
+    const { data: votesData } = activityIds.length > 0
+      ? await supabase.from("votes").select("*").in("activity_id", activityIds)
+      : { data: [] };
+
+    // Build upvotes/downvotes arrays per activity from the votes table
+    // value = 1 means upvote, value = -1 means downvote
+    const votesByActivity = {};
+    for(const v of (votesData||[])) {
+      if(!votesByActivity[v.activity_id]) votesByActivity[v.activity_id] = { upvotes: [], downvotes: [] };
+      if(v.value === 1)  votesByActivity[v.activity_id].upvotes.push(v.user_id);
+      if(v.value === -1) votesByActivity[v.activity_id].downvotes.push(v.user_id);
+    }
+
     // Load accommodations
     const { data: accoms } = await supabase
       .from("accommodations")
@@ -3190,18 +3215,19 @@ export default function App() {
       day:         a.scheduled_date || null,
       startTime:   a.scheduled_time || null,
       startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: 60,
-      location:    "",
+      durationMin: a.duration_min || 60,
+      location:    a.location || "",
       price:       parseFloat(a.cost) || 0,
       priceType:   a.price_type || "flat",
       metadata: {
-        description: "",
-        notes:       "",
-        upvotes:     [],
-        downvotes:   [],
-        createdBy:   a.created_by || "",
-        checkIn:     null,
-        checkOut:    null,
+        description: a.description || "",
+        notes:       a.notes       || "",
+        // Use votes table as source of truth, fall back to jsonb columns
+        upvotes:   votesByActivity[a.id]?.upvotes   || (Array.isArray(a.upvotes)   ? a.upvotes   : []),
+        downvotes: votesByActivity[a.id]?.downvotes || (Array.isArray(a.downvotes) ? a.downvotes : []),
+        createdBy: a.created_by || "",
+        checkIn:   null,
+        checkOut:  null,
         transportationTime: "",
       },
     }));
@@ -3211,11 +3237,11 @@ export default function App() {
       name:          a.name,
       address:       a.address || "",
       pricePerNight: parseFloat(a.cost_per_night) || 0,
-      rating:        "",
-      checkIn:       a.check_in || "",
+      rating:        a.rating ? String(a.rating) : "",
+      checkIn:       a.check_in  || "",
       checkOut:      a.check_out || "",
-      notes:         "",
-      votes:         [],
+      notes:         a.notes || "",
+      votes:         Array.isArray(a.votes) ? a.votes : [],
     }));
 
     // Load personal budget — guard against authUser being null during restore
@@ -3337,13 +3363,8 @@ export default function App() {
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
-        duration_min:   item.durationMin || 60,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
-        location:       item.location || "",
-        description:    item.metadata?.description || "",
-        notes:          item.metadata?.notes || "",
-        // Never overwrite votes on a regular edit — only updateVotes should touch these
       }).eq("id", item.id);
     },
 
