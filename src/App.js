@@ -1500,9 +1500,20 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
   const writeVote = async (dir, col, itemId) => {
     if(!db || db.isMock) return;
     const val = dir==="up" ? 1 : -1;
-    const { data: ex } = await supabase.from("votes").select("id,value").eq(col,itemId).eq("user_id",uid).maybeSingle();
-    if(ex) { if(ex.value===val) await supabase.from("votes").delete().eq("id",ex.id); else await supabase.from("votes").update({value:val}).eq("id",ex.id); }
-    else await supabase.from("votes").insert({[col]:itemId, user_id:uid, value:val});
+    const { data: ex, error: selErr } = await supabase.from("votes").select("id,value").eq(col,itemId).eq("user_id",uid).maybeSingle();
+    if(selErr) { console.error("writeVote select:", selErr); return; }
+    if(ex) {
+      if(ex.value===val) {
+        const { error } = await supabase.from("votes").delete().eq("id",ex.id);
+        if(error) console.error("writeVote delete:", error);
+      } else {
+        const { error } = await supabase.from("votes").update({value:val}).eq("id",ex.id);
+        if(error) console.error("writeVote update:", error);
+      }
+    } else {
+      const { error } = await supabase.from("votes").insert({[col]:itemId, user_id:uid, value:val});
+      if(error) console.error("writeVote insert:", col, itemId, error);
+    }
   };
 
   const voteDest = (id, dir) => {
@@ -3144,6 +3155,7 @@ export default function App() {
   }[cat] || "activity");
 
   const db = {
+    isMock,
     // ── Activities (calendar items) ──
     addItem: async (tripId, item) => {
       if(isMock) return item;
