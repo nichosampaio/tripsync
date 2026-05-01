@@ -1927,7 +1927,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                         👥 ${ci.price} flat
                       </span>
                     )}
-                    <span style={{fontSize:13,fontWeight:700,color:"var(--green)",minWidth:60,textAlign:"right"}}>
+                    <span style={{fontSize:13,fontWeight:700,color:"#248a3d",minWidth:60,textAlign:"right"}}>
                       ${Math.ceil(myPart).toLocaleString()}<span style={{fontSize:11,fontWeight:400,color:"var(--muted)"}}> /me</span>
                     </span>
                   </div>
@@ -1978,7 +1978,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                         <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
                         <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
                       </>)}
-                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"#248a3d"}}>${total.toLocaleString()}</span>
                       {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
                   ) : (
@@ -2030,7 +2030,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                         <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{days} day{days!==1?"s":""}</span>
                         <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
                       </>)}
-                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"#248a3d"}}>${total.toLocaleString()}</span>
                       {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
                   ) : (
