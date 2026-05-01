@@ -26,8 +26,8 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
   --yellow-soft: rgba(196,124,10,0.10);
   --text: #1d1d1f;
   --text-secondary: #3a3a3c;
-  --muted: #3d3d3f;
-  --muted-light: #525254;
+  --muted: #6e6e73;
+  --muted-light: #8e8e93;
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.07), 0 1px 2px rgba(0,0,0,0.04);
   --shadow-md: 0 6px 20px rgba(0,0,0,0.09), 0 2px 6px rgba(0,0,0,0.05);
@@ -129,7 +129,7 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
 
 /* ─── SECTION TABS ────────────────────────────────────── */
 .section-tabs { display:flex; gap:0; margin:28px 0 24px; border-bottom:1px solid var(--border); flex-wrap:wrap; overflow-x:auto; }
-.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:#1d1d1f; border-bottom:2.5px solid transparent; margin-bottom:-1px; transition:all 0.16s; white-space:nowrap; }
+.section-tab { padding:9px 16px; border-radius:0; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:500; background:transparent; color:var(--muted); border-bottom:2.5px solid transparent; margin-bottom:-1px; transition:all 0.16s; white-space:nowrap; }
 .section-tab:hover { color:var(--text-secondary); }
 .section-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
 .section-content { animation:fadeIn 0.2s ease; }
@@ -1495,21 +1495,14 @@ function ActivityTab({trip,setTrip,user,db}) {
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db}) {
-  // Destination votes — persisted in trips.country_info as destinations array
   const voteItem=(section,id)=>{
     const items=trip[section];
     const item=items.find(i=>i.id===id);
     if(!item) return;
     const hasVote=item.votes.includes(user);
     const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
-    const updatedSection = trip[section].map(i=>i.id!==id?i:{...i,votes:newVotes});
-    // Persist destinations votes inside country_info JSONB (avoids needing a new column)
-    if(db && !db.isMock && section==="destinations") {
-      supabase.from("trips").update({
-        country_info: { ...(trip.country || {}), destinations: updatedSection }
-      }).eq("id", trip.id);
-    }
-    setTrip(t=>({...t,[section]:updatedSection}));
+    if(db) db.upsertVote(trip.id, section, id, user, hasVote?0:1);
+    setTrip(t=>({...t,[section]:t[section].map(i=>i.id!==id?i:{...i,votes:newVotes})}));
   };
 
   const voteVehicle = (id) => {
@@ -1536,6 +1529,7 @@ function VotingTab({trip,setTrip,user,db}) {
         const votes = a.votes || [];
         const hasVote = votes.includes(user);
         const newVotes = hasVote ? votes.filter(v => v !== user) : [...votes, user];
+        // Persist to Supabase — store votes as a JSON array in the votes column
         if(db && !db.isMock) {
           supabase.from("accommodations").update({ votes: newVotes }).eq("id", id);
         }
@@ -1552,7 +1546,7 @@ function VotingTab({trip,setTrip,user,db}) {
         let newUp,newDown;
         if(dir==="up"){const has=up.includes(user);newUp=has?up.filter(u=>u!==user):[...up.filter(u=>u!==user),user];newDown=down.filter(u=>u!==user);}
         else{const has=down.includes(user);newDown=has?down.filter(u=>u!==user):[...down.filter(u=>u!==user),user];newUp=up.filter(u=>u!==user);}
-        if(db && !db.isMock) db.updateVotes(id, newUp, newDown);
+        if(db) db.updateVotes(id, newUp, newDown);
         return{...ci,metadata:{...ci.metadata,upvotes:newUp,downvotes:newDown}};
       })
     }));
@@ -1829,17 +1823,10 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
             <span className="cat-label">{cat.label}</span>
             <div className="cat-bar-wrap">
               <div className="cat-bar-bg">
-                <div className="cat-bar-fill" style={{width:`${grandTotal > 0 ? Math.round((cat.total/grandTotal)*100) : 0}%`,background:cat.color}}/>
+                <div className="cat-bar-fill" style={{width:`${Math.round((cat.total/maxCat)*100)}%`,background:cat.color}}/>
               </div>
             </div>
-            <span className="cat-amount" style={{color:cat.color}}>
-              ${cat.total.toLocaleString()}
-              {grandTotal > 0 && cat.total > 0 && (
-                <span style={{fontSize:10,fontWeight:500,color:"var(--muted)",marginLeft:4}}>
-                  {Math.round((cat.total/grandTotal)*100)}%
-                </span>
-              )}
-            </span>
+            <span className="cat-amount" style={{color:cat.color}}>${cat.total.toLocaleString()}</span>
           </div>
         ))}
         <div className="budget-total-row">
@@ -1895,7 +1882,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"var(--green)"}}>Total: ${accomTotal.toLocaleString()}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>Total: ${accomTotal.toLocaleString()}</span>
         </div>
         {accomOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
@@ -1914,7 +1901,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -1942,7 +1929,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🚗 Vehicle Rental Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"var(--green)"}}>Total: ${vehicleTotal.toLocaleString()}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#f97316"}}>Total: ${vehicleTotal.toLocaleString()}</span>
         </div>
         {vehicleOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No vehicle rentals added yet — go to <strong>🚗 Vehicles</strong> to add options.</p>
@@ -1962,7 +1949,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       {v.pickupLocation && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
                       {(v.pickupDate||v.returnDate)&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📅 {v.pickupDate?fmtDate(v.pickupDate):"?"} → {v.returnDate?fmtDate(v.returnDate):"?"}</div>}
                     </div>
-                    {total > 0 && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {total > 0 && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {total > 0 ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -2555,7 +2542,11 @@ function SummaryTab({trip}) {
   const items=trip.calendarItems||[];
   const ciTotal=items.reduce((s,c)=>s+(c.price||0),0);
   const accomTotal=calcAllAccomTotal(trip.accommodationOptions||[]);
-  const grandTotal=ciTotal+accomTotal;
+  const vehicleTotal=(trip.vehicleRentals||[]).reduce((s,v)=>{
+    const days=nightsBetween(v.pickupDate,v.returnDate)||1;
+    return s+(v.priceType==="daily"?(v.pricePerDay||0)*days:(v.price||0));
+  },0);
+  const grandTotal=ciTotal+accomTotal+vehicleTotal;
   return (
     <div className="summary-card">
       <div className="flex-between" style={{marginBottom:6}}>
@@ -2571,7 +2562,85 @@ function SummaryTab({trip}) {
         <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
         <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
       </div>
-      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag tag-b">{a.name}{a.pricePerNight?` · $${a.pricePerNight}/night`:""}</span>)}</div></div>}
+
+      {/* ── Accommodations ── */}
+      {trip.accommodationOptions?.length>0&&(
+        <div className="mt-6">
+          <div className="flex-between" style={{marginBottom:10}}>
+            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label>
+            <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>Total: ${accomTotal.toLocaleString()}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {trip.accommodationOptions.map(a=>{
+              const n=calcAccomNights(a);
+              const ppn=parseFloat(a.pricePerNight)||0;
+              const tot=calcAccomTotal(a);
+              const hasData=a.checkIn&&a.checkOut&&ppn>0;
+              return (
+                <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:hasData?8:0}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
+                      {a.address&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
+                    </div>
+                    {hasData&&<div style={{fontSize:15,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${tot.toLocaleString()}</div>}
+                  </div>
+                  {hasData&&(
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                      <span style={{fontSize:12,background:"rgba(0,113,227,0.08)",color:"var(--accent)",border:"1px solid rgba(0,113,227,0.2)",borderRadius:20,padding:"3px 10px"}}>{n} night{n!==1?"s":""}</span>
+                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${tot.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {(a.checkIn||a.checkOut)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── Vehicle Rentals ── */}
+      {trip.vehicleRentals?.length>0&&(
+        <div className="mt-6">
+          <div className="flex-between" style={{marginBottom:10}}>
+            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label>
+            <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>Total: ${vehicleTotal.toLocaleString()}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {trip.vehicleRentals.map(v=>{
+              const days=nightsBetween(v.pickupDate,v.returnDate)||1;
+              const total=v.priceType==="daily"?(v.pricePerDay||0)*days:(v.price||0);
+              return (
+                <div key={v.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <div style={{fontWeight:600,fontSize:14}}>🚗 {v.company}{v.model?` — ${v.model}`:""}</div>
+                      {v.pickupLocation&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
+                    </div>
+                    {total>0&&<div style={{fontSize:15,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
+                    {v.priceType==="daily"
+                      ? <><span style={{fontSize:12,background:"rgba(249,115,22,0.10)",color:"#c2612a",border:"1px solid rgba(249,115,22,0.22)",borderRadius:20,padding:"3px 10px"}}>${(v.pricePerDay||0).toLocaleString()}/day</span>
+                          <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                          <span style={{fontSize:12,background:"rgba(0,113,227,0.08)",color:"var(--accent)",border:"1px solid rgba(0,113,227,0.2)",borderRadius:20,padding:"3px 10px"}}>{days} day{days!==1?"s":""}</span>
+                          <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                          <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span></>
+                      : <span style={{fontSize:12,background:"rgba(249,115,22,0.10)",color:"#c2612a",border:"1px solid rgba(249,115,22,0.22)",borderRadius:20,padding:"3px 10px"}}>🧾 Full price ${total.toLocaleString()}</span>
+                    }
+                  </div>
+                  {(v.pickupDate||v.returnDate)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>🗓️ {v.pickupDate?fmtDate(v.pickupDate):"?"} → {v.returnDate?fmtDate(v.returnDate):"?"}</div>}
+                  {(v.transmission||v.seats)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>⚙️ {[v.transmission,v.seats?`${v.seats} seats`:null].filter(Boolean).join(" · ")}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}`:""}</span>)}</div></div>}
       <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
     </div>
@@ -3047,14 +3116,8 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      // Use existing destinations if already loaded (preserves votes), otherwise build from destination text
-      // Also check country_info.destinations where we persist votes
-      destinations: existing?.destinations?.length > 0
-        ? existing.destinations
-        : Array.isArray(t.country_info?.destinations) && t.country_info.destinations.length > 0
-        ? t.country_info.destinations
-        : t.destination ? [{id:1,name:t.destination,votes:[]}]
-        : [{id:1,name:"TBD",votes:[]}],
+      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
       vehicleRentals:      existing?.vehicleRentals     ?? [],
@@ -3122,15 +3185,15 @@ export default function App() {
       day:         a.scheduled_date || null,
       startTime:   a.scheduled_time || null,
       startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: a.duration_min || 60,
-      location:    a.location || "",
+      durationMin: 60,
+      location:    "",
       price:       parseFloat(a.cost) || 0,
       priceType:   a.price_type || "flat",
       metadata: {
-        description: a.description || "",
-        notes:       a.notes || "",
-        upvotes:     Array.isArray(a.upvotes) ? a.upvotes : [],
-        downvotes:   Array.isArray(a.downvotes) ? a.downvotes : [],
+        description: "",
+        notes:       "",
+        upvotes:     [],
+        downvotes:   [],
         createdBy:   a.created_by || "",
         checkIn:     null,
         checkOut:    null,
@@ -3143,11 +3206,11 @@ export default function App() {
       name:          a.name,
       address:       a.address || "",
       pricePerNight: parseFloat(a.cost_per_night) || 0,
-      rating:        a.rating ? String(a.rating) : "",
+      rating:        "",
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
-      notes:         a.notes || "",
-      votes:         Array.isArray(a.votes) ? a.votes : [],
+      notes:         "",
+      votes:         [],
     }));
 
     // Load personal budget — guard against authUser being null during restore
@@ -3180,7 +3243,7 @@ export default function App() {
       seats:           v.seats || "",
       transmission:    v.transmission || "automatic",
       notes:           v.notes || "",
-      votes:           Array.isArray(v.votes) ? v.votes : [],
+      votes:           v.votes || [],
     }));
 
     const fullTrip = {
@@ -3244,7 +3307,6 @@ export default function App() {
   }[cat] || "activity");
 
   const db = {
-    isMock,
     // ── Activities (calendar items) ──
     addItem: async (tripId, item) => {
       if(isMock) return item;
@@ -3254,16 +3316,10 @@ export default function App() {
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
-        duration_min:   item.durationMin || 60,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
-        location:       item.location || "",
-        description:    item.metadata?.description || "",
-        notes:          item.metadata?.notes || "",
         status:         "proposed",
         created_by:     item.metadata?.createdBy || null,
-        upvotes:        item.metadata?.upvotes || [],
-        downvotes:      item.metadata?.downvotes || [],
       }).select().single();
       if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
@@ -3276,12 +3332,8 @@ export default function App() {
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
-        duration_min:   item.durationMin || 60,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
-        location:       item.location || "",
-        description:    item.metadata?.description || "",
-        notes:          item.metadata?.notes || "",
       }).eq("id", item.id);
     },
 
@@ -3316,10 +3368,7 @@ export default function App() {
         cost_per_night: accom.pricePerNight || 0,
         check_in:       accom.checkIn || new Date().toISOString().slice(0,10),
         check_out:      accom.checkOut || new Date().toISOString().slice(0,10),
-        rating:         accom.rating ? parseFloat(accom.rating) : null,
-        notes:          accom.notes || "",
-        votes:          [],
-        created_by:     authUser?.id || null,
+        created_by:     null,
       }).select().single();
       if(error) { console.error("db.addAccom:", error); return accom; }
       return { ...accom, id: data.id };
@@ -3333,8 +3382,6 @@ export default function App() {
         cost_per_night: accom.pricePerNight || 0,
         check_in:       accom.checkIn || null,
         check_out:      accom.checkOut || null,
-        rating:         accom.rating ? parseFloat(accom.rating) : null,
-        notes:          accom.notes || "",
       }).eq("id", accom.id);
     },
 
