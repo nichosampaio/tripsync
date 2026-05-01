@@ -1845,7 +1845,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700}}><span style={{color:"var(--text)"}}>Total: </span><span style={{color:"var(--green)"}}>${accomTotal.toLocaleString()}</span></span>
+          <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total: <span style={{color:"#248a3d"}}>${accomTotal.toLocaleString()}</span></span>
         </div>
         {accomOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
@@ -1864,7 +1864,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12,minWidth:"fit-content"}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -1892,7 +1892,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🚗 Vehicle Rental Detail</h4>
-          <span style={{fontSize:13,fontWeight:700}}><span style={{color:"var(--text)"}}>Total: </span><span style={{color:"var(--green)"}}>${vehicleTotal.toLocaleString()}</span></span>
+          <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total: <span style={{color:"#248a3d"}}>${vehicleTotal.toLocaleString()}</span></span>
         </div>
         {vehicleOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No vehicle rentals added yet — go to <strong>🚗 Vehicles</strong> to add options.</p>
@@ -1912,7 +1912,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       {v.pickupLocation && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
                       {(v.pickupDate||v.returnDate)&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📅 {v.pickupDate?fmtDate(v.pickupDate):"?"} → {v.returnDate?fmtDate(v.returnDate):"?"}</div>}
                     </div>
-                    {total > 0 && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {total > 0 && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12,minWidth:"fit-content"}}>${total.toLocaleString()}</div>}
                   </div>
                   {total > 0 ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
