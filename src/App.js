@@ -2542,11 +2542,7 @@ function SummaryTab({trip}) {
   const items=trip.calendarItems||[];
   const ciTotal=items.reduce((s,c)=>s+(c.price||0),0);
   const accomTotal=calcAllAccomTotal(trip.accommodationOptions||[]);
-  const vehicleTotal=(trip.vehicleRentals||[]).reduce((s,v)=>{
-    const days=nightsBetween(v.pickupDate,v.returnDate)||1;
-    return s+(v.priceType==="daily"?(v.pricePerDay||0)*days:(v.price||0));
-  },0);
-  const grandTotal=ciTotal+accomTotal+vehicleTotal;
+  const grandTotal=ciTotal+accomTotal;
   return (
     <div className="summary-card">
       <div className="flex-between" style={{marginBottom:6}}>
@@ -2562,86 +2558,71 @@ function SummaryTab({trip}) {
         <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
         <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
       </div>
-
-      {/* ── Accommodations ── */}
-      {trip.accommodationOptions?.length>0&&(
+      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag tag-b">{a.name}{a.pricePerNight?` · $${a.pricePerNight}/night`:""}</span>)}</div></div>}
+      {/* ── Items by Day ── */}
+      {items.length>0&&(
         <div className="mt-6">
           <div className="flex-between" style={{marginBottom:10}}>
-            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label>
-            <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>Total: ${accomTotal.toLocaleString()}</span>
+            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label>
+            <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>Total: ${ciTotal.toLocaleString()}</span>
           </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {trip.accommodationOptions.map(a=>{
-              const n=calcAccomNights(a);
-              const ppn=parseFloat(a.pricePerNight)||0;
-              const tot=calcAccomTotal(a);
-              const hasData=a.checkIn&&a.checkOut&&ppn>0;
-              return (
-                <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:hasData?8:0}}>
-                    <div>
-                      <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
-                      {a.address&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
+          {/* Group items by day */}
+          {Object.entries(
+            items.reduce((groups,item)=>{
+              const key=item.day||"Unscheduled";
+              if(!groups[key]) groups[key]=[];
+              groups[key].push(item);
+              return groups;
+            },{})
+          ).sort(([a],[b])=>a==="Unscheduled"?1:b==="Unscheduled"?-1:a.localeCompare(b))
+          .map(([day,dayItems])=>(
+            <div key={day} style={{marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:"var(--muted)",marginBottom:6,paddingBottom:5,borderBottom:"1px solid var(--border)"}}>
+                {day==="Unscheduled"?"📌 Unscheduled":fmtDate(day)}
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:7}}>
+                {dayItems.sort((a,b)=>(a.startMin||0)-(b.startMin||0)).map(item=>{
+                  const meta=TYPE_META[item.type]||{icon:"📌",label:item.type,color:"#6e6e73"};
+                  const upvotes=item.metadata?.upvotes||[];
+                  const downvotes=item.metadata?.downvotes||[];
+                  const netVotes=upvotes.length-downvotes.length;
+                  return (
+                    <div key={item.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                        <div style={{display:"flex",gap:9,alignItems:"flex-start",flex:1,minWidth:0}}>
+                          <span style={{fontSize:18,flexShrink:0,marginTop:1}}>{meta.icon}</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontWeight:700,fontSize:14,letterSpacing:"-0.1px"}}>{item.title}</div>
+                            {item.metadata?.description&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2,lineHeight:1.5}}>{item.metadata.description}</div>}
+                          </div>
+                        </div>
+                        {item.price>0&&<div style={{fontSize:15,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${item.price.toLocaleString()}</div>}
+                      </div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                        {/* Type badge */}
+                        <span className={`type-badge type-${item.type}`}>{meta.icon} {meta.label}</span>
+                        {/* Time */}
+                        {item.startTime&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:500}}>⏰ {item.startTime}{item.durationMin?` · ${item.durationMin}min`:""}</span>}
+                        {/* Location */}
+                        {item.location&&<span style={{fontSize:11,color:"var(--muted)"}}>📍 {item.location}</span>}
+                        {/* Price type */}
+                        {item.price>0&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:500}}>{item.priceType==="per_person"?"per person":"flat"}</span>}
+                        {/* Vote tally */}
+                        {(upvotes.length>0||downvotes.length>0)&&(
+                          <span style={{fontSize:11,marginLeft:"auto",color:netVotes>0?"var(--green)":netVotes<0?"var(--red)":"var(--muted)",fontWeight:600}}>
+                            {netVotes>0?"👍":"👎"} {netVotes>0?`+${netVotes}`:netVotes}
+                          </span>
+                        )}
+                      </div>
+                      {item.metadata?.notes&&<div style={{fontSize:12,color:"var(--muted)",marginTop:7,paddingTop:7,borderTop:"1px solid var(--border)",lineHeight:1.5}}>📝 {item.metadata.notes}</div>}
                     </div>
-                    {hasData&&<div style={{fontSize:15,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${tot.toLocaleString()}</div>}
-                  </div>
-                  {hasData&&(
-                    <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
-                      <span style={{fontSize:12,background:"rgba(0,113,227,0.08)",color:"var(--accent)",border:"1px solid rgba(0,113,227,0.2)",borderRadius:20,padding:"3px 10px"}}>{n} night{n!==1?"s":""}</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
-                      <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${tot.toLocaleString()}</span>
-                    </div>
-                  )}
-                  {(a.checkIn||a.checkOut)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
-
-      {/* ── Vehicle Rentals ── */}
-      {trip.vehicleRentals?.length>0&&(
-        <div className="mt-6">
-          <div className="flex-between" style={{marginBottom:10}}>
-            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label>
-            <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>Total: ${vehicleTotal.toLocaleString()}</span>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>
-            {trip.vehicleRentals.map(v=>{
-              const days=nightsBetween(v.pickupDate,v.returnDate)||1;
-              const total=v.priceType==="daily"?(v.pricePerDay||0)*days:(v.price||0);
-              return (
-                <div key={v.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                    <div>
-                      <div style={{fontWeight:600,fontSize:14}}>🚗 {v.company}{v.model?` — ${v.model}`:""}</div>
-                      {v.pickupLocation&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
-                    </div>
-                    {total>0&&<div style={{fontSize:15,fontWeight:800,color:"var(--green)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
-                  </div>
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
-                    {v.priceType==="daily"
-                      ? <><span style={{fontSize:12,background:"rgba(249,115,22,0.10)",color:"#c2612a",border:"1px solid rgba(249,115,22,0.22)",borderRadius:20,padding:"3px 10px"}}>${(v.pricePerDay||0).toLocaleString()}/day</span>
-                          <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
-                          <span style={{fontSize:12,background:"rgba(0,113,227,0.08)",color:"var(--accent)",border:"1px solid rgba(0,113,227,0.2)",borderRadius:20,padding:"3px 10px"}}>{days} day{days!==1?"s":""}</span>
-                          <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
-                          <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span></>
-                      : <span style={{fontSize:12,background:"rgba(249,115,22,0.10)",color:"#c2612a",border:"1px solid rgba(249,115,22,0.22)",borderRadius:20,padding:"3px 10px"}}>🧾 Full price ${total.toLocaleString()}</span>
-                    }
-                  </div>
-                  {(v.pickupDate||v.returnDate)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>🗓️ {v.pickupDate?fmtDate(v.pickupDate):"?"} → {v.returnDate?fmtDate(v.returnDate):"?"}</div>}
-                  {(v.transmission||v.seats)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>⚙️ {[v.transmission,v.seats?`${v.seats} seats`:null].filter(Boolean).join(" · ")}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}`:""}</span>)}</div></div>}
       <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
     </div>
   );
