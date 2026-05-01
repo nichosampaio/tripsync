@@ -1523,7 +1523,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     if(db&&!db.isMock){
       const existing=trip.country||trip.country_info||{};
       supabase.from("trips").update({country_info:{...existing,destinations:updated}}).eq("id",trip.id)
-        .then(({error})=>{if(error)console.error("voteDest:",error);});
+        .then(({error})=>{if(error)console.error("voteDest save:",error);});
     }
     setTrip(t=>({...t,destinations:updated}));
   };
@@ -3007,7 +3007,13 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      destinations: (()=>{
+        if(existing?.destinations?.length>0) return existing.destinations;
+        if(Array.isArray(t.country_info?.destinations)&&t.country_info.destinations.length>0)
+          return t.country_info.destinations.map(d=>({...d,upvotes:d.upvotes||[],downvotes:d.downvotes||[],votes:d.votes||[]}));
+        if(t.destination) return [{id:1,name:t.destination,votes:[],upvotes:[],downvotes:[]}];
+        return [{id:1,name:"TBD",votes:[],upvotes:[],downvotes:[]}];
+      })(),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
