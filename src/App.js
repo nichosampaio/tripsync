@@ -1497,7 +1497,7 @@ function ActivityTab({trip,setTrip,user,db}) {
 function VotingTab({trip,setTrip,user,db,authUserId}) {
   const uid = authUserId || user;
 
-  // ── Single vote writer — always writes to votes table ──
+  // Single writer — always uses the votes table
   const writeVote = async (dir, col, itemId) => {
     if(!db || db.isMock) return;
     const val = dir === "up" ? 1 : -1;
@@ -1514,12 +1514,15 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     }
   };
 
-  // ── Destination votes (stored in trips.country_info — no FK in votes table) ──
-  const voteDest = (id) => {
+  // Destination votes (stored in trips.country_info — no FK in votes table)
+  const voteDest = (id, dir) => {
     const updated = (trip.destinations||[]).map(d => {
       if(d.id !== id) return d;
-      const has = (d.votes||[]).includes(uid);
-      return { ...d, votes: has ? d.votes.filter(v=>v!==uid) : [...(d.votes||[]), uid] };
+      const up = d.upvotes||[], dn = d.downvotes||[];
+      let nu, nd;
+      if(dir==="up"){ const h=up.includes(uid); nu=h?up.filter(x=>x!==uid):[...up.filter(x=>x!==uid),uid]; nd=dn.filter(x=>x!==uid); }
+      else           { const h=dn.includes(uid); nd=h?dn.filter(x=>x!==uid):[...dn.filter(x=>x!==uid),uid]; nu=up.filter(x=>x!==uid); }
+      return { ...d, upvotes:nu, downvotes:nd };
     });
     if(db && !db.isMock) {
       supabase.from("trips").update({ country_info: {...(trip.country||{}), destinations: updated} }).eq("id", trip.id);
@@ -1527,7 +1530,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     setTrip(t => ({...t, destinations: updated}));
   };
 
-  // ── Activity votes → activity_id column ──
+  // Activity votes → activity_id column
   const voteAct = (id, dir) => {
     setTrip(t => ({...t, calendarItems: t.calendarItems.map(ci => {
       if(ci.id !== id) return ci;
@@ -1540,7 +1543,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     })}));
   };
 
-  // ── Accommodation votes → accommodation_id column ──
+  // Accommodation votes → accommodation_id column
   const voteAccom = (id, dir) => {
     setTrip(t => ({...t, accommodationOptions: t.accommodationOptions.map(a => {
       if(a.id !== id) return a;
@@ -1553,7 +1556,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     })}));
   };
 
-  // ── Vehicle votes → vehicle_id column ──
+  // Vehicle votes → vehicle_id column
   const voteVehicle = (id, dir) => {
     setTrip(t => ({...t, vehicleRentals: t.vehicleRentals.map(v => {
       if(v.id !== id) return v;
@@ -1566,9 +1569,9 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
     })}));
   };
 
-  // ── Shared vote card ──
+  // Shared vote card
   const VCard = ({icon,name,subtitle,desc,pills,up,dn,onUp,onDn}) => {
-    const hasUp=up.includes(uid), hasDn=dn.includes(uid), net=up.length-dn.length;
+    const hasUp=(up||[]).includes(uid), hasDn=(dn||[]).includes(uid), net=(up||[]).length-(dn||[]).length;
     return (
       <div className="act-vote-card">
         <div className="act-vote-top">
@@ -1581,8 +1584,8 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
           </div>
         </div>
         <div className="act-vote-row">
-          <button className={`vbtn-up ${hasUp?"on":""}`} onClick={onUp}>👍 Yes{up.length>0?` (${up.length})`:""}</button>
-          <button className={`vbtn-down ${hasDn?"on":""}`} onClick={onDn}>👎 No{dn.length>0?` (${dn.length})`:""}</button>
+          <button className={`vbtn-up ${hasUp?"on":""}`} onClick={onUp}>👍 Yes{(up||[]).length>0?` (${(up||[]).length})`:""}</button>
+          <button className={`vbtn-down ${hasDn?"on":""}`} onClick={onDn}>👎 No{(dn||[]).length>0?` (${(dn||[]).length})`:""}</button>
           <div className="vote-tally"><span style={{color:net>0?"var(--green)":net<0?"var(--red)":"var(--muted)",fontWeight:600}}>{net>0?`+${net}`:net} net</span></div>
         </div>
       </div>
@@ -1591,29 +1594,20 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
 
   return (
     <div>
-      {/* ── Destinations ── */}
+      {/* Destinations */}
       {(trip.destinations||[]).length > 0 && (
         <div className="vote-card">
           <h4>📍 Destinations</h4>
-          {trip.destinations.map(d => {
-            const has=(d.votes||[]).includes(uid), net=(d.votes||[]).length;
-            return (
-              <div key={d.id} className="act-vote-card">
-                <div className="act-vote-top">
-                  <span className="act-vote-emoji">📍</span>
-                  <div className="act-vote-info"><div className="act-vote-name">{d.name}</div></div>
-                </div>
-                <div className="act-vote-row">
-                  <button className={`vbtn-up ${has?"on":""}`} onClick={()=>voteDest(d.id)}>👍 Yes{net>0?` (${net})`:""}</button>
-                  <div className="vote-tally"><span style={{color:net>0?"var(--green)":"var(--muted)",fontWeight:600}}>{net} vote{net!==1?"s":""}</span></div>
-                </div>
-              </div>
-            );
-          })}
+          {trip.destinations.map(d => (
+            <VCard key={d.id}
+              icon="📍" name={d.name}
+              up={d.upvotes||[]} dn={d.downvotes||[]}
+              onUp={()=>voteDest(d.id,"up")} onDn={()=>voteDest(d.id,"down")}/>
+          ))}
         </div>
       )}
 
-      {/* ── Vehicle Rentals ── */}
+      {/* Vehicle Rentals */}
       {(trip.vehicleRentals||[]).length > 0 && (
         <div className="vote-card">
           <h4>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
@@ -1631,7 +1625,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
         </div>
       )}
 
-      {/* ── Accommodations ── */}
+      {/* Accommodations */}
       {(trip.accommodationOptions||[]).length > 0 && (
         <div className="vote-card">
           <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
@@ -1647,7 +1641,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
         </div>
       )}
 
-      {/* ── Activities & Items ── */}
+      {/* Activities & Items */}
       <div className="vote-card">
         <h4>🗳️ Activities & Items ({(trip.calendarItems||[]).length})</h4>
         {(trip.calendarItems||[]).length===0
@@ -2974,7 +2968,7 @@ export default function App() {
         ()=>loadJoinRequests(authUser.id)).subscribe();
 
     const votesCh = supabase.channel(`votes:${authUser.id}`)
-      .on("postgres_changes",{event:"*",schema:"public",table:"votes"}, async ()=>{
+      .on("postgres_changes",{event:"*",schema:"public",table:"votes"}, ()=>{
         setActive(prev=>{
           if(!prev) return prev;
           const filters=[
@@ -3061,7 +3055,12 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      destinations: existing?.destinations?.length > 0
+        ? existing.destinations
+        : Array.isArray(t.country_info?.destinations) && t.country_info.destinations.length > 0
+        ? t.country_info.destinations.map(d=>({...d, upvotes:d.upvotes||[], downvotes:d.downvotes||[]}))
+        : t.destination ? [{id:1,name:t.destination,votes:[],upvotes:[],downvotes:[]}]
+        : [{id:1,name:"TBD",votes:[],upvotes:[],downvotes:[]}],
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
@@ -3110,34 +3109,27 @@ export default function App() {
   const loadTripDetails = async (trip) => {
     setTripLoading(true);
 
-    // Load all data in parallel
     const [{ data: items }, { data: accoms }, { data: vehicles }] = await Promise.all([
-      supabase.from("activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+      supabase.from("activities").select("*").eq("trip_id", trip.id).order("created_at",{ascending:true}),
       supabase.from("accommodations").select("*").eq("trip_id", trip.id),
       supabase.from("vehicle_rentals").select("*").eq("trip_id", trip.id),
     ]);
 
-    // Load all votes from the votes table in one query
-    const actIds = (items||[]).map(a => a.id);
-    const acIds  = (accoms||[]).map(a => a.id);
-    const vIds   = (vehicles||[]).map(v => v.id);
+    // Load all votes from votes table
+    const actIds = (items||[]).map(a=>a.id);
+    const acIds  = (accoms||[]).map(a=>a.id);
+    const vIds   = (vehicles||[]).map(v=>v.id);
+    const filters = [...actIds.map(id=>`activity_id.eq.${id}`),...acIds.map(id=>`accommodation_id.eq.${id}`),...vIds.map(id=>`vehicle_id.eq.${id}`)];
     let allVotes = [];
-    const filters = [
-      ...actIds.map(id=>`activity_id.eq.${id}`),
-      ...acIds.map(id=>`accommodation_id.eq.${id}`),
-      ...vIds.map(id=>`vehicle_id.eq.${id}`),
-    ];
     if(filters.length > 0) {
       const { data: vd } = await supabase.from("votes").select("*").or(filters.join(","));
       allVotes = vd || [];
     }
-
-    // Bucket votes by item id
     const aV={}, acV={}, vhV={};
     for(const v of allVotes) {
-      if(v.activity_id)     { if(!aV[v.activity_id])              aV[v.activity_id]             ={up:[],dn:[]}; v.value===1?aV[v.activity_id].up.push(v.user_id)            :aV[v.activity_id].dn.push(v.user_id); }
-      if(v.accommodation_id){ if(!acV[v.accommodation_id])        acV[v.accommodation_id]       ={up:[],dn:[]}; v.value===1?acV[v.accommodation_id].up.push(v.user_id)      :acV[v.accommodation_id].dn.push(v.user_id); }
-      if(v.vehicle_id)      { if(!vhV[v.vehicle_id])              vhV[v.vehicle_id]             ={up:[],dn:[]}; v.value===1?vhV[v.vehicle_id].up.push(v.user_id)            :vhV[v.vehicle_id].dn.push(v.user_id); }
+      if(v.activity_id)     { if(!aV[v.activity_id])           aV[v.activity_id]          ={up:[],dn:[]}; v.value===1?aV[v.activity_id].up.push(v.user_id)         :aV[v.activity_id].dn.push(v.user_id); }
+      if(v.accommodation_id){ if(!acV[v.accommodation_id])     acV[v.accommodation_id]    ={up:[],dn:[]}; v.value===1?acV[v.accommodation_id].up.push(v.user_id)   :acV[v.accommodation_id].dn.push(v.user_id); }
+      if(v.vehicle_id)      { if(!vhV[v.vehicle_id])           vhV[v.vehicle_id]          ={up:[],dn:[]}; v.value===1?vhV[v.vehicle_id].up.push(v.user_id)         :vhV[v.vehicle_id].dn.push(v.user_id); }
     }
 
     const calendarItems = (items||[]).map(a => ({
@@ -3146,11 +3138,9 @@ export default function App() {
       startMin:a.scheduled_time?timeStrToMin(a.scheduled_time):null,
       durationMin:a.duration_min||60, location:a.location||"",
       price:parseFloat(a.cost)||0, priceType:a.price_type||"flat",
-      metadata:{
-        description:a.description||"", notes:a.notes||"",
+      metadata:{ description:a.description||"", notes:a.notes||"",
         upvotes:aV[a.id]?.up||[], downvotes:aV[a.id]?.dn||[],
-        createdBy:a.created_by||"", checkIn:null, checkOut:null, transportationTime:"",
-      },
+        createdBy:a.created_by||"", checkIn:null, checkOut:null, transportationTime:"" },
     }));
 
     const accommodationOptions = (accoms||[]).map(a => ({
@@ -3172,10 +3162,9 @@ export default function App() {
       votes:[], upvotes:vhV[v.id]?.up||[], downvotes:vhV[v.id]?.dn||[],
     }));
 
-    // Load personal budget
     const currentUserId = authUser?.id || authUserIdRef.current;
-    const { data: profile } = currentUserId ? await supabase
-      .from("profiles").select("personal_budget").eq("id", currentUserId).single()
+    const { data: profile } = currentUserId
+      ? await supabase.from("profiles").select("personal_budget").eq("id", currentUserId).single()
       : { data: null };
 
     const fullTrip = {
