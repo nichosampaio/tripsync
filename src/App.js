@@ -1523,10 +1523,17 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
       let nu,nd;
       if(dir==="up"){const h=up.includes(uid);nu=h?up.filter(x=>x!==uid):[...up.filter(x=>x!==uid),uid];nd=dn.filter(x=>x!==uid);}
       else{const h=dn.includes(uid);nd=h?dn.filter(x=>x!==uid):[...dn.filter(x=>x!==uid),uid];nu=up.filter(x=>x!==uid);}
-      return {...d,upvotes:nu,downvotes:nd};
+      return {...d, upvotes:nu, downvotes:nd};
     });
-    if(db&&!db.isMock) supabase.from("trips").update({country_info:{...(trip.country||{}),destinations:updated}}).eq("id",trip.id);
-    setTrip(t=>({...t,destinations:updated}));
+    if(db&&!db.isMock) {
+      // Merge updated destinations into existing country_info, preserving all other fields
+      const existingCountryInfo = trip.country || trip.country_info || {};
+      supabase.from("trips")
+        .update({ country_info: {...existingCountryInfo, destinations: updated} })
+        .eq("id", trip.id)
+        .then(({error}) => { if(error) console.error("voteDest save:", error); });
+    }
+    setTrip(t=>({...t, destinations:updated}));
   };
 
   const voteAct = (id,dir) => setTrip(t=>({...t,calendarItems:t.calendarItems.map(ci=>{
@@ -3010,7 +3017,16 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      destinations: (()=>{
+        // First priority: already-loaded destinations with votes in memory
+        if(existing?.destinations?.length > 0) return existing.destinations;
+        // Second priority: destinations saved in country_info with votes
+        if(Array.isArray(t.country_info?.destinations) && t.country_info.destinations.length > 0)
+          return t.country_info.destinations.map(d=>({...d, upvotes:d.upvotes||[], downvotes:d.downvotes||[], votes:d.votes||[]}));
+        // Fallback: build from plain destination text
+        if(t.destination) return [{id:1, name:t.destination, votes:[], upvotes:[], downvotes:[]}];
+        return [{id:1, name:"TBD", votes:[], upvotes:[], downvotes:[]}];
+      })(),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
