@@ -33,6 +33,10 @@ body { font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Helvetica Neu
   --shadow-md: 0 6px 20px rgba(0,0,0,0.09), 0 2px 6px rgba(0,0,0,0.05);
   --shadow-lg: 0 16px 48px rgba(0,0,0,0.13), 0 4px 14px rgba(0,0,0,0.07);
   --shadow-xl: 0 28px 72px rgba(0,0,0,0.18), 0 8px 24px rgba(0,0,0,0.09);
+  --budget-text: #1d1d1f;
+  --budget-green: #248a3d;
+  --budget-indigo: #818cf8;
+  --budget-orange: #f97316;
   --shadow-blue: 0 4px 20px rgba(0,113,227,0.30);
   --r-sm: 10px; --r-md: 14px; --r-lg: 20px; --r-xl: 26px; --r-full: 980px;
 }
@@ -1502,7 +1506,6 @@ function VotingTab({trip,setTrip,user,db}) {
     const hasVote=item.votes.includes(user);
     const newVotes=hasVote?item.votes.filter(v=>v!==user):[...item.votes,user];
     if(!db?.isMock) {
-      // Destination votes stored in the votes table (activity_id = destination row id, user_id = current user)
       if(hasVote) {
         supabase.from("votes").delete().match({ activity_id: id, user_id: user });
       } else {
@@ -1599,11 +1602,24 @@ function VotingTab({trip,setTrip,user,db}) {
               const hasVote = votes.includes(user);
               const max = Math.max(...(trip.vehicleRentals||[]).map(x=>(x.votes||[]).length), 1);
               const VTYPE = {car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+              const ppd = parseFloat(v.price || v.pricePerDay) || 0;
+              const days = calcVehicleDays(v);
+              const total = calcVehicleTotal(v);
               return (
                 <div key={v.id} className={`vote-opt ${hasVote?"voted":""}`} onClick={()=>voteVehicle(v.id)}>
-                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:2}}>
+                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:3}}>
                     <span style={{fontSize:13,fontWeight:hasVote?600:400}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model&&` — ${v.model}`}</span>
-                    {v.pricePerDay&&v.days&&<span style={{fontSize:11,color:"var(--muted)"}}>💰 ${v.pricePerDay}/day · {v.days}d · ~${(v.pricePerDay*v.days).toFixed(0)} total</span>}
+                    {v.priceType==="full" && ppd>0 && (
+                      <span style={{fontSize:11,color:"#f97316",fontWeight:500}}>🧾 ${ppd.toLocaleString()} full price</span>
+                    )}
+                    {v.priceType!=="full" && ppd>0 && days>0 && (
+                      <span style={{fontSize:11,color:"#f97316",fontWeight:500}}>
+                        💰 ${ppd}/day × {days}d = <strong>${total.toLocaleString()} total</strong>
+                      </span>
+                    )}
+                    {v.priceType!=="full" && ppd>0 && days===0 && (
+                      <span style={{fontSize:11,color:"var(--muted)"}}>💰 ${ppd}/day</span>
+                    )}
                   </div>
                   <div className="vbar-wrap"><div className="vbar-bg"><div className="vbar-fill" style={{width:`${Math.round((votes.length/max)*100)}%`}}/></div></div>
                   <span className="vote-count">{votes.length} 👍</span>
@@ -1622,11 +1638,25 @@ function VotingTab({trip,setTrip,user,db}) {
               const votes = a.votes || [];
               const hasVote = votes.includes(user);
               const max = Math.max(...(trip.accommodationOptions||[]).map(x=>(x.votes||[]).length), 1);
+              const ppn = parseFloat(a.pricePerNight) || 0;
+              const nights = calcAccomNights(a);
+              const total = calcAccomTotal(a);
+              const isFull = a.priceType === "full";
               return (
                 <div key={a.id} className={`vote-opt ${hasVote?"voted":""}`} onClick={()=>voteAccom(a.id)}>
-                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:2}}>
+                  <div style={{display:"flex",flexDirection:"column",minWidth:130,flexShrink:0,gap:3}}>
                     <span style={{fontSize:13,fontWeight:hasVote?600:400}}>{a.name}</span>
-                    {a.pricePerNight>0&&<span style={{fontSize:11,color:"var(--muted)"}}>💰 ${a.pricePerNight}/night</span>}
+                    {isFull && total>0 && (
+                      <span style={{fontSize:11,color:"#818cf8",fontWeight:500}}>🧾 ${total.toLocaleString()} full price</span>
+                    )}
+                    {!isFull && ppn>0 && nights>0 && (
+                      <span style={{fontSize:11,color:"#818cf8",fontWeight:500}}>
+                        🏨 ${ppn}/night × {nights}n = <strong>${total.toLocaleString()} total</strong>
+                      </span>
+                    )}
+                    {!isFull && ppn>0 && nights===0 && (
+                      <span style={{fontSize:11,color:"var(--muted)"}}>💰 ${ppn}/night</span>
+                    )}
                     {a.checkIn&&a.checkOut&&<span style={{fontSize:11,color:"var(--muted)"}}>📅 {fmtDate(a.checkIn)} – {fmtDate(a.checkOut)}</span>}
                   </div>
                   <div className="vbar-wrap"><div className="vbar-bg"><div className="vbar-fill" style={{width:`${Math.round((votes.length/max)*100)}%`}}/></div></div>
@@ -1662,7 +1692,11 @@ function VotingTab({trip,setTrip,user,db}) {
                     {ci.metadata?.description&&<div className="act-vote-desc">{ci.metadata.description}</div>}
                     <div className="act-vote-pills">
                       {ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}
-                      {ci.price>0&&<span className="pill pill-g">💵 ${ci.price}</span>}
+                      {ci.price>0&&(
+                        ci.priceType==="per_person"
+                          ? <span className="pill pill-g">💵 ${ci.price}/person</span>
+                          : <span className="pill pill-g">💵 ${ci.price} total</span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -1690,6 +1724,7 @@ function calcAccomNights(a) {
   return Math.max(n, 0);
 }
 function calcAccomTotal(a) {
+  if(a.priceType === "full") return parseFloat(a.totalPrice) || 0;
   const nights = calcAccomNights(a);
   const ppn = parseFloat(a.pricePerNight) || 0;
   return ppn * nights;
@@ -1838,12 +1873,12 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
           </div>
         ))}
         <div className="budget-total-row">
-          <span className="budget-total-label">Total (all members)</span>
+          <span className="budget-total-label" style={{color:"#1d1d1f"}}>Total (all members)</span>
           <span className="budget-total-val">${grandTotal.toLocaleString()}</span>
         </div>
         <div className="per-person-row">
           <span style={{fontSize:13,color:"var(--muted)"}}>My equal share ({memberCount} member{memberCount!==1?"s":""})</span>
-          <span style={{fontFamily:"Inter",fontSize:18,fontWeight:800,color:"var(--accent2)"}}>${Math.ceil(myShare).toLocaleString()}</span>
+          <span style={{fontFamily:"Inter",fontSize:18,fontWeight:800,color:"#248a3d"}}>${Math.ceil(myShare).toLocaleString()}</span>
         </div>
       </div>
 
@@ -1868,7 +1903,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                         🧍 ${ci.price}/person
                       </span>
                     ) : (
-                      <span style={{fontSize:11,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
+                      <span style={{fontSize:11,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
                         👥 ${ci.price} flat
                       </span>
                     )}
@@ -1890,7 +1925,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>Total: ${accomTotal.toLocaleString()}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#818cf8"}}>Total: ${accomTotal.toLocaleString()}</span>
         </div>
         {accomOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
@@ -1899,9 +1934,11 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
             {accomOptions.map(a => {
               const nights   = calcAccomNights(a);
               const ppn      = parseFloat(a.pricePerNight) || 0;
+              const totalFull= parseFloat(a.totalPrice) || 0;
               const total    = calcAccomTotal(a);
               const myPart   = memberCount > 0 ? total / memberCount : 0;
-              const hasData  = a.checkIn && a.checkOut && ppn > 0;
+              const isFull   = a.priceType === "full";
+              const hasData  = isFull ? totalFull > 0 : (a.checkIn && a.checkOut && ppn > 0);
               return (
                 <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
@@ -1909,20 +1946,24 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                      <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"var(--accent2)",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
-                      <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
-                      <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      {isFull ? (
+                        <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>🧾 ${totalFull.toLocaleString()} full price</span>
+                      ) : (<>
+                        <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
+                        <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
+                        <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
+                        <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                      </>)}
                       <span style={{fontSize:12,fontWeight:700,color:"var(--green)"}}>${total.toLocaleString()}</span>
                       {memberCount > 1 && <span style={{fontSize:12,color:"var(--muted)",marginLeft:"auto"}}>${Math.ceil(myPart).toLocaleString()}/person</span>}
                     </div>
                   ) : (
                     <div style={{fontSize:12,color:"var(--yellow)",display:"flex",alignItems:"center",gap:6}}>
-                      ⚠️ {!a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab
+                      ⚠️ {isFull ? "Missing total price" : !a.checkIn||!a.checkOut ? "Missing check-in or check-out dates" : "Missing nightly rate"} — edit in Stays tab
                     </div>
                   )}
                   {(a.checkIn||a.checkOut) && <div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
@@ -1990,7 +2031,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 }
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
-const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
+const BLANK_A={name:"",address:"",priceType:"nightly",pricePerNight:"",totalPrice:"",rating:"",checkIn:"",checkOut:"",notes:""};
 const BLANK_V={company:"",model:"",vehicleType:"car",pickupDate:"",returnDate:"",priceType:"daily",price:"",rating:"",pickupLocation:"",dropoffLocation:"",seats:"",transmission:"automatic",notes:"",votes:[]};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
@@ -2001,17 +2042,18 @@ function AccommodationTab({trip,setTrip,db}) {
   const validate=()=>{
     const e={};
     if(!form.name.trim()) e.name="Name required";
-    if(form.pricePerNight&&isNaN(Number(form.pricePerNight))) e.pricePerNight="Numeric";
+    if(form.priceType==="nightly"&&form.pricePerNight&&isNaN(Number(form.pricePerNight))) e.pricePerNight="Numeric";
+    if(form.priceType==="full"&&form.totalPrice&&isNaN(Number(form.totalPrice))) e.totalPrice="Numeric";
     if(form.rating&&(isNaN(Number(form.rating))||+form.rating<1||+form.rating>5)) e.rating="1–5";
     setErrs(e); return !Object.keys(e).length;
   };
 
   const openAdd=()=>{setForm(BLANK_A);setEditId(null);setErrs({});setShow(true);};
-  const openEdit=a=>{setForm({name:a.name,address:a.address||"",pricePerNight:String(a.pricePerNight||""),rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
+  const openEdit=a=>{setForm({name:a.name,address:a.address||"",priceType:a.priceType||"nightly",pricePerNight:String(a.pricePerNight||""),totalPrice:String(a.totalPrice||""),rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
 
   const save=async ()=>{
     if(!validate()) return;
-    const formatted={...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",rating:form.rating?+form.rating:""};
+    const formatted={...form,pricePerNight:form.priceType==="nightly"&&form.pricePerNight?+form.pricePerNight:"",totalPrice:form.priceType==="full"&&form.totalPrice?+form.totalPrice:"",rating:form.rating?+form.rating:""};
     if(editId){
       const updated={...trip.accommodationOptions.find(a=>a.id===editId),...formatted};
       if(db) db.updateAccom(updated);
@@ -2040,7 +2082,41 @@ function AccommodationTab({trip,setTrip,db}) {
           <div className="form-group"><label className="form-label">Name *</label><input {...F("name")} placeholder="e.g. Beachside Airbnb"/>{errs.name&&<div className="err-msg">{errs.name}</div>}</div>
           <div className="form-group"><label className="form-label">Address</label><input {...F("address")} placeholder="e.g. Zona Hotelera, Cancun"/></div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Price/Night ($)</label><input {...F("pricePerNight")} placeholder="180"/>{errs.pricePerNight&&<div className="err-msg">{errs.pricePerNight}</div>}</div>
+            <div className="form-group">
+              <label className="form-label">Pricing</label>
+              <div style={{display:"flex",gap:8}}>
+                <button type="button"
+                  className={`btn btn-sm ${form.priceType==="nightly"?"btn-primary":"btn-ghost"}`}
+                  style={{flex:1}}
+                  onClick={()=>setForm(f=>({...f,priceType:"nightly"}))}>
+                  🌙 Per Night
+                </button>
+                <button type="button"
+                  className={`btn btn-sm ${form.priceType==="full"?"btn-primary":"btn-ghost"}`}
+                  style={{flex:1}}
+                  onClick={()=>setForm(f=>({...f,priceType:"full"}))}>
+                  🧾 Full Price
+                </button>
+              </div>
+            </div>
+            {form.priceType==="nightly" ? (
+              <div className="form-group">
+                <label className="form-label">Price/Night ($)</label>
+                <input {...F("pricePerNight")} placeholder="180"/>
+                {errs.pricePerNight&&<div className="err-msg">{errs.pricePerNight}</div>}
+                {form.pricePerNight&&calcAccomNights({checkIn:form.checkIn,checkOut:form.checkOut})>0&&(
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>
+                    ~${(+(form.pricePerNight||0)*calcAccomNights({checkIn:form.checkIn,checkOut:form.checkOut})).toLocaleString()} total for {calcAccomNights({checkIn:form.checkIn,checkOut:form.checkOut})} nights
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="form-group">
+                <label className="form-label">Total Price ($)</label>
+                <input {...F("totalPrice")} placeholder="e.g. 800"/>
+                {errs.totalPrice&&<div className="err-msg">{errs.totalPrice}</div>}
+              </div>
+            )}
             <div className="form-group"><label className="form-label">Rating (1–5)</label><input {...F("rating")} placeholder="4.5"/>{errs.rating&&<div className="err-msg">{errs.rating}</div>}</div>
           </div>
           <div className="form-row">
@@ -2068,7 +2144,8 @@ function AccommodationTab({trip,setTrip,db}) {
               </div>
               <div className="card-meta">
                 {a.address&&<div className="card-meta-row">📍 <strong>{a.address}</strong></div>}
-                {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong></div>}
+                {a.priceType==="full"&&a.totalPrice!==""&&<div className="card-meta-row">🧾 <strong>${parseFloat(a.totalPrice).toLocaleString()} full price</strong></div>}
+                {a.priceType!=="full"&&a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong>{calcAccomNights(a)>0&&<> × {calcAccomNights(a)}n = <strong>${calcAccomTotal(a).toLocaleString()}</strong></>}</div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
               </div>
@@ -2550,7 +2627,9 @@ function SummaryTab({trip}) {
   const items=trip.calendarItems||[];
   const ciTotal=items.reduce((s,c)=>s+(c.price||0),0);
   const accomTotal=calcAllAccomTotal(trip.accommodationOptions||[]);
-  const grandTotal=ciTotal+accomTotal;
+  const vehicleTotal=calcAllVehicleTotal(trip.vehicleRentals||[]);
+  const grandTotal=ciTotal+accomTotal+vehicleTotal;
+  const VTYPE={car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
   return (
     <div className="summary-card">
       <div className="flex-between" style={{marginBottom:6}}>
@@ -2566,8 +2645,9 @@ function SummaryTab({trip}) {
         <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
         <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
       </div>
-      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag tag-b">{a.name}{a.pricePerNight?` · $${a.pricePerNight}/night`:""}</span>)}</div></div>}
-      {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}`:""}</span>)}</div></div>}
+      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag tag-b">{a.name}{a.pricePerNight?` · $${a.pricePerNight}/night`:""}{calcAccomNights(a)>0?` × ${calcAccomNights(a)}n`:""}{calcAccomTotal(a)>0?` = $${calcAccomTotal(a).toLocaleString()}`:""}</span>)}</div></div>}
+      {(trip.vehicleRentals||[]).length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label><div className="tag-wrap">{(trip.vehicleRentals||[]).map(v=>{const ppd=parseFloat(v.price||v.pricePerDay)||0;const days=calcVehicleDays(v);const tot=calcVehicleTotal(v);return(<span key={v.id} className="tag" style={{borderColor:"rgba(249,115,22,0.25)",color:"#f97316",background:"rgba(249,115,22,0.08)"}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model?` — ${v.model}`:""}{v.priceType==="full"&&ppd>0?` · $${ppd} full`:ppd>0&&days>0?` · $${ppd}/day × ${days}d = $${tot.toLocaleString()}`:ppd>0?` · $${ppd}/day`:""}</span>);})}</div></div>}
+      {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}${c.priceType==="per_person"?"/person":" total"}`:""}</span>)}</div></div>}
       <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
     </div>
   );
@@ -3131,7 +3211,9 @@ export default function App() {
       id:            a.id,
       name:          a.name,
       address:       a.address || "",
+      priceType:     a.price_type || "nightly",
       pricePerNight: parseFloat(a.cost_per_night) || 0,
+      totalPrice:    parseFloat(a.total_price) || 0,
       rating:        "",
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
@@ -3292,7 +3374,9 @@ export default function App() {
         trip_id:        tripId,
         name:           accom.name,
         address:        accom.address || "",
-        cost_per_night: accom.pricePerNight || 0,
+        price_type:     accom.priceType || "nightly",
+        cost_per_night: accom.priceType === "full" ? 0 : (accom.pricePerNight || 0),
+        total_price:    accom.priceType === "full" ? (accom.totalPrice || 0) : 0,
         check_in:       accom.checkIn || new Date().toISOString().slice(0,10),
         check_out:      accom.checkOut || new Date().toISOString().slice(0,10),
         created_by:     null,
@@ -3306,7 +3390,9 @@ export default function App() {
       await supabase.from("accommodations").update({
         name:           accom.name,
         address:        accom.address || "",
-        cost_per_night: accom.pricePerNight || 0,
+        price_type:     accom.priceType || "nightly",
+        cost_per_night: accom.priceType === "full" ? 0 : (accom.pricePerNight || 0),
+        total_price:    accom.priceType === "full" ? (accom.totalPrice || 0) : 0,
         check_in:       accom.checkIn || null,
         check_out:      accom.checkOut || null,
       }).eq("id", accom.id);
