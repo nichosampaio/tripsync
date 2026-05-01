@@ -1605,7 +1605,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
           {[...(trip.vehicleRentals||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(v=>{
             const days=calcVehicleDays(v),total=calcVehicleTotal(v);
             return <VCard key={v.id} icon={VTYPE[v.vehicleType]||"🚗"} name={`${v.company}${v.model?` — ${v.model}`:""}`} subtitle={v.pickupLocation?`📍 ${v.pickupLocation}`:null}
-              pills={<>{v.pricePerDay>0&&<span className="pill pill-y">💰 ${v.pricePerDay}/day</span>}{days>0&&<span className="pill pill-b">📅 {days}d</span>}{total>0&&<span className="pill pill-g">💵 ${total} total</span>}</>}
+              pills={<>{v.pricePerDay>0&&<span className="pill pill-y">💰 ${v.pricePerDay}/day</span>}{days>0&&<span className="pill pill-b">× {days} day{days!==1?"s":""}</span>}{total>0&&<span className="pill pill-g">= ${total} total</span>}</>}
               up={v.upvotes} dn={v.downvotes} onUp={()=>voteVehicle(v.id,"up")} onDn={()=>voteVehicle(v.id,"down")}/>;
           })}
         </div>
@@ -1616,7 +1616,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
           {[...(trip.accommodationOptions||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(a=>{
             const nights=calcAccomNights(a);
             return <VCard key={a.id} icon="🏨" name={a.name} subtitle={a.address?`📍 ${a.address}`:null}
-              pills={<>{a.pricePerNight>0&&<span className="pill pill-y">💰 ${a.pricePerNight}/night</span>}{nights>0&&<span className="pill pill-b">🌙 {nights}n</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>}
+              pills={<>{a.pricePerNight>0&&<span className="pill pill-y">💰 ${a.pricePerNight}/night</span>}{nights>0&&<span className="pill pill-b">× {nights} night{nights!==1?"s":""}</span>}{a.pricePerNight>0&&nights>0&&<span className="pill pill-g">= ${(a.pricePerNight*nights).toLocaleString()} total</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>}
               up={a.upvotes} dn={a.downvotes} onUp={()=>voteAccom(a.id,"up")} onDn={()=>voteAccom(a.id,"down")}/>;
           })}
         </div>
@@ -1628,7 +1628,7 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
           :[...(trip.calendarItems||[])].sort((a,b)=>((b.metadata?.upvotes||[]).length-(b.metadata?.downvotes||[]).length)-((a.metadata?.upvotes||[]).length-(a.metadata?.downvotes||[]).length)).map(ci=>{
             const tm=TYPE_META[ci.type]||TYPE_META.activity;
             return <VCard key={ci.id} icon={tm.icon} name={ci.title} subtitle={ci.location?`📍 ${ci.location}`:null} desc={ci.metadata?.description||null}
-              pills={<>{ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}{ci.price>0&&<span className="pill pill-g">💵 ${ci.price}</span>}<span className={`type-badge type-${ci.type}`}>{tm.icon} {tm.label}</span></>}
+              pills={<>{ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}{ci.price>0&&<span className="pill pill-g">💵 ${ci.price} {ci.priceType==="per_person"?"per person":"total"}</span>}<span className={`type-badge type-${ci.type}`}>{tm.icon} {tm.label}</span></>}
               up={ci.metadata?.upvotes} dn={ci.metadata?.downvotes} onUp={()=>voteAct(ci.id,"up")} onDn={()=>voteAct(ci.id,"down")}/>;
           })
         }
