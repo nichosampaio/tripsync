@@ -1495,145 +1495,98 @@ function ActivityTab({trip,setTrip,user,db}) {
 
 // ─── VOTING TAB ───────────────────────────────────────────────────────────────
 function VotingTab({trip,setTrip,user,db,authUserId}) {
-  const userId = authUserId || user;
+  const uid = authUserId || user;
 
-  // ── Generic vote writer — writes to votes table for all item types ──
-  const castVote = async (dir, opts) => {
-    // opts: { type: "activity"|"accommodation"|"vehicle"|"destination", id, section? }
+  // Single writer — always uses the votes table
+  const writeVote = async (dir, col, id) => {
     if(!db || db.isMock) return;
-    const { type, id } = opts;
-    const col = type === "activity" ? "activity_id"
-              : type === "accommodation" ? "accommodation_id"
-              : type === "vehicle" ? "vehicle_id"
-              : null;
-    if(!col) return; // destinations use local state only (no FK in votes table)
-    const voteValue = dir === "up" ? 1 : -1;
-
-    // Check if user already voted this way — if so, delete (toggle off)
-    const { data: existing } = await supabase.from("votes")
-      .select("id,value").eq(col, id).eq("user_id", userId).maybeSingle();
-
-    if(existing && existing.value === voteValue) {
-      await supabase.from("votes").delete().eq("id", existing.id);
+    const val = dir === "up" ? 1 : -1;
+    // Check existing vote
+    const { data: existing } = await supabase
+      .from("votes").select("id,value").eq(col, id).eq("user_id", uid).maybeSingle();
+    if(existing) {
+      if(existing.value === val) {
+        // Same direction — toggle off
+        await supabase.from("votes").delete().eq("id", existing.id);
+      } else {
+        // Different direction — update
+        await supabase.from("votes").update({ value: val }).eq("id", existing.id);
+      }
     } else {
-      await supabase.from("votes").upsert(
-        { [col]: id, user_id: userId, value: voteValue },
-        { onConflict: `${col},user_id` }
-      );
+      await supabase.from("votes").insert({ [col]: id, user_id: uid, value: val });
     }
   };
 
-  // ── Destination votes (local state + trips.country_info) ──
-  const voteDestination = (id) => {
-    const items = trip.destinations || [];
-    const item = items.find(i => i.id === id);
-    if(!item) return;
-    const hasVote = (item.votes||[]).includes(userId);
-    const newVotes = hasVote ? item.votes.filter(v=>v!==userId) : [...(item.votes||[]), userId];
-    const updated = items.map(i => i.id!==id ? i : {...i, votes:newVotes});
+  // Destination votes (no FK in votes table — stored in trips.country_info)
+  const voteDest = (id) => {
+    const updated = (trip.destinations||[]).map(d => {
+      if(d.id !== id) return d;
+      const has = (d.votes||[]).includes(uid);
+      return { ...d, votes: has ? d.votes.filter(v=>v!==uid) : [...(d.votes||[]), uid] };
+    });
     if(db && !db.isMock) {
-      supabase.from("trips").update({
-        country_info: { ...(trip.country||{}), destinations: updated }
-      }).eq("id", trip.id);
+      supabase.from("trips").update({ country_info: {...(trip.country||{}), destinations: updated} }).eq("id", trip.id);
     }
     setTrip(t => ({...t, destinations: updated}));
   };
 
-  // ── Vehicle votes ──
-  const voteVehicle = (id, dir) => {
-    setTrip(t => ({
-      ...t,
-      vehicleRentals: (t.vehicleRentals||[]).map(v => {
-        if(v.id !== id) return v;
-        const up = v.upvotes||[], down = v.downvotes||[];
-        let newUp, newDown;
-        if(dir==="up") {
-          const has = up.includes(userId);
-          newUp = has ? up.filter(u=>u!==userId) : [...up.filter(u=>u!==userId), userId];
-          newDown = down.filter(u=>u!==userId);
-        } else {
-          const has = down.includes(userId);
-          newDown = has ? down.filter(u=>u!==userId) : [...down.filter(u=>u!==userId), userId];
-          newUp = up.filter(u=>u!==userId);
-        }
-        castVote(dir, { type:"vehicle", id });
-        return {...v, upvotes:newUp, downvotes:newDown};
-      })
-    }));
+  // Activity votes — votes table, activity_id column
+  const voteAct = (id, dir) => {
+    setTrip(t => ({...t, calendarItems: t.calendarItems.map(ci => {
+      if(ci.id !== id) return ci;
+      const up = ci.metadata?.upvotes||[], dn = ci.metadata?.downvotes||[];
+      let nu, nd;
+      if(dir==="up"){ const h=up.includes(uid); nu=h?up.filter(x=>x!==uid):[...up.filter(x=>x!==uid),uid]; nd=dn.filter(x=>x!==uid); }
+      else           { const h=dn.includes(uid); nd=h?dn.filter(x=>x!==uid):[...dn.filter(x=>x!==uid),uid]; nu=up.filter(x=>x!==uid); }
+      writeVote(dir, "activity_id", id);
+      return {...ci, metadata:{...ci.metadata, upvotes:nu, downvotes:nd}};
+    })}));
   };
 
-  // ── Accommodation votes ──
+  // Accommodation votes — votes table, accommodation_id column
   const voteAccom = (id, dir) => {
-    setTrip(t => ({
-      ...t,
-      accommodationOptions: t.accommodationOptions.map(a => {
-        if(a.id !== id) return a;
-        const up = a.upvotes||[], down = a.downvotes||[];
-        let newUp, newDown;
-        if(dir==="up") {
-          const has = up.includes(userId);
-          newUp = has ? up.filter(u=>u!==userId) : [...up.filter(u=>u!==userId), userId];
-          newDown = down.filter(u=>u!==userId);
-        } else {
-          const has = down.includes(userId);
-          newDown = has ? down.filter(u=>u!==userId) : [...down.filter(u=>u!==userId), userId];
-          newUp = up.filter(u=>u!==userId);
-        }
-        castVote(dir, { type:"accommodation", id });
-        return {...a, upvotes:newUp, downvotes:newDown};
-      })
-    }));
+    setTrip(t => ({...t, accommodationOptions: t.accommodationOptions.map(a => {
+      if(a.id !== id) return a;
+      const up = a.upvotes||[], dn = a.downvotes||[];
+      let nu, nd;
+      if(dir==="up"){ const h=up.includes(uid); nu=h?up.filter(x=>x!==uid):[...up.filter(x=>x!==uid),uid]; nd=dn.filter(x=>x!==uid); }
+      else           { const h=dn.includes(uid); nd=h?dn.filter(x=>x!==uid):[...dn.filter(x=>x!==uid),uid]; nu=up.filter(x=>x!==uid); }
+      writeVote(dir, "accommodation_id", id);
+      return {...a, upvotes:nu, downvotes:nd};
+    })}));
   };
 
-  // ── Activity votes ──
-  const voteCI = (id, dir) => {
-    setTrip(t => ({
-      ...t,
-      calendarItems: t.calendarItems.map(ci => {
-        if(ci.id !== id) return ci;
-        const up = ci.metadata?.upvotes||[], down = ci.metadata?.downvotes||[];
-        let newUp, newDown;
-        if(dir==="up") {
-          const has = up.includes(userId);
-          newUp = has ? up.filter(u=>u!==userId) : [...up.filter(u=>u!==userId), userId];
-          newDown = down.filter(u=>u!==userId);
-        } else {
-          const has = down.includes(userId);
-          newDown = has ? down.filter(u=>u!==userId) : [...down.filter(u=>u!==userId), userId];
-          newUp = up.filter(u=>u!==userId);
-        }
-        castVote(dir, { type:"activity", id });
-        return {...ci, metadata:{...ci.metadata, upvotes:newUp, downvotes:newDown}};
-      })
-    }));
+  // Vehicle votes — votes table, vehicle_id column
+  const voteVehicle = (id, dir) => {
+    setTrip(t => ({...t, vehicleRentals: t.vehicleRentals.map(v => {
+      if(v.id !== id) return v;
+      const up = v.upvotes||[], dn = v.downvotes||[];
+      let nu, nd;
+      if(dir==="up"){ const h=up.includes(uid); nu=h?up.filter(x=>x!==uid):[...up.filter(x=>x!==uid),uid]; nd=dn.filter(x=>x!==uid); }
+      else           { const h=dn.includes(uid); nd=h?dn.filter(x=>x!==uid):[...dn.filter(x=>x!==uid),uid]; nu=up.filter(x=>x!==uid); }
+      writeVote(dir, "vehicle_id", id);
+      return {...v, upvotes:nu, downvotes:nd};
+    })}));
   };
 
-  // ── Shared card renderer (used for vehicles, accommodations, activities) ──
-  const renderVoteCard = (icon, name, subtitle, description, pills, up, down, onUp, onDown) => {
-    const hasUp = up.includes(userId);
-    const hasDown = down.includes(userId);
-    const net = up.length - down.length;
+  // Shared card renderer
+  const VCard = ({icon,name,subtitle,desc,pills,up,dn,onUp,onDn}) => {
+    const hasUp=up.includes(uid), hasDn=dn.includes(uid), net=up.length-dn.length;
     return (
       <div className="act-vote-card">
         <div className="act-vote-top">
           <span className="act-vote-emoji">{icon}</span>
           <div className="act-vote-info">
             <div className="act-vote-name">{name}</div>
-            {subtitle && <div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>{subtitle}</div>}
-            {description && <div className="act-vote-desc">{description}</div>}
-            {pills && <div className="act-vote-pills">{pills}</div>}
+            {subtitle&&<div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>{subtitle}</div>}
+            {desc&&<div className="act-vote-desc">{desc}</div>}
+            {pills&&<div className="act-vote-pills">{pills}</div>}
           </div>
         </div>
         <div className="act-vote-row">
-          <button className={`vbtn-up ${hasUp?"on":""}`} onClick={onUp}>
-            👍 Yes{up.length>0?` (${up.length})`:""}</button>
-          <button className={`vbtn-down ${hasDown?"on":""}`} onClick={onDown}>
-            👎 No{down.length>0?` (${down.length})`:""}</button>
-          <div className="vote-tally">
-            <span style={{color:net>0?"var(--green)":net<0?"var(--red)":"var(--muted)",fontWeight:600}}>
-              {net>0?`+${net}`:net} net
-            </span>
-          </div>
+          <button className={`vbtn-up ${hasUp?"on":""}`} onClick={onUp}>👍 Yes{up.length>0?` (${up.length})`:""}</button>
+          <button className={`vbtn-down ${hasDn?"on":""}`} onClick={onDn}>👎 No{dn.length>0?` (${dn.length})`:""}</button>
+          <div className="vote-tally"><span style={{color:net>0?"var(--green)":net<0?"var(--red)":"var(--muted)",fontWeight:600}}>{net>0?`+${net}`:net} net</span></div>
         </div>
       </div>
     );
@@ -1641,28 +1594,18 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
 
   return (
     <div>
-      {/* ── Destinations ── */}
+      {/* Destinations */}
       {(trip.destinations||[]).length > 0 && (
         <div className="vote-card">
           <h4>📍 Destinations</h4>
-          {trip.destinations.map(dest => {
-            const up = dest.votes||[], down = [];
-            const hasUp = up.includes(userId);
-            const net = up.length;
+          {trip.destinations.map(d => {
+            const has=(d.votes||[]).includes(uid), net=(d.votes||[]).length;
             return (
-              <div key={dest.id} className="act-vote-card">
-                <div className="act-vote-top">
-                  <span className="act-vote-emoji">📍</span>
-                  <div className="act-vote-info">
-                    <div className="act-vote-name">{dest.name}</div>
-                  </div>
-                </div>
+              <div key={d.id} className="act-vote-card">
+                <div className="act-vote-top"><span className="act-vote-emoji">📍</span><div className="act-vote-info"><div className="act-vote-name">{d.name}</div></div></div>
                 <div className="act-vote-row">
-                  <button className={`vbtn-up ${hasUp?"on":""}`} onClick={()=>voteDestination(dest.id)}>
-                    👍 Yes{up.length>0?` (${up.length})`:""}</button>
-                  <div className="vote-tally">
-                    <span style={{color:net>0?"var(--green)":"var(--muted)",fontWeight:600}}>{net} vote{net!==1?"s":""}</span>
-                  </div>
+                  <button className={`vbtn-up ${has?"on":""}`} onClick={()=>voteDest(d.id)}>👍 Yes{net>0?` (${net})`:""}</button>
+                  <div className="vote-tally"><span style={{color:net>0?"var(--green)":"var(--muted)",fontWeight:600}}>{net} vote{net!==1?"s":""}</span></div>
                 </div>
               </div>
             );
@@ -1670,75 +1613,54 @@ function VotingTab({trip,setTrip,user,db,authUserId}) {
         </div>
       )}
 
-      {/* ── Vehicle Rentals ── */}
+      {/* Vehicle Rentals */}
       {(trip.vehicleRentals||[]).length > 0 && (
         <div className="vote-card">
           <h4>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
-          {[...(trip.vehicleRentals||[])].sort((a,b)=>
-            ((b.upvotes||[]).length-(b.downvotes||[]).length) -
-            ((a.upvotes||[]).length-(a.downvotes||[]).length)
-          ).map(v => {
-            const VTYPE = {car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
-            const days = calcVehicleDays(v);
-            const total = calcVehicleTotal(v);
-            return renderVoteCard(
-              VTYPE[v.vehicleType]||"🚗",
-              `${v.company}${v.model?` — ${v.model}`:""}`,
-              v.pickupLocation ? `📍 ${v.pickupLocation}` : null,
-              null,
-              <>{v.pricePerDay>0&&<span className="pill pill-y">💰 ${v.pricePerDay}/day</span>}
-                {days>0&&<span className="pill pill-b">📅 {days} day{days!==1?"s":""}</span>}
-                {total>0&&<span className="pill pill-g">💵 ${total} total</span>}</>,
-              v.upvotes||[], v.downvotes||[],
-              ()=>voteVehicle(v.id,"up"), ()=>voteVehicle(v.id,"down")
-            );
+          {[...(trip.vehicleRentals||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(v => {
+            const VTYPE={car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+            const days=calcVehicleDays(v), total=calcVehicleTotal(v);
+            return <VCard key={v.id}
+              icon={VTYPE[v.vehicleType]||"🚗"}
+              name={`${v.company}${v.model?` — ${v.model}`:""}`}
+              subtitle={v.pickupLocation?`📍 ${v.pickupLocation}`:null}
+              pills={<>{v.pricePerDay>0&&<span className="pill pill-y">💰 ${v.pricePerDay}/day</span>}{days>0&&<span className="pill pill-b">📅 {days}d</span>}{total>0&&<span className="pill pill-g">💵 ${total} total</span>}</>}
+              up={v.upvotes||[]} dn={v.downvotes||[]}
+              onUp={()=>voteVehicle(v.id,"up")} onDn={()=>voteVehicle(v.id,"down")}/>;
           })}
         </div>
       )}
 
-      {/* ── Accommodations ── */}
+      {/* Accommodations */}
       {(trip.accommodationOptions||[]).length > 0 && (
         <div className="vote-card">
           <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
-          {[...(trip.accommodationOptions||[])].sort((a,b)=>
-            ((b.upvotes||[]).length-(b.downvotes||[]).length) -
-            ((a.upvotes||[]).length-(a.downvotes||[]).length)
-          ).map(a => {
-            const nights = calcAccomNights(a);
-            return renderVoteCard(
-              "🏨", a.name,
-              a.address ? `📍 ${a.address}` : null,
-              null,
-              <>{a.pricePerNight>0&&<span className="pill pill-y">💰 ${a.pricePerNight}/night</span>}
-                {nights>0&&<span className="pill pill-b">🌙 {nights} night{nights!==1?"s":""}</span>}
-                {a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)} – {fmtDate(a.checkOut)}</span>}</>,
-              a.upvotes||[], a.downvotes||[],
-              ()=>voteAccom(a.id,"up"), ()=>voteAccom(a.id,"down")
-            );
+          {[...(trip.accommodationOptions||[])].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length)).map(a => {
+            const nights=calcAccomNights(a);
+            return <VCard key={a.id}
+              icon="🏨" name={a.name}
+              subtitle={a.address?`📍 ${a.address}`:null}
+              pills={<>{a.pricePerNight>0&&<span className="pill pill-y">💰 ${a.pricePerNight}/night</span>}{nights>0&&<span className="pill pill-b">🌙 {nights}n</span>}{a.checkIn&&a.checkOut&&<span className="pill pill-p">📅 {fmtDate(a.checkIn)}–{fmtDate(a.checkOut)}</span>}</>}
+              up={a.upvotes||[]} dn={a.downvotes||[]}
+              onUp={()=>voteAccom(a.id,"up")} onDn={()=>voteAccom(a.id,"down")}/>;
           })}
         </div>
       )}
 
-      {/* ── Activities & Items ── */}
+      {/* Activities & Items */}
       <div className="vote-card">
-        <h4>🗳️ Activities & Items ({trip.calendarItems?.length||0})</h4>
-        {(trip.calendarItems||[]).length === 0
+        <h4>🗳️ Activities & Items ({(trip.calendarItems||[]).length})</h4>
+        {(trip.calendarItems||[]).length===0
           ? <div style={{textAlign:"center",padding:"20px 0",color:"var(--muted)",fontSize:14}}>No items yet — add some in the <strong>🎯 Items</strong> tab.</div>
-          : [...(trip.calendarItems||[])].sort((a,b)=>
-              ((b.metadata?.upvotes||[]).length-(b.metadata?.downvotes||[]).length) -
-              ((a.metadata?.upvotes||[]).length-(a.metadata?.downvotes||[]).length)
-            ).map(ci => {
-              const tm = TYPE_META[ci.type]||TYPE_META.activity;
-              return renderVoteCard(
-                tm.icon, ci.title,
-                ci.location ? `📍 ${ci.location}` : null,
-                ci.metadata?.description||null,
-                <>{ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}
-                  {ci.price>0&&<span className="pill pill-g">💵 ${ci.price}</span>}
-                  <span className={`type-badge type-${ci.type}`}>{tm.icon} {tm.label}</span></>,
-                ci.metadata?.upvotes||[], ci.metadata?.downvotes||[],
-                ()=>voteCI(ci.id,"up"), ()=>voteCI(ci.id,"down")
-              );
+          : [...(trip.calendarItems||[])].sort((a,b)=>((b.metadata?.upvotes||[]).length-(b.metadata?.downvotes||[]).length)-((a.metadata?.upvotes||[]).length-(a.metadata?.downvotes||[]).length)).map(ci => {
+              const tm=TYPE_META[ci.type]||TYPE_META.activity;
+              return <VCard key={ci.id}
+                icon={tm.icon} name={ci.title}
+                subtitle={ci.location?`📍 ${ci.location}`:null}
+                desc={ci.metadata?.description||null}
+                pills={<>{ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}{ci.price>0&&<span className="pill pill-g">💵 ${ci.price}</span>}<span className={`type-badge type-${ci.type}`}>{tm.icon} {tm.label}</span></>}
+                up={ci.metadata?.upvotes||[]} dn={ci.metadata?.downvotes||[]}
+                onUp={()=>voteAct(ci.id,"up")} onDn={()=>voteAct(ci.id,"down")}/>;
             })
         }
       </div>
@@ -3043,47 +2965,42 @@ export default function App() {
     processPendingInvites(authUser.id, authUser.email?.toLowerCase());
     loadJoinRequests(authUser.id);
 
-    const memberChannel = supabase.channel(`trip_members:${authUser.id}`)
+    const memberCh = supabase.channel(`tm:${authUser.id}`)
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"trip_members",filter:`user_id=eq.${authUser.id}`},
         ()=>loadTrips(authUser.id)).subscribe();
 
-    const requestChannel = supabase.channel(`join_requests:${authUser.id}`)
+    const reqCh = supabase.channel(`notif:${authUser.id}`)
       .on("postgres_changes",{event:"INSERT",schema:"public",table:"notifications"},
         ()=>loadJoinRequests(authUser.id)).subscribe();
 
-    const votesChannel = supabase.channel(`votes:${authUser.id}`)
-      .on("postgres_changes",{event:"*",schema:"public",table:"votes"},
-        async ()=>{
-          setActive(prev=>{
-            if(!prev) return prev;
-            const filters=[
-              ...prev.calendarItems.map(ci=>`activity_id.eq.${ci.id}`),
-              ...prev.accommodationOptions.map(a=>`accommodation_id.eq.${a.id}`),
-              ...prev.vehicleRentals.map(v=>`vehicle_id.eq.${v.id}`),
-            ];
-            if(!filters.length) return prev;
-            supabase.from("votes").select("*").or(filters.join(",")).then(({data:vd})=>{
-              const aV={},acV={},vhV={};
-              for(const v of (vd||[])){
-                if(v.activity_id){if(!aV[v.activity_id])aV[v.activity_id]={upvotes:[],downvotes:[]};v.value===1?aV[v.activity_id].upvotes.push(v.user_id):aV[v.activity_id].downvotes.push(v.user_id);}
-                if(v.accommodation_id){if(!acV[v.accommodation_id])acV[v.accommodation_id]={upvotes:[],downvotes:[]};v.value===1?acV[v.accommodation_id].upvotes.push(v.user_id):acV[v.accommodation_id].downvotes.push(v.user_id);}
-                if(v.vehicle_id){if(!vhV[v.vehicle_id])vhV[v.vehicle_id]={upvotes:[],downvotes:[]};v.value===1?vhV[v.vehicle_id].upvotes.push(v.user_id):vhV[v.vehicle_id].downvotes.push(v.user_id);}
-              }
-              setActive(p=>!p?p:{...p,
-                calendarItems:p.calendarItems.map(ci=>({...ci,metadata:{...ci.metadata,upvotes:aV[ci.id]?.upvotes||[],downvotes:aV[ci.id]?.downvotes||[]}})),
-                accommodationOptions:p.accommodationOptions.map(a=>({...a,upvotes:acV[a.id]?.upvotes||[],downvotes:acV[a.id]?.downvotes||[]})),
-                vehicleRentals:p.vehicleRentals.map(v=>({...v,upvotes:vhV[v.id]?.upvotes||[],downvotes:vhV[v.id]?.downvotes||[]})),
-              });
+    const votesCh = supabase.channel(`votes:${authUser.id}`)
+      .on("postgres_changes",{event:"*",schema:"public",table:"votes"}, async ()=>{
+        setActive(prev=>{
+          if(!prev) return prev;
+          const filters=[
+            ...prev.calendarItems.map(ci=>`activity_id.eq.${ci.id}`),
+            ...prev.accommodationOptions.map(a=>`accommodation_id.eq.${a.id}`),
+            ...prev.vehicleRentals.map(v=>`vehicle_id.eq.${v.id}`),
+          ];
+          if(!filters.length) return prev;
+          supabase.from("votes").select("*").or(filters.join(",")).then(({data:vd})=>{
+            const aV={},acV={},vhV={};
+            for(const v of (vd||[])){
+              if(v.activity_id){if(!aV[v.activity_id])aV[v.activity_id]={up:[],dn:[]};v.value===1?aV[v.activity_id].up.push(v.user_id):aV[v.activity_id].dn.push(v.user_id);}
+              if(v.accommodation_id){if(!acV[v.accommodation_id])acV[v.accommodation_id]={up:[],dn:[]};v.value===1?acV[v.accommodation_id].up.push(v.user_id):acV[v.accommodation_id].dn.push(v.user_id);}
+              if(v.vehicle_id){if(!vhV[v.vehicle_id])vhV[v.vehicle_id]={up:[],dn:[]};v.value===1?vhV[v.vehicle_id].up.push(v.user_id):vhV[v.vehicle_id].dn.push(v.user_id);}
+            }
+            setActive(p=>!p?p:{...p,
+              calendarItems:p.calendarItems.map(ci=>({...ci,metadata:{...ci.metadata,upvotes:aV[ci.id]?.up||[],downvotes:aV[ci.id]?.dn||[]}})),
+              accommodationOptions:p.accommodationOptions.map(a=>({...a,upvotes:acV[a.id]?.up||[],downvotes:acV[a.id]?.dn||[]})),
+              vehicleRentals:p.vehicleRentals.map(v=>({...v,upvotes:vhV[v.id]?.up||[],downvotes:vhV[v.id]?.dn||[]})),
             });
-            return prev;
           });
-        }).subscribe();
+          return prev;
+        });
+      }).subscribe();
 
-    return ()=>{
-      supabase.removeChannel(memberChannel);
-      supabase.removeChannel(requestChannel);
-      supabase.removeChannel(votesChannel);
-    };
+    return ()=>{ supabase.removeChannel(memberCh); supabase.removeChannel(reqCh); supabase.removeChannel(votesCh); };
   },[authUser?.id]);
 
   // ── Forgot Password — sends reset email ──
@@ -3193,117 +3110,82 @@ export default function App() {
   const loadTripDetails = async (trip) => {
     setTripLoading(true);
 
-    // Load all data in parallel
-    const [
-      { data: items },
-      { data: accoms },
-      { data: vehicles },
-    ] = await Promise.all([
-      supabase.from("activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
-      supabase.from("accommodations").select("*").eq("trip_id", trip.id),
+    // Load calendar items (activities)
+    const { data: items } = await supabase
+      .from("activities")
+      .select("*")
+      .eq("trip_id", trip.id)
+      .order("created_at", { ascending: true });
+
+    // Load accommodations
+    const { data: accoms } = await supabase
+      .from("accommodations")
+      .select("*")
+      .eq("trip_id", trip.id);
+
+    // Load vehicles and personal budget in parallel with votes
+    const [{ data: vehicles }, { data: profile }] = await Promise.all([
       supabase.from("vehicle_rentals").select("*").eq("trip_id", trip.id),
+      (authUser?.id || authUserIdRef.current)
+        ? supabase.from("profiles").select("personal_budget").eq("id", authUser?.id || authUserIdRef.current).single()
+        : Promise.resolve({ data: null }),
     ]);
 
-    // Load all votes for activities and accommodations in this trip
-    const activityIds = (items||[]).map(a => a.id);
-    const accomIds    = (accoms||[]).map(a => a.id);
-    const vehicleIds  = (vehicles||[]).map(v => v.id);
-
-    let allVotes = [];
-    if(activityIds.length > 0 || accomIds.length > 0 || vehicleIds.length > 0) {
+    // Load all votes for this trip from the votes table
+    const actIds  = (items||[]).map(a => a.id);
+    const acIds   = (accoms||[]).map(a => a.id);
+    const vIds    = (vehicles||[]).map(v => v.id);
+    const allIds  = [...actIds, ...acIds, ...vIds];
+    let allVotes  = [];
+    if(allIds.length > 0) {
       const filters = [
-        ...activityIds.map(id => `activity_id.eq.${id}`),
-        ...accomIds.map(id => `accommodation_id.eq.${id}`),
-        ...vehicleIds.map(id => `vehicle_id.eq.${id}`),
-      ];
-      const { data: vd } = await supabase.from("votes").select("*").or(filters.join(","));
+        ...actIds.map(id=>`activity_id.eq.${id}`),
+        ...acIds.map(id=>`accommodation_id.eq.${id}`),
+        ...vIds.map(id=>`vehicle_id.eq.${id}`),
+      ].join(",");
+      const { data: vd } = await supabase.from("votes").select("*").or(filters);
       allVotes = vd || [];
     }
-
-    // Bucket votes by item id
-    const actVotes={}, accomVotes={}, vehicleVotes={};
+    // Bucket by item id
+    const aV={}, acV={}, vhV={};
     for(const v of allVotes) {
-      if(v.activity_id) {
-        if(!actVotes[v.activity_id]) actVotes[v.activity_id]={upvotes:[],downvotes:[]};
-        if(v.value===1)  actVotes[v.activity_id].upvotes.push(v.user_id);
-        if(v.value===-1) actVotes[v.activity_id].downvotes.push(v.user_id);
-      }
-      if(v.accommodation_id) {
-        if(!accomVotes[v.accommodation_id]) accomVotes[v.accommodation_id]={upvotes:[],downvotes:[]};
-        if(v.value===1)  accomVotes[v.accommodation_id].upvotes.push(v.user_id);
-        if(v.value===-1) accomVotes[v.accommodation_id].downvotes.push(v.user_id);
-      }
-      if(v.vehicle_id) {
-        if(!vehicleVotes[v.vehicle_id]) vehicleVotes[v.vehicle_id]={upvotes:[],downvotes:[]};
-        if(v.value===1)  vehicleVotes[v.vehicle_id].upvotes.push(v.user_id);
-        if(v.value===-1) vehicleVotes[v.vehicle_id].downvotes.push(v.user_id);
-      }
+      if(v.activity_id)     { if(!aV[v.activity_id])   aV[v.activity_id]  ={up:[],dn:[]}; v.value===1?aV[v.activity_id].up.push(v.user_id)  :aV[v.activity_id].dn.push(v.user_id); }
+      if(v.accommodation_id){ if(!acV[v.accommodation_id]) acV[v.accommodation_id]={up:[],dn:[]}; v.value===1?acV[v.accommodation_id].up.push(v.user_id):acV[v.accommodation_id].dn.push(v.user_id); }
+      if(v.vehicle_id)      { if(!vhV[v.vehicle_id])   vhV[v.vehicle_id]  ={up:[],dn:[]}; v.value===1?vhV[v.vehicle_id].up.push(v.user_id)  :vhV[v.vehicle_id].dn.push(v.user_id); }
     }
 
     const calendarItems = (items||[]).map(a => ({
-      id:          a.id,
-      type:        fromDbCategory(a.category),
-      title:       a.title,
-      day:         a.scheduled_date || null,
-      startTime:   a.scheduled_time || null,
-      startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: a.duration_min || 60,
-      location:    a.location || "",
-      price:       parseFloat(a.cost) || 0,
-      priceType:   a.price_type || "flat",
-      metadata: {
-        description: a.description || "",
-        notes:       a.notes       || "",
-        upvotes:     actVotes[a.id]?.upvotes   || [],
-        downvotes:   actVotes[a.id]?.downvotes || [],
-        createdBy:   a.created_by || "",
-        checkIn:     null,
-        checkOut:    null,
-        transportationTime: "",
+      id:a.id, type:fromDbCategory(a.category), title:a.title,
+      day:a.scheduled_date||null, startTime:a.scheduled_time||null,
+      startMin:a.scheduled_time?timeStrToMin(a.scheduled_time):null,
+      durationMin:a.duration_min||60, location:a.location||"",
+      price:parseFloat(a.cost)||0, priceType:a.price_type||"flat",
+      metadata:{
+        description:a.description||"", notes:a.notes||"",
+        upvotes:aV[a.id]?.up||[], downvotes:aV[a.id]?.dn||[],
+        createdBy:a.created_by||"", checkIn:null, checkOut:null, transportationTime:"",
       },
     }));
 
     const accommodationOptions = (accoms||[]).map(a => ({
-      id:            a.id,
-      name:          a.name,
-      address:       a.address || "",
-      pricePerNight: parseFloat(a.cost_per_night) || 0,
-      rating:        a.rating ? String(a.rating) : "",
-      checkIn:       a.check_in  || "",
-      checkOut:      a.check_out || "",
-      notes:         a.notes || "",
-      votes:         Array.isArray(a.votes) ? a.votes : [],   // legacy jsonb fallback
-      upvotes:       accomVotes[a.id]?.upvotes   || [],
-      downvotes:     accomVotes[a.id]?.downvotes || [],
+      id:a.id, name:a.name, address:a.address||"",
+      pricePerNight:parseFloat(a.cost_per_night)||0,
+      rating:a.rating?String(a.rating):"",
+      checkIn:a.check_in||"", checkOut:a.check_out||"", notes:a.notes||"",
+      votes:Array.isArray(a.votes)?a.votes:[],
+      upvotes:acV[a.id]?.up||[], downvotes:acV[a.id]?.dn||[],
     }));
 
-    // Load personal budget — guard against authUser being null during restore
-    const currentUserId = authUser?.id || authUserIdRef.current;
-    const { data: profile } = currentUserId ? await supabase
-      .from("profiles")
-      .select("personal_budget")
-      .eq("id", currentUserId)
-      .single() : { data: null };
-
     const vehicleRentals = (vehicles||[]).map(v => ({
-      id:              v.id,
-      company:         v.company,
-      model:           v.model || "",
-      vehicleType:     v.vehicle_type || "car",
-      pickupDate:      v.pickup_date || "",
-      returnDate:      v.return_date || "",
-      pricePerDay:     parseFloat(v.price_per_day) || 0,
-      price:           parseFloat(v.price_per_day) || 0,
-      priceType:       v.price_type || "daily",
-      rating:          v.rating || "",
-      pickupLocation:  v.pickup_location || "",
-      dropoffLocation: v.dropoff_location || "",
-      seats:           v.seats || "",
-      transmission:    v.transmission || "automatic",
-      notes:           v.notes || "",
-      votes:           Array.isArray(v.votes) ? v.votes : [],  // legacy jsonb fallback
-      upvotes:         vehicleVotes[v.id]?.upvotes   || [],
-      downvotes:       vehicleVotes[v.id]?.downvotes || [],
+      id:v.id, company:v.company, model:v.model||"",
+      vehicleType:v.vehicle_type||"car",
+      pickupDate:v.pickup_date||"", returnDate:v.return_date||"",
+      pricePerDay:parseFloat(v.price_per_day)||0, price:parseFloat(v.price_per_day)||0,
+      priceType:v.price_type||"daily", rating:v.rating||"",
+      pickupLocation:v.pickup_location||"", dropoffLocation:v.dropoff_location||"",
+      seats:v.seats||"", transmission:v.transmission||"automatic", notes:v.notes||"",
+      votes:Array.isArray(v.votes)?v.votes:[],
+      upvotes:vhV[v.id]?.up||[], downvotes:vhV[v.id]?.dn||[],
     }));
 
     const fullTrip = {
@@ -3753,8 +3635,8 @@ export default function App() {
           <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
-                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
-                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",background:authMode==="login"?"var(--accent)":"transparent",color:authMode==="login"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("login");setAuthError("");}}>Sign In</button>
+                <button className="btn" style={{flex:1,padding:"8px 0",borderRadius:8,fontSize:14,justifyContent:"center",background:authMode==="signup"?"var(--accent)":"transparent",color:authMode==="signup"?"#fff":"var(--muted)"}} onClick={()=>{setAuthMode("signup");setAuthError("");}}>Create Account</button>
               </div>
               <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
               {authMode==="signup"&&<div className="form-group"><label className="form-label">Your Name</label><input className="form-input" placeholder="e.g. Maria" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/></div>}
