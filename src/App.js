@@ -1655,8 +1655,10 @@ function calcAccomNights(a) {
   return Math.max(n, 0);
 }
 function calcAccomTotal(a) {
-  const nights = calcAccomNights(a);
   const ppn = parseFloat(a.pricePerNight) || 0;
+  if(!ppn) return 0;
+  if(a.priceType === "total") return ppn;
+  const nights = calcAccomNights(a);
   return ppn * nights;
 }
 function calcAllAccomTotal(accommodationOptions) {
@@ -1855,7 +1857,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🏨 Accommodation Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"var(--accent2)"}}>Total: ${accomTotal.toLocaleString()}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total: <span style={{color:"#248a3d"}}>${accomTotal.toLocaleString()}</span></span>
         </div>
         {accomOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No accommodations added yet — go to <strong>🏨 Stays</strong> to add options.</p>
@@ -1874,7 +1876,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"var(--accent2)",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
@@ -1902,7 +1904,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
       <div className="budget-card">
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <h4 style={{margin:0}}>🚗 Vehicle Rental Detail</h4>
-          <span style={{fontSize:13,fontWeight:700,color:"#f97316"}}>Total: ${vehicleTotal.toLocaleString()}</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#1d1d1f"}}>Total: <span style={{color:"#248a3d"}}>${vehicleTotal.toLocaleString()}</span></span>
         </div>
         {vehicleOptions.length === 0 ? (
           <p className="text-muted" style={{fontSize:13}}>No vehicle rentals added yet — go to <strong>🚗 Vehicles</strong> to add options.</p>
@@ -1955,7 +1957,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
 }
 
 // ─── ACCOMMODATION TAB ────────────────────────────────────────────────────────
-const BLANK_A={name:"",address:"",pricePerNight:"",rating:"",checkIn:"",checkOut:"",notes:""};
+const BLANK_A={name:"",address:"",pricePerNight:"",priceType:"per_night",rating:"",checkIn:"",checkOut:"",notes:""};
 const BLANK_V={company:"",model:"",vehicleType:"car",pickupDate:"",returnDate:"",priceType:"daily",price:"",rating:"",pickupLocation:"",dropoffLocation:"",seats:"",transmission:"automatic",notes:"",votes:[]};
 function AccommodationTab({trip,setTrip,db}) {
   const [show,setShow] = useState(false);
@@ -1972,11 +1974,11 @@ function AccommodationTab({trip,setTrip,db}) {
   };
 
   const openAdd=()=>{setForm(BLANK_A);setEditId(null);setErrs({});setShow(true);};
-  const openEdit=a=>{setForm({name:a.name,address:a.address||"",pricePerNight:String(a.pricePerNight||""),rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
+  const openEdit=a=>{setForm({name:a.name,address:a.address||"",pricePerNight:String(a.pricePerNight||""),priceType:a.priceType||"per_night",rating:String(a.rating||""),checkIn:a.checkIn||"",checkOut:a.checkOut||"",notes:a.notes||""});setEditId(a.id);setErrs({});setShow(true);};
 
   const save=async ()=>{
     if(!validate()) return;
-    const formatted={...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",rating:form.rating?+form.rating:""};
+    const formatted={...form,pricePerNight:form.pricePerNight?+form.pricePerNight:"",priceType:form.priceType||"per_night",rating:form.rating?+form.rating:""};
     if(editId){
       const updated={...trip.accommodationOptions.find(a=>a.id===editId),...formatted};
       if(db) db.updateAccom(updated);
@@ -2004,8 +2006,20 @@ function AccommodationTab({trip,setTrip,db}) {
           <h5>{editId?"Edit Accommodation":"New Accommodation"}</h5>
           <div className="form-group"><label className="form-label">Name *</label><input {...F("name")} placeholder="e.g. Beachside Airbnb"/>{errs.name&&<div className="err-msg">{errs.name}</div>}</div>
           <div className="form-group"><label className="form-label">Address</label><input {...F("address")} placeholder="e.g. Zona Hotelera, Cancun"/></div>
+          <div className="form-group">
+            <label className="form-label">Pricing Type</label>
+            <div className="type-tab-row">
+              <button type="button" className={`type-tab ${form.priceType==="per_night"?"active":""}`} onClick={()=>setForm(f=>({...f,priceType:"per_night"}))}>💰 Per Night</button>
+              <button type="button" className={`type-tab ${form.priceType==="total"?"active":""}`} onClick={()=>setForm(f=>({...f,priceType:"total"}))}>🧾 Total Stay</button>
+            </div>
+            <p style={{fontSize:12,color:"var(--muted)",marginTop:5}}>{form.priceType==="per_night"?"Enter nightly rate — total calculated from dates.":"Enter full stay cost — nightly rate derived from dates."}</p>
+          </div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Price/Night ($)</label><input {...F("pricePerNight")} placeholder="180"/>{errs.pricePerNight&&<div className="err-msg">{errs.pricePerNight}</div>}</div>
+            <div className="form-group">
+              <label className="form-label">{form.priceType==="per_night"?"Price/Night ($)":"Total Stay Price ($)"}</label>
+              <input {...F("pricePerNight")} placeholder={form.priceType==="per_night"?"180":"750"}/>
+              {errs.pricePerNight&&<div className="err-msg">{errs.pricePerNight}</div>}
+            </div>
             <div className="form-group"><label className="form-label">Rating (1–5)</label><input {...F("rating")} placeholder="4.5"/>{errs.rating&&<div className="err-msg">{errs.rating}</div>}</div>
           </div>
           <div className="form-row">
@@ -2033,7 +2047,7 @@ function AccommodationTab({trip,setTrip,db}) {
               </div>
               <div className="card-meta">
                 {a.address&&<div className="card-meta-row">📍 <strong>{a.address}</strong></div>}
-                {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong></div>}
+                {a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}{a.priceType==="total"?" total stay":" /night"}</strong></div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
               </div>
@@ -2510,12 +2524,14 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
 
 // ─── SUMMARY TAB ─────────────────────────────────────────────────────────────
 function SummaryTab({trip}) {
-  const topDest=[...trip.destinations].sort((a,b)=>b.votes.length-a.votes.length)[0];
+  const topDest=[...trip.destinations].sort((a,b)=>(b.votes||[]).length-(a.votes||[]).length)[0];
   const nights=nightsBetween(trip.startDate,trip.endDate);
   const items=trip.calendarItems||[];
   const ciTotal=items.reduce((s,c)=>s+(c.price||0),0);
   const accomTotal=calcAllAccomTotal(trip.accommodationOptions||[]);
-  const grandTotal=ciTotal+accomTotal;
+  const vehicleTotal=calcAllVehicleTotal(trip.vehicleRentals||[]);
+  const grandTotal=ciTotal+accomTotal+vehicleTotal;
+  const memberCount=trip.members?.length||1;
   return (
     <div className="summary-card">
       <div className="flex-between" style={{marginBottom:6}}>
@@ -2528,10 +2544,87 @@ function SummaryTab({trip}) {
       <div className="summary-grid">
         <div className="summary-item"><label>📍 Destination</label><div className="val">{topDest?.name}</div></div>
         <div className="summary-item"><label>📅 Dates</label><div className="val" style={{fontSize:14}}>{fmtRange(trip.startDate,trip.endDate)}</div>{nights>0&&<div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>{nights} nights</div>}</div>
-        <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
+        <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/memberCount)}/person</div></div>
         <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
       </div>
-      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag tag-b">{a.name}{a.pricePerNight?` · $${a.pricePerNight}/night`:""}</span>)}</div></div>}
+
+      {/* Accommodations */}
+      {(trip.accommodationOptions||[]).length>0&&(
+        <div className="mt-6">
+          <div className="flex-between" style={{marginBottom:10}}>
+            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label>
+            <span style={{fontSize:12,fontWeight:700,color:"#248a3d"}}>Total: ${accomTotal.toLocaleString()}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {trip.accommodationOptions.map(a=>{
+              const n=calcAccomNights(a), ppn=parseFloat(a.pricePerNight)||0;
+              const tot=calcAccomTotal(a), hasData=a.checkIn&&a.checkOut&&ppn>0;
+              const isTotal=a.priceType==="total";
+              const nightlyRate=isTotal?(n>0&&ppn>0?Math.round(ppn/n):null):ppn;
+              return(
+                <div key={a.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:hasData?8:0}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:14}}>{a.name}</div>
+                      {a.address&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
+                    </div>
+                    {hasData&&<div style={{fontSize:15,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12}}>${tot.toLocaleString()}</div>}
+                  </div>
+                  {hasData&&<div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                    {nightlyRate>0&&<span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${nightlyRate}/night</span>}
+                    {n>0&&<span style={{fontSize:12,color:"var(--muted)"}}>× {n} night{n!==1?"s":""}</span>}
+                    <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
+                    <span style={{fontSize:12,fontWeight:700,color:"#248a3d"}}>${tot.toLocaleString()}</span>
+                    {isTotal&&<span style={{fontSize:11,color:"var(--muted)"}}>🧾 Total stay</span>}
+                  </div>}
+                  {(a.checkIn||a.checkOut)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:6}}>🗓️ {a.checkIn?fmtDate(a.checkIn):"?"} → {a.checkOut?fmtDate(a.checkOut):"?"}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Vehicle Rentals */}
+      {(trip.vehicleRentals||[]).length>0&&(
+        <div className="mt-6">
+          <div className="flex-between" style={{marginBottom:10}}>
+            <label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label>
+            <span style={{fontSize:12,fontWeight:700,color:"#248a3d"}}>Total: ${vehicleTotal.toLocaleString()}</span>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {trip.vehicleRentals.map(v=>{
+              const days=calcVehicleDays(v),total=calcVehicleTotal(v);
+              const isDaily=v.priceType!=="full";
+              const ppd=v.pricePerDay||0;
+              const derivedRate=(!isDaily&&days>0&&total>0)?Math.round(total/days):null;
+              const displayRate=isDaily?ppd:derivedRate;
+              const VTYPE={car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+              return(
+                <div key={v.id} style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:14}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model?` — ${v.model}`:""}</div>
+                      {v.pickupLocation&&<div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {v.pickupLocation}</div>}
+                    </div>
+                    {total>0&&<div style={{fontSize:15,fontWeight:800,color:"#f97316",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                  </div>
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:6}}>
+                    {displayRate>0&&<span style={{fontSize:12,background:"rgba(249,115,22,0.10)",color:"#f97316",border:"1px solid rgba(249,115,22,0.22)",borderRadius:20,padding:"3px 10px"}}>${displayRate}/day</span>}
+                    {days>0&&<span style={{fontSize:12,color:"var(--muted)"}}>× {days} day{days!==1?"s":""}</span>}
+                    {total>0&&<><span style={{fontSize:12,color:"var(--muted)"}}>→</span><span style={{fontSize:12,fontWeight:700,color:"#248a3d"}}>${total.toLocaleString()}</span></>}
+                    {!isDaily&&<span style={{fontSize:11,color:"var(--muted)"}}>🧾 Full price</span>}
+                  </div>
+                  {(v.pickupDate||v.returnDate)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>🗓️ {v.pickupDate?fmtDate(v.pickupDate):"?"} → {v.returnDate?fmtDate(v.returnDate):"?"}</div>}
+                  {(v.transmission||v.seats)&&<div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>⚙️ {[v.transmission,v.seats?`${v.seats} seats`:null].filter(Boolean).join(" · ")}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Items */}
       {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}`:""}</span>)}</div></div>}
       <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
     </div>
@@ -3007,7 +3100,13 @@ export default function App() {
         role:     m.role,
         joinedAt: m.joined_at,
       })),
-      destinations:        t.destination ? [{id:1,name:t.destination,votes:[]}] : (t.country_info?.destination ? [{id:1,name:t.country_info.destination,votes:[]}] : []),
+      destinations: (()=>{
+        if(existing?.destinations?.length>0) return existing.destinations;
+        if(Array.isArray(t.country_info?.destinations)&&t.country_info.destinations.length>0)
+          return t.country_info.destinations.map(d=>({...d,upvotes:d.upvotes||[],downvotes:d.downvotes||[],votes:d.votes||[]}));
+        if(t.destination) return [{id:1,name:t.destination,votes:[],upvotes:[],downvotes:[]}];
+        return [{id:1,name:"TBD",votes:[],upvotes:[],downvotes:[]}];
+      })(),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
       activityCount:       (t.activities||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
@@ -3097,11 +3196,12 @@ export default function App() {
       name:          a.name,
       address:       a.address || "",
       pricePerNight: parseFloat(a.cost_per_night) || 0,
-      rating:        "",
+      priceType:     a.price_type || "per_night",
+      rating:        a.rating ? String(a.rating) : "",
       checkIn:       a.check_in || "",
       checkOut:      a.check_out || "",
-      notes:         "",
-      votes:         [],
+      notes:         a.notes || "",
+      votes:         [], upvotes:[], downvotes:[],
     }));
 
     // Load personal budget — guard against authUser being null during restore
@@ -3198,6 +3298,7 @@ export default function App() {
   }[cat] || "activity");
 
   const db = {
+    isMock,
     // ── Activities (calendar items) ──
     addItem: async (tripId, item) => {
       if(isMock) return item;
@@ -3257,6 +3358,7 @@ export default function App() {
         name:           accom.name,
         address:        accom.address || "",
         cost_per_night: accom.pricePerNight || 0,
+        price_type:     accom.priceType || "per_night",
         check_in:       accom.checkIn || new Date().toISOString().slice(0,10),
         check_out:      accom.checkOut || new Date().toISOString().slice(0,10),
         created_by:     null,
@@ -3271,6 +3373,7 @@ export default function App() {
         name:           accom.name,
         address:        accom.address || "",
         cost_per_night: accom.pricePerNight || 0,
+        price_type:     accom.priceType || "per_night",
         check_in:       accom.checkIn || null,
         check_out:      accom.checkOut || null,
       }).eq("id", accom.id);
