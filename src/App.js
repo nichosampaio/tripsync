@@ -2600,6 +2600,14 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
       {/* ── Invite by Email ── */}
       <div className="invite-panel" style={{marginTop:22}}>
         <h5>✉️ Invite by Email</h5>
+        {members.length >= 10 && (
+          <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"rgba(196,124,10,0.08)",border:"1px solid rgba(196,124,10,0.22)",borderRadius:10,padding:"10px 13px",marginBottom:12}}>
+            <span style={{fontSize:16,flexShrink:0}}>💡</span>
+            <p style={{fontSize:13,color:"var(--yellow)",margin:0,lineHeight:1.5}}>
+              <strong>Large groups can be harder to coordinate</strong> — TripSync works best for groups under 10. You can still invite more, but decisions may take longer to reach consensus.
+            </p>
+          </div>
+        )}
         <p style={{fontSize:13,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>Invited members can join the trip immediately from their home page.</p>
         <div style={{display:"flex",gap:8,marginBottom:4}}>
           <input
