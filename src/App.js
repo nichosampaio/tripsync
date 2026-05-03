@@ -6,14 +6,14 @@ const FONT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@3
 const CSS = `/* TripSync v3 */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
-body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; background: #f7f5f1; color: #1c1410; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif; background: #f0ede8; color: #1c1410; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 :root {
-  --bg: #f7f5f1;
-  --surface: #fffffe;
-  --surface2: #f4f1ec;
-  --surface3: #ede9e2;
-  --border: rgba(100,70,40,0.10);
-  --border-strong: rgba(100,70,40,0.18);
+  --bg: #f0ede8;
+  --surface: #fefcf9;
+  --surface2: #f4f1eb;
+  --surface3: #ece8e0;
+  --border: rgba(100,70,40,0.11);
+  --border-strong: rgba(100,70,40,0.20);
   --accent: #c96a28;
   --accent-hover: #b85a1e;
   --accent-soft: rgba(201,106,40,0.09);
@@ -37,12 +37,12 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
   --budget-green: #1e7a45;
   --budget-indigo: #4a6fa5;
   --budget-orange: #c96a28;
-  --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-full: 980px;
+  --r-sm: 7px; --r-md: 12px; --r-lg: 16px; --r-xl: 22px; --r-full: 980px;
 }
 .app { min-height: 100vh; background: var(--bg); }
 
 /* ─── NAV ─────────────────────────────────────────────── */
-.nav { display:flex; align-items:center; justify-content:space-between; padding:0 48px; height:58px; border-bottom:1px solid var(--border); background:rgba(255,255,254,0.92); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px); position:sticky; top:0; z-index:200; }
+.nav { display:flex; align-items:center; justify-content:space-between; padding:0 48px; height:58px; border-bottom:1px solid var(--border); background:rgba(254,252,249,0.94); backdrop-filter:saturate(180%) blur(20px); -webkit-backdrop-filter:saturate(180%) blur(20px); position:sticky; top:0; z-index:200; }
 .nav-logo { font-family:'Inter',sans-serif; font-size:17px; font-weight:800; color:var(--text); letter-spacing:-0.6px; cursor:pointer; display:flex; align-items:center; gap:8px; }
 .nav-logo-mark { width:26px; height:26px; border-radius:7px; background:linear-gradient(135deg,#c96a28,#e8924a); display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(201,106,40,0.35); flex-shrink:0; }
 .nav-logo-mark svg { width:14px; height:14px; fill:none; stroke:#fff; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
@@ -54,9 +54,9 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,#c96a28,#e8924a); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:12px; color:#fff; box-shadow:0 2px 8px rgba(201,106,40,0.3); flex-shrink:0; }
 
 /* ─── LANDING ─────────────────────────────────────────── */
-.landing { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:calc(100vh - 58px); text-align:center; padding:80px 24px 100px; position:relative; overflow:hidden; background:linear-gradient(170deg, #f7f5f1 0%, #fffffe 55%, #f7f5f1 100%); }
+.landing { display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:calc(100vh - 58px); text-align:center; padding:80px 24px 100px; position:relative; overflow:hidden; background:linear-gradient(170deg, #f0ede8 0%, #fefcf9 55%, #f0ede8 100%); }
 .landing::before { content:""; position:absolute; top:-80px; left:50%; transform:translateX(-50%); width:900px; height:600px; background:radial-gradient(ellipse 55% 50% at 50% 30%, rgba(201,106,40,0.08) 0%, rgba(232,146,74,0.04) 50%, transparent 75%); pointer-events:none; }
-.landing::after { content:""; position:absolute; bottom:0; left:0; right:0; height:180px; background:linear-gradient(to top, #f7f5f1, transparent); pointer-events:none; }
+.landing::after { content:""; position:absolute; bottom:0; left:0; right:0; height:180px; background:linear-gradient(to top, #f0ede8, transparent); pointer-events:none; }
 .landing-eyebrow { display:inline-flex; align-items:center; gap:7px; padding:6px 14px; border-radius:var(--r-full); background:rgba(201,106,40,0.07); border:1px solid rgba(201,106,40,0.18); color:var(--accent); font-size:12px; font-weight:600; letter-spacing:0.3px; margin-bottom:28px; position:relative; }
 .landing-eyebrow-dot { width:6px; height:6px; border-radius:50%; background:var(--accent); animation:pulse-dot 2s ease infinite; }
 @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
@@ -95,7 +95,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .trip-card:hover { box-shadow:var(--shadow-md); transform:translateY(-2px); border-color:rgba(201,106,40,0.2); }
 .trip-card:hover::before { opacity:1; }
 .trip-card-header { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px; }
-.trip-name { font-family:'Inter',sans-serif; font-size:16px; font-weight:700; color:var(--text); letter-spacing:-0.4px; line-height:1.3; }
+.trip-name { font-family:'Inter',sans-serif; font-size:15px; font-weight:700; color:var(--text); letter-spacing:-0.4px; line-height:1.3; }
 .badge { padding:3px 9px; border-radius:var(--r-full); font-size:11px; font-weight:600; background:var(--accent-soft); color:var(--accent); border:1px solid rgba(201,106,40,0.18); letter-spacing:0.1px; }
 .badge-yellow { background:var(--yellow-soft); color:var(--yellow); border-color:rgba(160,112,0,0.18); }
 .badge-green { background:var(--green-soft); color:var(--green); border-color:rgba(30,122,69,0.18); }
@@ -114,10 +114,10 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 @keyframes slideUp { from{opacity:0;transform:translateY(18px) scale(0.98)} to{opacity:1;transform:translateY(0) scale(1)} }
 
 /* ─── FORMS ───────────────────────────────────────────── */
-.form-group { margin-bottom:17px; }
+.form-group { margin-bottom:15px; }
 .form-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.form-label { display:block; font-size:11px; font-weight:700; color:var(--muted); margin-bottom:6px; letter-spacing:0.8px; text-transform:uppercase; font-family:'Inter',sans-serif; }
-.form-input { width:100%; padding:10px 13px; border-radius:var(--r-sm); background:var(--surface2); border:1.5px solid var(--border); color:var(--text); font-family:'Inter',sans-serif; font-size:13px; outline:none; transition:all 0.18s; }
+.form-label { display:block; font-size:10px; font-weight:700; color:var(--muted); margin-bottom:5px; letter-spacing:0.9px; text-transform:uppercase; font-family:'Inter',sans-serif; }
+.form-input { width:100%; padding:9px 12px; border-radius:7px; background:var(--surface2); border:1.5px solid var(--border); color:var(--text); font-family:'Inter',sans-serif; font-size:13px; outline:none; transition:all 0.18s; }
 .form-input:focus { border-color:var(--accent); background:var(--surface); box-shadow:0 0 0 3px rgba(201,106,40,0.10); }
 .form-input.err { border-color:var(--red); }
 .form-textarea { resize:vertical; min-height:76px; }
@@ -129,11 +129,11 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .trip-detail-header { display:flex; align-items:center; gap:11px; margin-bottom:8px; flex-wrap:wrap; }
 .back-btn { background:transparent; border:none; color:var(--accent); padding:6px 0; cursor:pointer; font-size:13px; font-weight:600; transition:opacity 0.15s; letter-spacing:-0.1px; }
 .back-btn:hover { opacity:0.6; }
-.trip-detail h2 { font-family:'Inter',sans-serif; font-size:26px; font-weight:800; letter-spacing:-0.7px; color:var(--text); }
+.trip-detail h2 { font-family:'Inter',sans-serif; font-size:26px; font-weight:800; letter-spacing:-0.8px; color:var(--text); }
 
 /* ─── SECTION TABS ────────────────────────────────────── */
 .section-tabs { display:flex; gap:0; margin:24px 0 22px; border-bottom:1px solid var(--border); flex-wrap:wrap; overflow-x:auto; }
-.section-tab { padding:9px 15px; border-radius:0; border:none; cursor:pointer; font-family:'Inter',sans-serif; font-size:12px; font-weight:500; background:transparent; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; white-space:nowrap; letter-spacing:0.1px; }
+.section-tab { padding:9px 15px; border-radius:0; border:none; cursor:pointer; font-family:'Inter',sans-serif; font-size:11.5px; font-weight:500; background:transparent; color:var(--muted); border-bottom:2px solid transparent; margin-bottom:-1px; transition:all 0.15s; white-space:nowrap; letter-spacing:0.15px; }
 .section-tab:hover { color:var(--text-secondary); }
 .section-tab.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:700; }
 .section-content { animation:fadeIn 0.2s ease; }
@@ -244,7 +244,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .add-input { flex:1; min-width:130px; padding:9px 13px; border-radius:10px; background:var(--surface2); border:1.5px solid var(--border); color:var(--text); font-family:'Inter',sans-serif; font-size:13px; outline:none; transition:all 0.16s; }
 .add-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(201,106,40,0.09); background:#fff; }
 .add-type { padding:9px 10px; border-radius:10px; background:var(--surface2); border:1.5px solid var(--border); color:var(--text); font-family:'Inter',sans-serif; font-size:13px; }
-.pill { padding:3px 10px; border-radius:var(--r-full); font-size:12px; font-weight:600; }
+.pill { padding:2px 8px; border-radius:5px; font-size:11px; font-weight:600; }
 .pill-b { background:var(--accent-soft); color:var(--accent); border:1px solid rgba(201,106,40,0.16); }
 .pill-p { background:rgba(110,110,115,0.09); color:var(--muted); border:1px solid rgba(110,110,115,0.16); }
 .pill-g { background:var(--green-soft); color:var(--green); border:1px solid rgba(36,138,61,0.16); }
@@ -292,8 +292,8 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .activity-desc { font-size:13px; color:var(--muted); line-height:1.55; margin:6px 0 12px; }
 
 /* ─── VOTING ──────────────────────────────────────────── */
-.vote-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:24px; margin-bottom:14px; box-shadow:var(--shadow-xs); }
-.vote-card h4 { font-family:'Inter',sans-serif; font-size:13px; font-weight:700; margin-bottom:14px; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); }
+.vote-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:22px 24px; margin-bottom:14px; box-shadow:var(--shadow-xs); }
+.vote-card h4 { font-family:'Inter',sans-serif; font-size:10px; font-weight:700; margin-bottom:14px; letter-spacing:1.3px; text-transform:uppercase; color:var(--muted); padding-bottom:10px; border-bottom:1px solid var(--border); }
 .vote-options { display:flex; flex-direction:column; gap:9px; }
 .vote-opt { display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border-radius:11px; background:var(--surface2); border:1px solid var(--border); cursor:pointer; transition:all 0.16s; }
 .vote-opt:hover { border-color:rgba(201,106,40,0.25); background:rgba(201,106,40,0.02); }
@@ -304,32 +304,34 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .vote-count { font-size:12px; color:var(--muted); min-width:44px; text-align:right; font-weight:500; }
 .vote-btn { padding:4px 13px; border-radius:var(--r-full); border:1px solid var(--border); background:transparent; color:var(--muted); cursor:pointer; font-size:12px; font-weight:600; white-space:nowrap; transition:all 0.15s; }
 .vote-btn.on { background:var(--accent); color:#fff; border-color:var(--accent); font-weight:600; box-shadow:0 2px 8px rgba(201,106,40,0.25); }
-.act-vote-card { background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-md); padding:18px; margin-bottom:9px; transition:box-shadow 0.18s; }
-.act-vote-card:hover { box-shadow:var(--shadow-sm); }
+.act-vote-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:16px 18px; margin-bottom:9px; transition:box-shadow 0.18s; box-shadow:var(--shadow-xs); }
+.act-vote-card:hover { box-shadow:var(--shadow-sm); border-color:var(--border-strong); }
 .act-vote-top { display:flex; gap:12px; align-items:flex-start; }
 .act-vote-emoji { font-size:20px; flex-shrink:0; margin-top:1px; }
 .act-vote-info { flex:1; min-width:0; }
-.act-vote-name { font-size:14px; font-weight:700; margin-bottom:2px; letter-spacing:-0.2px; color:var(--text); }
+.act-vote-name { font-size:13.5px; font-weight:700; margin-bottom:3px; letter-spacing:-0.2px; color:var(--text); }
 .act-vote-desc { font-size:12px; color:var(--muted); line-height:1.5; margin-bottom:8px; }
 .act-vote-pills { display:flex; gap:5px; flex-wrap:wrap; margin-bottom:10px; }
-.act-vote-row { display:flex; align-items:center; gap:7px; border-top:1px solid var(--border); padding-top:11px; margin-top:3px; }
-.vbtn-up { padding:5px 14px; border-radius:var(--r-sm); border:1px solid rgba(30,122,69,0.22); background:var(--green-soft); color:var(--green); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.14s; font-family:'Inter',sans-serif; }
-.vbtn-up.on { background:rgba(30,122,69,0.16); border-color:var(--green); }
-.vbtn-down { padding:5px 14px; border-radius:var(--r-sm); border:1px solid rgba(192,57,43,0.16); background:var(--red-soft); color:var(--red); font-size:12px; font-weight:600; cursor:pointer; transition:all 0.14s; font-family:'Inter',sans-serif; }
-.vbtn-down.on { background:rgba(192,57,43,0.13); border-color:var(--red); }
+.act-vote-row { display:flex; align-items:center; gap:8px; border-top:1px solid var(--border); padding-top:12px; margin-top:3px; }
+.vbtn-up { padding:6px 16px; border-radius:7px; border:none; background:linear-gradient(135deg,#1e7a45,#27a05c); color:#fff; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.14s; font-family:'Inter',sans-serif; box-shadow:0 2px 8px rgba(30,122,69,0.30); letter-spacing:0.1px; }
+.vbtn-up:hover { box-shadow:0 4px 12px rgba(30,122,69,0.38); transform:translateY(-1px); }
+.vbtn-up.on { background:linear-gradient(135deg,#166638,#1e7a45); box-shadow:0 2px 10px rgba(30,122,69,0.40); }
+.vbtn-down { padding:6px 16px; border-radius:7px; border:none; background:linear-gradient(135deg,#c0392b,#d44333); color:#fff; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.14s; font-family:'Inter',sans-serif; box-shadow:0 2px 8px rgba(192,57,43,0.25); letter-spacing:0.1px; }
+.vbtn-down:hover { box-shadow:0 4px 12px rgba(192,57,43,0.34); transform:translateY(-1px); }
+.vbtn-down.on { background:linear-gradient(135deg,#a0281c,#c0392b); box-shadow:0 2px 10px rgba(192,57,43,0.38); }
 .vote-tally { font-size:12px; color:var(--muted); margin-left:auto; font-weight:500; }
 
 /* ─── BUDGET ──────────────────────────────────────────── */
 .budget-dash { display:flex; flex-direction:column; gap:16px; }
 .budget-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:22px; box-shadow:var(--shadow-xs); }
-.budget-card h4 { font-family:'Inter',sans-serif; font-size:13px; font-weight:700; margin-bottom:15px; letter-spacing:0.5px; text-transform:uppercase; color:var(--muted); }
-.cat-row { display:flex; align-items:center; gap:11px; margin-bottom:11px; }
-.cat-icon { font-size:16px; width:24px; flex-shrink:0; text-align:center; }
-.cat-label { min-width:110px; font-size:13px; color:var(--muted); }
+.budget-card h4 { font-family:'Inter',sans-serif; font-size:10px; font-weight:700; margin-bottom:16px; letter-spacing:1.3px; text-transform:uppercase; color:var(--muted); padding-bottom:10px; border-bottom:1px solid var(--border); }
+.cat-row { display:flex; align-items:center; gap:12px; padding:8px 0; }
+.cat-bar-bg { flex:1; height:4px; background:var(--surface3); border-radius:4px; overflow:hidden; }
+.cat-bar-fill { height:100%; border-radius:4px; transition:width 0.6s cubic-bezier(0.25,0.46,0.45,0.94); }
+.cat-icon { font-size:15px; width:22px; flex-shrink:0; text-align:center; }
+.cat-label { min-width:110px; font-size:12.5px; color:var(--muted); font-weight:500; }
 .cat-bar-wrap { flex:1; }
-.cat-bar-bg { height:6px; background:var(--surface3); border-radius:3px; overflow:hidden; }
-.cat-bar-fill { height:100%; border-radius:3px; transition:width 0.6s cubic-bezier(0.25,0.46,0.45,0.94); }
-.cat-amount { min-width:64px; text-align:right; font-size:13px; font-weight:600; }
+.cat-amount { min-width:60px; text-align:right; font-size:12.5px; font-weight:700; }
 .budget-total-row { display:flex; justify-content:space-between; align-items:center; padding:14px 0 0; border-top:1px solid var(--border); }
 .budget-total-label { font-size:15px; font-weight:700; }
 .budget-total-val { font-family:'Inter',sans-serif; font-size:26px; font-weight:800; background:linear-gradient(135deg,#c96a28,#e8924a); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; letter-spacing:-0.6px; }
@@ -362,9 +364,12 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .members-tab { display:flex; flex-direction:column; gap:10px; }
 .member-row { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); transition:all 0.16s; }
 .member-row:hover { box-shadow:var(--shadow-sm); transform:translateY(-1px); }
-.member-avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#c96a28,#e8924a); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:14px; color:#fff; flex-shrink:0; box-shadow:0 3px 10px rgba(201,106,40,0.28); }
-.member-avatar.owner { background:linear-gradient(135deg,#f59e0b,#f97316); box-shadow:0 3px 10px rgba(249,115,22,0.28); }
-.member-avatar.viewer { background:linear-gradient(135deg,#8e8e93,#6e6e73); box-shadow:none; }
+.member-avatar { width:38px; height:38px; border-radius:50%; background:linear-gradient(135deg,#2a527a,#3a72aa); display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; color:#fff; flex-shrink:0; box-shadow:0 2px 8px rgba(42,82,122,0.28); }
+.member-avatar.owner { background:linear-gradient(135deg,#c96a28,#e8924a); box-shadow:0 2px 8px rgba(201,106,40,0.30); }
+.member-avatar.viewer { background:linear-gradient(135deg,#6a8a6a,#4a6a4a); box-shadow:0 2px 6px rgba(74,106,74,0.22); }
+.role-admin { background:linear-gradient(135deg,rgba(201,106,40,0.12),rgba(232,146,74,0.08)); color:var(--accent); border:1px solid rgba(201,106,40,0.22); padding:3px 9px; border-radius:5px; font-size:10.5px; font-weight:700; letter-spacing:0.3px; }
+.role-editor { background:linear-gradient(135deg,rgba(42,82,122,0.10),rgba(58,114,170,0.07)); color:#2a527a; border:1px solid rgba(42,82,122,0.20); padding:3px 9px; border-radius:5px; font-size:10.5px; font-weight:700; letter-spacing:0.3px; }
+.role-viewer { background:var(--surface2); color:var(--muted); border:1px solid var(--border); padding:3px 9px; border-radius:5px; font-size:10.5px; font-weight:600; letter-spacing:0.2px; }
 .member-info { flex:1; min-width:0; }
 .member-name { font-weight:600; font-size:14px; letter-spacing:-0.1px; }
 .member-meta { font-size:12px; color:var(--muted); margin-top:1px; }
@@ -429,7 +434,7 @@ const TYPE_META = {
   activity:  { icon:"🎯", label:"Activity",  color:"#38bdf8", tlClass:"tl-activity" },
   meal:      { icon:"🍽️", label:"Meal",       color:"#fbbf24", tlClass:"tl-meal" },
   transport: { icon:"🚌", label:"Transport",  color:"#34d399", tlClass:"tl-transport" },
-  hotel:     { icon:"🏨", label:"Check In/Out", color:"#818cf8", tlClass:"tl-hotel" },
+  hotel:     { icon:"🏨", label:"Check In/Out", color:"#4a6fa5", tlClass:"tl-hotel" },
   note:      { icon:"📝", label:"Note",       color:"#6b7fa3", tlClass:"tl-note" },
 };
 
@@ -1680,13 +1685,13 @@ function VotingTab({trip,setTrip,user,userId,db}) {
                 <div style={{fontWeight:600,fontSize:14,marginBottom:3}}>{a.name}</div>
                 <div className="act-vote-pills">
                   {isFull && total>0 && (
-                    <span className="pill" style={{background:"rgba(129,140,248,0.10)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)"}}>🧾 ${total.toLocaleString()} full price</span>
+                    <span className="pill" style={{background:"rgba(129,140,248,0.10)",color:"#4a6fa5",border:"1px solid rgba(74,111,165,0.22)"}}>🧾 ${total.toLocaleString()} full price</span>
                   )}
                   {!isFull && ppn>0 && nights>0 && (
-                    <span className="pill" style={{background:"rgba(129,140,248,0.10)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)"}}>🏨 ${ppn}/night × {nights}n = ${total.toLocaleString()} total</span>
+                    <span className="pill" style={{background:"rgba(129,140,248,0.10)",color:"#4a6fa5",border:"1px solid rgba(74,111,165,0.22)"}}>🏨 ${ppn}/night × {nights}n = ${total.toLocaleString()} total</span>
                   )}
                   {!isFull && ppn>0 && nights===0 && (
-                    <span className="pill" style={{background:"rgba(129,140,248,0.10)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)"}}>💰 ${ppn}/night</span>
+                    <span className="pill" style={{background:"rgba(129,140,248,0.10)",color:"#4a6fa5",border:"1px solid rgba(74,111,165,0.22)"}}>💰 ${ppn}/night</span>
                   )}
                   {a.checkIn&&a.checkOut&&<span className="pill pill-b">📅 {fmtDate(a.checkIn)} – {fmtDate(a.checkOut)}</span>}
                   {a.address&&<span className="pill pill-b">📍 {a.address}</span>}
@@ -1806,11 +1811,11 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
   const myShare     = memberCount > 0 ? grandTotal / memberCount : 0;
 
   const cats = [
-    {icon:"🎯", label:"Activities",    total:actTotal,       color:"#38bdf8"},
-    {icon:"🚌", label:"Transport",     total:transportTotal, color:"#34d399"},
-    {icon:"🍽️", label:"Meals",         total:mealTotal,      color:"#fbbf24"},
-    {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#818cf8"},
-    {icon:"🚗", label:"Vehicles",       total:vehicleTotal,  color:"#f97316"},
+    {icon:"🎯", label:"Activities",    total:actTotal,       color:"#2a7a55"},
+    {icon:"🚌", label:"Transport",     total:transportTotal, color:"#5a8a6a"},
+    {icon:"🍽️", label:"Meals",         total:mealTotal,      color:"#c4a030"},
+    {icon:"🏨", label:"Accommodation", total:accomTotal,     color:"#4a6fa5"},
+    {icon:"🚗", label:"Vehicles",       total:vehicleTotal,  color:"#c96a28"},
   ];
   const maxCat = Math.max(...cats.map(c=>c.total), 1);
 
@@ -1923,7 +1928,7 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                         🧍 ${ci.price}/person
                       </span>
                     ) : (
-                      <span style={{fontSize:11,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"2px 8px"}}>
+                      <span style={{fontSize:11,background:"rgba(74,111,165,0.10)",color:"#4a6fa5",border:"1px solid rgba(74,111,165,0.22)",borderRadius:20,padding:"2px 8px"}}>
                         👥 ${ci.price} flat
                       </span>
                     )}
@@ -1975,14 +1980,14 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
                       <div style={{fontWeight:600,fontSize:14}}>{a.name}</div>
                       {a.address && <div style={{fontSize:12,color:"var(--muted)",marginTop:2}}>📍 {a.address}</div>}
                     </div>
-                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#818cf8",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
+                    {hasData && <div style={{fontFamily:"Inter",fontSize:16,fontWeight:800,color:"#4a6fa5",flexShrink:0,marginLeft:12}}>${total.toLocaleString()}</div>}
                   </div>
                   {hasData ? (
                     <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
                       {isFull ? (
-                        <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>🧾 ${totalFull.toLocaleString()} full price</span>
+                        <span style={{fontSize:12,background:"rgba(74,111,165,0.10)",color:"#4a6fa5",border:"1px solid rgba(74,111,165,0.22)",borderRadius:20,padding:"3px 10px"}}>🧾 ${totalFull.toLocaleString()} full price</span>
                       ) : (<>
-                        <span style={{fontSize:12,background:"rgba(129,140,248,0.12)",color:"#818cf8",border:"1px solid rgba(129,140,248,0.25)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
+                        <span style={{fontSize:12,background:"rgba(74,111,165,0.10)",color:"#4a6fa5",border:"1px solid rgba(74,111,165,0.22)",borderRadius:20,padding:"3px 10px"}}>${ppn.toLocaleString()}/night</span>
                         <span style={{fontSize:12,color:"var(--muted)"}}>×</span>
                         <span style={{fontSize:12,background:"rgba(56,189,248,0.12)",color:"var(--accent)",border:"1px solid rgba(56,189,248,0.25)",borderRadius:20,padding:"3px 10px"}}>{nights} night{nights!==1?"s":""}</span>
                         <span style={{fontSize:12,color:"var(--muted)"}}>→</span>
@@ -2688,7 +2693,7 @@ function SummaryTab({trip}) {
         <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
         <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
       </div>
-      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag" style={{background:"rgba(129,140,248,0.08)",borderColor:"rgba(129,140,248,0.25)",color:"#818cf8"}}>{a.name}{a.priceType==="full"&&a.totalPrice?` · $${parseFloat(a.totalPrice).toLocaleString()} full`:a.pricePerNight?` · $${a.pricePerNight}/night`:""}{a.priceType!=="full"&&calcAccomNights(a)>0?` × ${calcAccomNights(a)}n`:""}{calcAccomTotal(a)>0?` = $${calcAccomTotal(a).toLocaleString()}`:""}</span>)}</div></div>}
+      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag" style={{background:"rgba(129,140,248,0.08)",borderColor:"rgba(74,111,165,0.22)",color:"#4a6fa5"}}>{a.name}{a.priceType==="full"&&a.totalPrice?` · $${parseFloat(a.totalPrice).toLocaleString()} full`:a.pricePerNight?` · $${a.pricePerNight}/night`:""}{a.priceType!=="full"&&calcAccomNights(a)>0?` × ${calcAccomNights(a)}n`:""}{calcAccomTotal(a)>0?` = $${calcAccomTotal(a).toLocaleString()}`:""}</span>)}</div></div>}
       {(trip.vehicleRentals||[]).length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label><div className="tag-wrap">{(trip.vehicleRentals||[]).map(v=>{const ppd=parseFloat(v.price||v.pricePerDay)||0;const days=calcVehicleDays(v);const tot=calcVehicleTotal(v);return(<span key={v.id} className="tag" style={{borderColor:"rgba(249,115,22,0.25)",color:"#f97316",background:"rgba(249,115,22,0.08)"}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model?` — ${v.model}`:""}{v.priceType==="full"&&ppd>0?` · $${ppd} full`:ppd>0&&days>0?` · $${ppd}/day × ${days}d = $${tot.toLocaleString()}`:ppd>0?` · $${ppd}/day`:""}</span>);})}</div></div>}
       {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}${c.priceType==="per_person"?"/person":" total"}`:""}</span>)}</div></div>}
       <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
