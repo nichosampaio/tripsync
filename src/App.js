@@ -2649,20 +2649,33 @@ function CountryTab({trip,setTrip,db,user}) {
           : <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {docs.map(doc=>{
                 const isPdf = doc.type==="application/pdf" || doc.name.toLowerCase().endsWith(".pdf");
+                const isExpired = doc.expired === true;
+                // Expiry = trip end date + 1 month
+                const tripEnd = trip.endDate ? new Date(trip.endDate) : null;
+                const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
+                const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date()) / (1000*60*60*24)) : null;
+                const expiringSoon = !isExpired && daysUntilExpiry !== null && daysUntilExpiry <= 14 && daysUntilExpiry > 0;
                 return (
-                  <div key={doc.id} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"11px 14px"}}>
-                    <div style={{fontSize:24,flexShrink:0}}>{isPdf?"📄":"🖼️"}</div>
+                  <div key={doc.id} style={{display:"flex",alignItems:"center",gap:12,background:isExpired?"var(--surface3)":"var(--surface2)",border:`1px solid ${isExpired?"rgba(192,57,43,0.2)":expiringSoon?"rgba(160,112,0,0.25)":"var(--border)"}`,borderRadius:10,padding:"11px 14px",opacity:isExpired?0.65:1}}>
+                    <div style={{fontSize:24,flexShrink:0}}>{isExpired?"🗂️":isPdf?"📄":"🖼️"}</div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.name}</div>
-                      <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>
-                        {fmtSize(doc.size)} · by {doc.uploadedBy} · {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}
+                      <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                        <div style={{fontSize:13,fontWeight:600,color:isExpired?"var(--muted)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isExpired?"line-through":"none"}}>{doc.name}</div>
+                        {isExpired && <span style={{padding:"1px 7px",borderRadius:4,background:"var(--red-soft)",color:"var(--red)",fontSize:10,fontWeight:700,border:"1px solid rgba(192,57,43,0.18)",flexShrink:0}}>EXPIRED</span>}
+                        {expiringSoon && <span style={{padding:"1px 7px",borderRadius:4,background:"var(--yellow-soft)",color:"var(--yellow)",fontSize:10,fontWeight:700,border:"1px solid rgba(160,112,0,0.22)",flexShrink:0}}>⚠️ Expires in {daysUntilExpiry}d</span>}
+                        {!isExpired && !expiringSoon && expiryDate && <span style={{padding:"1px 7px",borderRadius:4,background:"var(--surface3)",color:"var(--muted-light)",fontSize:10,fontWeight:500,flexShrink:0}}>Expires {expiryDate.toLocaleDateString()}</span>}
+                      </div>
+                      <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>
+                        {isExpired ? "File deleted from storage — re-upload to restore" : `${fmtSize(doc.size)} · by ${doc.uploadedBy} · ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}`}
                       </div>
                     </div>
                     <div style={{display:"flex",gap:7,flexShrink:0}}>
-                      <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name}
-                        style={{padding:"5px 12px",borderRadius:7,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}>
-                        ⬇️ Download
-                      </a>
+                      {!isExpired && (
+                        <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name}
+                          style={{padding:"5px 12px",borderRadius:7,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}>
+                          ⬇️ Download
+                        </a>
+                      )}
                       <button onClick={()=>handleDelete(doc)}
                         style={{padding:"5px 10px",borderRadius:7,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
                         🗑️
