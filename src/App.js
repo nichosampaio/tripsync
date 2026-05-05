@@ -1486,18 +1486,17 @@ function ActivityTab({trip,setTrip,user,db}) {
                   {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
                 </div>
                 {ci.metadata?.notes&&<div style={{fontSize:12,color:"var(--muted)",marginTop:8,padding:"7px 10px",background:"rgba(255,255,255,0.03)",borderRadius:7,borderLeft:"2px solid var(--border)"}}>📝 {ci.metadata.notes}</div>}
-                {((ci.metadata?.upvotes||[]).length>0||(ci.metadata?.downvotes||[]).length>0)&&(
-                  <div className="card-meta-row" style={{marginTop:8,fontSize:12}}>
-                    🗳️ <strong style={{color:"var(--green)"}}>{(ci.metadata?.upvotes||[]).length} yes</strong>
-                    <span style={{color:"var(--muted)"}}>·</span>
-                    <strong style={{color:"var(--red)"}}>{(ci.metadata?.downvotes||[]).length} no</strong>
-                    {((ci.metadata?.upvotes||[]).length-(ci.metadata?.downvotes||[]).length)!==0&&(
-                      <span style={{color:(ci.metadata?.upvotes||[]).length>(ci.metadata?.downvotes||[]).length?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>
-                        ({(ci.metadata?.upvotes||[]).length-(ci.metadata?.downvotes||[]).length)>0?"+":""}{(ci.metadata?.upvotes||[]).length-(ci.metadata?.downvotes||[]).length} net)
-                      </span>
-                    )}
-                  </div>
-                )}
+                {((ci.metadata?.upvotes||[]).length>0||(ci.metadata?.downvotes||[]).length>0)&&(()=>{
+                  const upV=(ci.metadata?.upvotes||[]).length, downV=(ci.metadata?.downvotes||[]).length, netV=upV-downV;
+                  return (
+                    <div className="card-meta-row" style={{marginTop:8,fontSize:12}}>
+                      🗳️ <strong style={{color:"var(--green)"}}>{upV} yes</strong>
+                      <span style={{color:"var(--muted)"}}>·</span>
+                      <strong style={{color:"var(--red)"}}>{downV} no</strong>
+                      {netV!==0&&<span style={{color:netV>0?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>({netV>0?"+":""}{netV} net)</span>}
+                    </div>
+                  );
+                })()}
                 {ci.metadata?.createdBy&&(()=>{
                   const raw = ci.metadata.createdBy;
                   // If it looks like a UUID, resolve to display name via tripMembers
@@ -2198,18 +2197,17 @@ function AccommodationTab({trip,setTrip,db}) {
                 {a.priceType!=="full"&&a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong>{calcAccomNights(a)>0&&<> × {calcAccomNights(a)}n = <strong>${calcAccomTotal(a).toLocaleString()}</strong></>}</div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
-                {((a.upvotes||[]).length>0||(a.downvotes||[]).length>0)&&(
-                  <div className="card-meta-row" style={{fontSize:12}}>
-                    🗳️ <strong style={{color:"var(--green)"}}>{(a.upvotes||[]).length} yes</strong>
-                    <span style={{color:"var(--muted)"}}>·</span>
-                    <strong style={{color:"var(--red)"}}>{(a.downvotes||[]).length} no</strong>
-                    {((a.upvotes||[]).length-(a.downvotes||[]).length)!==0&&(
-                      <span style={{color:(a.upvotes||[]).length>(a.downvotes||[]).length?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>
-                        ({(a.upvotes||[]).length-(a.downvotes||[]).length)>0?"+":""}{(a.upvotes||[]).length-(a.downvotes||[]).length} net)
-                      </span>
-                    )}
-                  </div>
-                )}
+                {((a.upvotes||[]).length>0||(a.downvotes||[]).length>0)&&(()=>{
+                  const upV=(a.upvotes||[]).length, downV=(a.downvotes||[]).length, netV=upV-downV;
+                  return (
+                    <div className="card-meta-row" style={{fontSize:12}}>
+                      🗳️ <strong style={{color:"var(--green)"}}>{upV} yes</strong>
+                      <span style={{color:"var(--muted)"}}>·</span>
+                      <strong style={{color:"var(--red)"}}>{downV} no</strong>
+                      {netV!==0&&<span style={{color:netV>0?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>({netV>0?"+":""}{netV} net)</span>}
+                    </div>
+                  );
+                })()}
               </div>
               {a.notes&&<div className="card-notes">{a.notes}</div>}
             </div>
