@@ -2518,7 +2518,7 @@ function CountryTab({trip,setTrip,db,user}) {
   const [form,setForm] = useState({visa:c.visa||"",passport:c.passport||"",advisory:c.advisory||"",currency:c.currency||"",language:c.language||"",notes:c.notes||""});
   useMemo(()=>{const cc=trip.country||{};setForm({visa:cc.visa||"",passport:cc.passport||"",advisory:cc.advisory||"",currency:cc.currency||"",language:cc.language||"",notes:cc.notes||""});},[trip.id]);
 
-  // ── Documents state ──
+  // ── Boarding passes state ──
   const [docs, setDocs] = useState(trip.documents||[]);
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState("");
@@ -2532,38 +2532,32 @@ function CountryTab({trip,setTrip,db,user}) {
     setEditing(false);
   };
 
-  // ── Upload handler ──
+  // ── Upload handler — PDF only ──
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if(!file) return;
-    const allowed = ["image/jpeg","image/png","image/gif","image/webp","application/pdf"];
-    if(!allowed.includes(file.type)) { setUploadErr("Only images (JPG, PNG, GIF, WebP) and PDFs are supported."); return; }
-    if(file.size > 20 * 1024 * 1024) { setUploadErr("File must be under 20MB."); return; }
+    if(file.type !== "application/pdf") { setUploadErr("Only PDF files are accepted for boarding passes."); return; }
+    if(file.size > 5 * 1024 * 1024) { setUploadErr("File must be under 5MB."); return; }
     setUploadErr(""); setUploading(true); setUploadSuccess("");
     try {
+      const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, uploadedBy: user, uploadedAt: new Date().toISOString(), category: "boarding_pass" };
       if(!db?.isMock) {
-        const ext = file.name.split(".").pop();
-        const path = `${trip.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+        const path = `${trip.id}/boarding-passes/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
         const { error: upErr } = await supabase.storage.from("trip-files").upload(path, file, { upsert: false });
         if(upErr) throw upErr;
         const { data: { publicUrl } } = supabase.storage.from("trip-files").getPublicUrl(path);
-        const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, path, url: publicUrl, uploadedBy: user, uploadedAt: new Date().toISOString() };
-        const updatedDocs = [...docs, newDoc];
-        await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
-        setDocs(updatedDocs);
-        setTrip(t=>({...t, documents: updatedDocs}));
-        setUploadSuccess(`"${file.name}" uploaded successfully.`);
-        setTimeout(()=>setUploadSuccess(""),3500);
+        newDoc.path = path;
+        newDoc.url = publicUrl;
       } else {
-        // Demo mode — store as blob URL
-        const url = URL.createObjectURL(file);
-        const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, path: file.name, url, uploadedBy: user, uploadedAt: new Date().toISOString() };
-        const updatedDocs = [...docs, newDoc];
-        setDocs(updatedDocs);
-        setTrip(t=>({...t, documents: updatedDocs}));
-        setUploadSuccess(`"${file.name}" uploaded successfully.`);
-        setTimeout(()=>setUploadSuccess(""),3500);
+        newDoc.path = file.name;
+        newDoc.url = URL.createObjectURL(file);
       }
+      const updatedDocs = [...docs, newDoc];
+      if(!db?.isMock) await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
+      setDocs(updatedDocs);
+      setTrip(t=>({...t, documents: updatedDocs}));
+      setUploadSuccess(`Boarding pass "${file.name}" uploaded.`);
+      setTimeout(()=>setUploadSuccess(""),3500);
     } catch(err) {
       setUploadErr(`Upload failed: ${err.message||"Please try again."}`);
     } finally {
@@ -2575,7 +2569,7 @@ function CountryTab({trip,setTrip,db,user}) {
   const handleDelete = async (doc) => {
     const updatedDocs = docs.filter(d=>d.id!==doc.id);
     if(!db?.isMock) {
-      await supabase.storage.from("trip-files").remove([doc.path]);
+      if(doc.path) await supabase.storage.from("trip-files").remove([doc.path]);
       await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
     }
     setDocs(updatedDocs);
@@ -2587,6 +2581,21 @@ function CountryTab({trip,setTrip,db,user}) {
     if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
     return `${(bytes/(1024*1024)).toFixed(1)} MB`;
   };
+
+  // Group boarding passes by uploader
+  const boardingPasses = docs.filter(d=>d.category==="boarding_pass"||d.type==="application/pdf");
+  const byMember = boardingPasses.reduce((acc,doc)=>{
+    const key = doc.uploadedBy||"Unknown";
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(doc);
+    return acc;
+  },{});
+  const members = Object.keys(byMember);
+
+  // Expiry calculation
+  const tripEnd = trip.endDate ? new Date(trip.endDate) : null;
+  const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
+  const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date())/(1000*60*60*24)) : null;
 
   const FIELDS=[{key:"visa",icon:"🛂",label:"Visa Requirements"},{key:"passport",icon:"📘",label:"Passport Validity"},{key:"advisory",icon:"⚠️",label:"Travel Advisory"},{key:"currency",icon:"💱",label:"Currency"},{key:"language",icon:"🗣️",label:"Language"}];
 
@@ -2613,83 +2622,97 @@ function CountryTab({trip,setTrip,db,user}) {
         </>}
       </div>
 
-      {/* ── Documents ── */}
+      {/* ── Boarding Passes ── */}
       <div className="country-card">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-          <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>📎 Trip Documents</h4>
-          <span style={{fontSize:12,color:"var(--muted)"}}>Images & PDFs · visible to all members</span>
-        </div>
-
-        {/* Upload area */}
-        <div
-          onClick={()=>!uploading&&fileInputRef.current?.click()}
-          style={{
-            border:"2px dashed var(--border-strong)",borderRadius:12,padding:"28px 20px",
-            textAlign:"center",cursor:uploading?"not-allowed":"pointer",
-            background:uploading?"var(--surface2)":"var(--surface)",
-            transition:"all 0.18s",marginBottom:16,
-          }}
-          onMouseEnter={e=>{if(!uploading)e.currentTarget.style.borderColor="var(--accent)";}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border-strong)";}}
-        >
-          <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
-          <div style={{fontSize:28,marginBottom:8}}>{uploading?"⏳":"📤"}</div>
-          <div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:4}}>
-            {uploading?"Uploading…":"Click to upload a file"}
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+          <div>
+            <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🛫 Boarding Passes</h4>
+            <p style={{fontSize:12,color:"var(--muted)",marginTop:4}}>PDF only · visible to all trip members · max 5MB per file</p>
           </div>
-          <div style={{fontSize:12,color:"var(--muted)"}}>Images (JPG, PNG, GIF, WebP) or PDF · max 20MB · one at a time</div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={()=>!uploading&&fileInputRef.current?.click()}
+            disabled={uploading}
+            style={{flexShrink:0,marginTop:2}}
+          >
+            {uploading ? "⏳ Uploading…" : "⬆️ Upload"}
+          </button>
+          <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
         </div>
 
-        {uploadErr && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>⚠️ {uploadErr}</div>}
-        {uploadSuccess && <div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.18)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>✅ {uploadSuccess}</div>}
+        {uploadErr && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:8,padding:"8px 12px",margin:"10px 0"}}>⚠️ {uploadErr}</div>}
+        {uploadSuccess && <div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.18)",borderRadius:8,padding:"8px 12px",margin:"10px 0"}}>✅ {uploadSuccess}</div>}
 
-        {/* File list */}
-        {docs.length === 0
-          ? <div style={{textAlign:"center",padding:"20px 0",color:"var(--muted)",fontSize:13}}>No documents uploaded yet.</div>
-          : <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {docs.map(doc=>{
-                const isPdf = doc.type==="application/pdf" || doc.name.toLowerCase().endsWith(".pdf");
-                const isExpired = doc.expired === true;
-                // Expiry = trip end date + 1 month
-                const tripEnd = trip.endDate ? new Date(trip.endDate) : null;
-                const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
-                const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date()) / (1000*60*60*24)) : null;
-                const expiringSoon = !isExpired && daysUntilExpiry !== null && daysUntilExpiry <= 14 && daysUntilExpiry > 0;
-                return (
-                  <div key={doc.id} style={{display:"flex",alignItems:"center",gap:12,background:isExpired?"var(--surface3)":"var(--surface2)",border:`1px solid ${isExpired?"rgba(192,57,43,0.2)":expiringSoon?"rgba(160,112,0,0.25)":"var(--border)"}`,borderRadius:10,padding:"11px 14px",opacity:isExpired?0.65:1}}>
-                    <div style={{fontSize:24,flexShrink:0}}>{isExpired?"🗂️":isPdf?"📄":"🖼️"}</div>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
-                        <div style={{fontSize:13,fontWeight:600,color:isExpired?"var(--muted)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isExpired?"line-through":"none"}}>{doc.name}</div>
-                        {isExpired && <span style={{padding:"1px 7px",borderRadius:4,background:"var(--red-soft)",color:"var(--red)",fontSize:10,fontWeight:700,border:"1px solid rgba(192,57,43,0.18)",flexShrink:0}}>EXPIRED</span>}
-                        {expiringSoon && <span style={{padding:"1px 7px",borderRadius:4,background:"var(--yellow-soft)",color:"var(--yellow)",fontSize:10,fontWeight:700,border:"1px solid rgba(160,112,0,0.22)",flexShrink:0}}>⚠️ Expires in {daysUntilExpiry}d</span>}
-                        {!isExpired && !expiringSoon && expiryDate && <span style={{padding:"1px 7px",borderRadius:4,background:"var(--surface3)",color:"var(--muted-light)",fontSize:10,fontWeight:500,flexShrink:0}}>Expires {expiryDate.toLocaleDateString()}</span>}
-                      </div>
-                      <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>
-                        {isExpired ? "File deleted from storage — re-upload to restore" : `${fmtSize(doc.size)} · by ${doc.uploadedBy} · ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}`}
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:7,flexShrink:0}}>
-                      {!isExpired && (
-                        <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name}
-                          style={{padding:"5px 12px",borderRadius:7,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}>
-                          ⬇️ Download
-                        </a>
-                      )}
-                      <button onClick={()=>handleDelete(doc)}
-                        style={{padding:"5px 10px",borderRadius:7,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                        🗑️
-                      </button>
-                    </div>
+        {/* Expiry notice */}
+        {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 14 && boardingPasses.length > 0 && (
+          <div style={{fontSize:12,color:"var(--yellow)",background:"var(--yellow-soft)",border:"1px solid rgba(160,112,0,0.22)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>
+            ⚠️ Boarding passes will be deleted in <strong>{daysUntilExpiry} days</strong> (1 month after trip end). Download any files you need to keep.
+          </div>
+        )}
+
+        {boardingPasses.length === 0 ? (
+          <div style={{textAlign:"center",padding:"28px 0",color:"var(--muted)",fontSize:13}}>
+            <div style={{fontSize:32,marginBottom:8}}>🛫</div>
+            No boarding passes uploaded yet.<br/>
+            <span style={{fontSize:12}}>Be the first to upload yours.</span>
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:18,marginTop:14}}>
+            {members.map(memberName=>(
+              <div key={memberName}>
+                {/* Member header */}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <div style={{width:26,height:26,borderRadius:"50%",background:memberName===user?"linear-gradient(135deg,#c96a28,#e8924a)":"linear-gradient(135deg,#2a527a,#3a72aa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>
+                    {memberName.slice(0,2).toUpperCase()}
                   </div>
-                );
-              })}
-            </div>
-        }
+                  <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>
+                    {memberName}{memberName===user&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}
+                  </span>
+                  <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{byMember[memberName].length} file{byMember[memberName].length!==1?"s":""}</span>
+                </div>
+                {/* Files for this member */}
+                <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:34}}>
+                  {byMember[memberName].map(doc=>{
+                    const isExpired = doc.expired===true;
+                    return (
+                      <div key={doc.id} style={{display:"flex",alignItems:"center",gap:10,background:isExpired?"var(--surface3)":"var(--surface2)",border:`1px solid ${isExpired?"rgba(192,57,43,0.18)":"var(--border)"}`,borderRadius:9,padding:"9px 12px",opacity:isExpired?0.65:1}}>
+                        <span style={{fontSize:18,flexShrink:0}}>📄</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                            <span style={{fontSize:12,fontWeight:600,color:isExpired?"var(--muted)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isExpired?"line-through":"none"}}>{doc.name}</span>
+                            {isExpired && <span style={{padding:"1px 6px",borderRadius:4,background:"var(--red-soft)",color:"var(--red)",fontSize:10,fontWeight:700,border:"1px solid rgba(192,57,43,0.18)",flexShrink:0}}>EXPIRED</span>}
+                          </div>
+                          <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
+                            {isExpired ? "Deleted — re-upload to restore" : `${fmtSize(doc.size)} · ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}`}
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:6,flexShrink:0}}>
+                          {!isExpired && (
+                            <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name}
+                              style={{padding:"4px 10px",borderRadius:6,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3}}>
+                              ⬇️
+                            </a>
+                          )}
+                          {(memberName===user||!doc.uploadedBy) && (
+                            <button onClick={()=>handleDelete(doc)}
+                              style={{padding:"4px 8px",borderRadius:6,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                              🗑️
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
+
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
 function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest}) {
