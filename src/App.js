@@ -2512,41 +2512,168 @@ function TripInfoTab({trip,setTrip,db}) {
 }
 
 // ─── COUNTRY TAB ─────────────────────────────────────────────────────────────
-function CountryTab({trip,setTrip,db}) {
+function CountryTab({trip,setTrip,db,user}) {
   const c=trip.country||{};
   const [editing,setEditing] = useState(false);
   const [form,setForm] = useState({visa:c.visa||"",passport:c.passport||"",advisory:c.advisory||"",currency:c.currency||"",language:c.language||"",notes:c.notes||""});
   useMemo(()=>{const cc=trip.country||{};setForm({visa:cc.visa||"",passport:cc.passport||"",advisory:cc.advisory||"",currency:cc.currency||"",language:cc.language||"",notes:cc.notes||""});},[trip.id]);
+
+  // ── Documents state ──
+  const [docs, setDocs] = useState(trip.documents||[]);
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const [uploadSuccess, setUploadSuccess] = useState("");
+  const fileInputRef = useRef(null);
+  useMemo(()=>setDocs(trip.documents||[]),[trip.id]);
+
   const save=()=>{
-    if(db) db.updateTrip(trip.id, { country_info: form });
+    if(db) db.updateTrip(trip.id, { country_info: {...form, destination_votes: trip.country?.destination_votes} });
     setTrip(t=>({...t,country:{...(t.country||{}),...form}}));
     setEditing(false);
   };
+
+  // ── Upload handler ──
+  const handleUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if(!file) return;
+    const allowed = ["image/jpeg","image/png","image/gif","image/webp","application/pdf"];
+    if(!allowed.includes(file.type)) { setUploadErr("Only images (JPG, PNG, GIF, WebP) and PDFs are supported."); return; }
+    if(file.size > 20 * 1024 * 1024) { setUploadErr("File must be under 20MB."); return; }
+    setUploadErr(""); setUploading(true); setUploadSuccess("");
+    try {
+      if(!db?.isMock) {
+        const ext = file.name.split(".").pop();
+        const path = `${trip.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
+        const { error: upErr } = await supabase.storage.from("trip-files").upload(path, file, { upsert: false });
+        if(upErr) throw upErr;
+        const { data: { publicUrl } } = supabase.storage.from("trip-files").getPublicUrl(path);
+        const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, path, url: publicUrl, uploadedBy: user, uploadedAt: new Date().toISOString() };
+        const updatedDocs = [...docs, newDoc];
+        await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
+        setDocs(updatedDocs);
+        setTrip(t=>({...t, documents: updatedDocs}));
+        setUploadSuccess(`"${file.name}" uploaded successfully.`);
+        setTimeout(()=>setUploadSuccess(""),3500);
+      } else {
+        // Demo mode — store as blob URL
+        const url = URL.createObjectURL(file);
+        const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, path: file.name, url, uploadedBy: user, uploadedAt: new Date().toISOString() };
+        const updatedDocs = [...docs, newDoc];
+        setDocs(updatedDocs);
+        setTrip(t=>({...t, documents: updatedDocs}));
+        setUploadSuccess(`"${file.name}" uploaded successfully.`);
+        setTimeout(()=>setUploadSuccess(""),3500);
+      }
+    } catch(err) {
+      setUploadErr(`Upload failed: ${err.message||"Please try again."}`);
+    } finally {
+      setUploading(false);
+      if(fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async (doc) => {
+    const updatedDocs = docs.filter(d=>d.id!==doc.id);
+    if(!db?.isMock) {
+      await supabase.storage.from("trip-files").remove([doc.path]);
+      await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
+    }
+    setDocs(updatedDocs);
+    setTrip(t=>({...t, documents: updatedDocs}));
+  };
+
+  const fmtSize = (bytes) => {
+    if(bytes < 1024) return `${bytes} B`;
+    if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
+    return `${(bytes/(1024*1024)).toFixed(1)} MB`;
+  };
+
   const FIELDS=[{key:"visa",icon:"🛂",label:"Visa Requirements"},{key:"passport",icon:"📘",label:"Passport Validity"},{key:"advisory",icon:"⚠️",label:"Travel Advisory"},{key:"currency",icon:"💱",label:"Currency"},{key:"language",icon:"🗣️",label:"Language"}];
-  if(!editing) return (
-    <div className="country-card">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
-        <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🌍 Entry Requirements</h4>
-        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>
-      </div>
-      {FIELDS.map(f=>(
-        <div key={f.key} className="info-row"><span className="info-icon">{f.icon}</span><div><div className="info-lbl">{f.label}</div><div className="info-txt">{form[f.key]||<span style={{color:"var(--muted)",fontStyle:"italic"}}>Not set</span>}</div></div></div>
-      ))}
-    </div>
-  );
+
   return (
-    <div className="country-card">
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-        <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>✏️ Edit Entry Info</h4>
-        <div style={{display:"flex",gap:8}}>
-          <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
-          <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
+    <div>
+      {/* ── Entry Requirements ── */}
+      <div className="country-card" style={{marginBottom:18}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🌍 Entry Requirements and Documents</h4>
+          {!editing && <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>}
+          {editing && <div style={{display:"flex",gap:8}}>
+            <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
+          </div>}
         </div>
+        {!editing && FIELDS.map(f=>(
+          <div key={f.key} className="info-row"><span className="info-icon">{f.icon}</span><div><div className="info-lbl">{f.label}</div><div className="info-txt">{form[f.key]||<span style={{color:"var(--muted)",fontStyle:"italic"}}>Not set</span>}</div></div></div>
+        ))}
+        {editing && <>
+          {FIELDS.map(f=>(
+            <div key={f.key} className="form-group"><label className="form-label">{f.icon} {f.label}</label><input className="form-input" value={form[f.key]} onChange={e=>setForm(ff=>({...ff,[f.key]:e.target.value}))} placeholder={`Enter ${f.label.toLowerCase()}…`}/></div>
+          ))}
+          <div className="form-group"><label className="form-label">📝 Notes</label><textarea className="form-input form-textarea" value={form.notes} onChange={e=>setForm(ff=>({...ff,notes:e.target.value}))} placeholder="Additional details…"/></div>
+        </>}
       </div>
-      {FIELDS.map(f=>(
-        <div key={f.key} className="form-group"><label className="form-label">{f.icon} {f.label}</label><input className="form-input" value={form[f.key]} onChange={e=>setForm(ff=>({...ff,[f.key]:e.target.value}))} placeholder={`Enter ${f.label.toLowerCase()}…`}/></div>
-      ))}
-      <div className="form-group"><label className="form-label">📝 Notes</label><textarea className="form-input form-textarea" value={form.notes} onChange={e=>setForm(ff=>({...ff,notes:e.target.value}))} placeholder="Additional details…"/></div>
+
+      {/* ── Documents ── */}
+      <div className="country-card">
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+          <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>📎 Trip Documents</h4>
+          <span style={{fontSize:12,color:"var(--muted)"}}>Images & PDFs · visible to all members</span>
+        </div>
+
+        {/* Upload area */}
+        <div
+          onClick={()=>!uploading&&fileInputRef.current?.click()}
+          style={{
+            border:"2px dashed var(--border-strong)",borderRadius:12,padding:"28px 20px",
+            textAlign:"center",cursor:uploading?"not-allowed":"pointer",
+            background:uploading?"var(--surface2)":"var(--surface)",
+            transition:"all 0.18s",marginBottom:16,
+          }}
+          onMouseEnter={e=>{if(!uploading)e.currentTarget.style.borderColor="var(--accent)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="var(--border-strong)";}}
+        >
+          <input ref={fileInputRef} type="file" accept="image/*,.pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
+          <div style={{fontSize:28,marginBottom:8}}>{uploading?"⏳":"📤"}</div>
+          <div style={{fontSize:14,fontWeight:600,color:"var(--text)",marginBottom:4}}>
+            {uploading?"Uploading…":"Click to upload a file"}
+          </div>
+          <div style={{fontSize:12,color:"var(--muted)"}}>Images (JPG, PNG, GIF, WebP) or PDF · max 20MB · one at a time</div>
+        </div>
+
+        {uploadErr && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>⚠️ {uploadErr}</div>}
+        {uploadSuccess && <div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.18)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>✅ {uploadSuccess}</div>}
+
+        {/* File list */}
+        {docs.length === 0
+          ? <div style={{textAlign:"center",padding:"20px 0",color:"var(--muted)",fontSize:13}}>No documents uploaded yet.</div>
+          : <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {docs.map(doc=>{
+                const isPdf = doc.type==="application/pdf" || doc.name.toLowerCase().endsWith(".pdf");
+                return (
+                  <div key={doc.id} style={{display:"flex",alignItems:"center",gap:12,background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"11px 14px"}}>
+                    <div style={{fontSize:24,flexShrink:0}}>{isPdf?"📄":"🖼️"}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{doc.name}</div>
+                      <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>
+                        {fmtSize(doc.size)} · by {doc.uploadedBy} · {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:7,flexShrink:0}}>
+                      <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name}
+                        style={{padding:"5px 12px",borderRadius:7,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}>
+                        ⬇️ Download
+                      </a>
+                      <button onClick={()=>handleDelete(doc)}
+                        style={{padding:"5px 10px",borderRadius:7,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        🗑️
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+        }
+      </div>
     </div>
   );
 }
@@ -3237,7 +3364,7 @@ function AppInner() {
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
-        google_maps_url, country_info,
+        google_maps_url, country_info, documents,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
       `)
@@ -3273,6 +3400,7 @@ function AppInner() {
       availability:        existing?.availability        ?? {},
       personalBudgets:     existing?.personalBudgets     ?? {},
       country:             t.country_info || null,
+      documents:           Array.isArray(t.documents) ? t.documents : [],
       googleMapsUrl:       t.google_maps_url || "",
       description:         t.description || "",
     });
@@ -4009,7 +4137,7 @@ function AppInner() {
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest}/>}
-              {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db} user={user}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
             </>
