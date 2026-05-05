@@ -2538,6 +2538,8 @@ function CountryTab({trip,setTrip,db,user}) {
     if(!file) return;
     if(file.type !== "application/pdf") { setUploadErr("Only PDF files are accepted for boarding passes."); return; }
     if(file.size > 5 * 1024 * 1024) { setUploadErr("File must be under 5MB."); return; }
+    const myUploads = docs.filter(d=>(d.category==="boarding_pass"||d.type==="application/pdf")&&d.uploadedBy===user&&!d.expired);
+    if(myUploads.length >= 4) { setUploadErr("You have reached the maximum of 4 boarding passes. Delete one to upload a new one."); return; }
     setUploadErr(""); setUploading(true); setUploadSuccess("");
     try {
       const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, uploadedBy: user, uploadedAt: new Date().toISOString(), category: "boarding_pass" };
@@ -2592,7 +2594,8 @@ function CountryTab({trip,setTrip,db,user}) {
   },{});
   const members = Object.keys(byMember);
 
-  // Expiry calculation
+  const myUploadCount = boardingPasses.filter(d=>d.uploadedBy===user&&!d.expired).length;
+  const atLimit = myUploadCount >= 4;
   const tripEnd = trip.endDate ? new Date(trip.endDate) : null;
   const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
   const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date())/(1000*60*60*24)) : null;
@@ -2629,14 +2632,17 @@ function CountryTab({trip,setTrip,db,user}) {
             <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🛫 Boarding Passes</h4>
             <p style={{fontSize:12,color:"var(--muted)",marginTop:4}}>PDF only · visible to all trip members · max 5MB per file</p>
           </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={()=>!uploading&&fileInputRef.current?.click()}
-            disabled={uploading}
-            style={{flexShrink:0,marginTop:2}}
-          >
-            {uploading ? "⏳ Uploading…" : "⬆️ Upload"}
-          </button>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={()=>!uploading&&!atLimit&&fileInputRef.current?.click()}
+              disabled={uploading||atLimit}
+              style={{flexShrink:0,marginTop:2,opacity:atLimit?0.5:1,cursor:atLimit?"not-allowed":"pointer"}}
+            >
+              {uploading ? "⏳ Uploading…" : atLimit ? "🚫 Limit reached" : "⬆️ Upload"}
+            </button>
+            <span style={{fontSize:10,color:atLimit?"var(--red)":"var(--muted)",fontWeight:atLimit?600:400}}>{myUploadCount}/4 uploaded</span>
+          </div>
           <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
         </div>
 
