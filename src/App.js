@@ -2522,7 +2522,6 @@ function CountryTab({trip,setTrip,db,user}) {
   useMemo(()=>setForm({...BLANK_FORM,...(trip.country||{})}),[trip.id]);
 
   // ── AI auto-fill state ──
-  const [aiNationalities, setAiNationalities] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
   const [aiResults, setAiResults] = useState(null); // array of {nationality, fields}
@@ -2547,17 +2546,30 @@ function CountryTab({trip,setTrip,db,user}) {
   // ── AI auto-fill ──
   const hasContent = Object.keys(BLANK_FORM).some(k=>form[k]&&form[k].trim());
 
+  // Default destination = highest net-voted destination
+  const topDest = [...(trip.destinations||[])].sort((a,b)=>
+    ((b.upvotes||[]).length-(b.downvotes||[]).length) -
+    ((a.upvotes||[]).length-(a.downvotes||[]).length)
+  )[0]?.name || trip.name || "";
+  const [selectedDest, setSelectedDest] = useState(topDest);
+  useMemo(()=>setSelectedDest(topDest),[trip.id]);
+
   const runAutoFill = async () => {
-    const nats = aiNationalities.trim();
-    if(!nats) { setAiError("Please enter at least one nationality."); return; }
+    if(!selectedNats.length) { setAiError("Please select at least one nationality."); return; }
+    if(!selectedDest.trim()) { setAiError("Please enter a destination."); return; }
     if(autoFillCount >= AI_LIMIT) { setAiError(`This trip has reached the ${AI_LIMIT}-use auto-fill limit.`); return; }
-    const dest = trip.destinations?.[0]?.name || trip.name || "the destination";
+    const dest = selectedDest.trim();
     setAiLoading(true); setAiError(""); setAiResults(null);
     try {
-      const natList = nats.split(",").map(n=>n.trim()).filter(Boolean);
+      const natList = selectedNats;
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
+        headers:{
+          "Content-Type":"application/json",
+          "x-api-key": process.env.REACT_APP_ANTHROPIC_API_KEY||"",
+          "anthropic-version":"2023-06-01",
+          "anthropic-dangerous-direct-browser-calls":"true",
+        },
         body: JSON.stringify({
           model: "claude-haiku-4-5-20251001",
           max_tokens: 1000,
@@ -2641,8 +2653,54 @@ Be concise but complete. One sentence per field maximum.`
     if(hasContent) { setShowOverwriteConfirm(true); }
     else { runAutoFill(); }
   };
+  const [selectedNats, setSelectedNats] = useState([]);
+  const [natSearch, setNatSearch] = useState("");
+  const [natDropdownOpen, setNatDropdownOpen] = useState(false);
+  const natDropdownRef = useRef(null);
 
-  // ── Upload handler ──
+  const ALL_NATIONALITIES = [
+    "Afghan","Albanian","Algerian","American","Andorran","Angolan","Antiguan","Argentine",
+    "Armenian","Australian","Austrian","Azerbaijani","Bahamian","Bahraini","Bangladeshi",
+    "Barbadian","Belarusian","Belgian","Belizean","Beninese","Bhutanese","Bolivian",
+    "Bosnian","Botswanan","Brazilian","British","Bruneian","Bulgarian","Burkinabe",
+    "Burundian","Cambodian","Cameroonian","Canadian","Cape Verdean","Central African",
+    "Chadian","Chilean","Chinese","Colombian","Comoran","Congolese","Costa Rican",
+    "Croatian","Cuban","Cypriot","Czech","Danish","Djiboutian","Dominican","Dutch",
+    "East Timorese","Ecuadorian","Egyptian","Emirati","Equatorial Guinean","Eritrean",
+    "Estonian","Eswatini","Ethiopian","Fijian","Finnish","French","Gabonese","Gambian",
+    "Georgian","German","Ghanaian","Greek","Grenadian","Guatemalan","Guinean",
+    "Guinea-Bissauan","Guyanese","Haitian","Honduran","Hungarian","Icelandic","Indian",
+    "Indonesian","Iranian","Iraqi","Irish","Israeli","Italian","Ivorian","Jamaican",
+    "Japanese","Jordanian","Kazakhstani","Kenyan","Kiribatian","Korean","Kuwaiti",
+    "Kyrgyz","Lao","Latvian","Lebanese","Lesothan","Liberian","Libyan","Liechtensteiner",
+    "Lithuanian","Luxembourger","Macedonian","Malagasy","Malawian","Malaysian","Maldivian",
+    "Malian","Maltese","Marshallese","Mauritanian","Mauritian","Mexican","Micronesian",
+    "Moldovan","Monacan","Mongolian","Montenegrin","Moroccan","Mozambican","Namibian",
+    "Nauruan","Nepali","New Zealander","Nicaraguan","Nigerian","Nigerien","Norwegian",
+    "Omani","Pakistani","Palauan","Palestinian","Panamanian","Papua New Guinean",
+    "Paraguayan","Peruvian","Filipino","Polish","Portuguese","Qatari","Romanian","Russian",
+    "Rwandan","Saint Lucian","Salvadoran","Samoan","Saudi","Senegalese","Serbian",
+    "Seychellois","Sierra Leonean","Singaporean","Slovak","Slovenian","Solomon Islander",
+    "Somali","South African","South Sudanese","Spanish","Sri Lankan","Sudanese",
+    "Surinamese","Swedish","Swiss","Syrian","São Toméan","Taiwanese","Tajik","Tanzanian",
+    "Thai","Togolese","Tongan","Trinidadian","Tunisian","Turkish","Turkmen","Tuvaluan",
+    "Ugandan","Ukrainian","Uruguayan","Uzbek","Vanuatuan","Venezuelan","Vietnamese",
+    "Yemeni","Zambian","Zimbabwean"
+  ];
+
+  const filteredNats = ALL_NATIONALITIES.filter(n =>
+    n.toLowerCase().includes(natSearch.toLowerCase()) && !selectedNats.includes(n)
+  );
+
+  const toggleNat = (nat) => {
+    setSelectedNats(prev => prev.includes(nat) ? prev.filter(n=>n!==nat) : [...prev, nat]);
+  };
+
+  useEffect(() => {
+    const handleClick = (e) => { if(natDropdownRef.current && !natDropdownRef.current.contains(e.target)) setNatDropdownOpen(false); };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if(!file) return;
@@ -2700,6 +2758,12 @@ Be concise but complete. One sentence per field maximum.`
   const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
   const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date())/(1000*60*60*24)) : null;
 
+  // Top-voted destinations sorted by net score for quick-select buttons
+  const destinations = [...(trip.destinations||[])].sort((a,b)=>
+    ((b.upvotes||[]).length-(b.downvotes||[]).length) -
+    ((a.upvotes||[]).length-(a.downvotes||[]).length)
+  );
+
   const FIELDS=[
     {key:"visa",icon:"🛂",label:"Visa Requirements"},
     {key:"passport",icon:"📘",label:"Passport Validity"},
@@ -2734,28 +2798,97 @@ Be concise but complete. One sentence per field maximum.`
             <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>Auto-fill with AI</span>
             <span style={{marginLeft:"auto",fontSize:11,color:autoFillCount>=AI_LIMIT?"var(--red)":"var(--muted)",fontWeight:autoFillCount>=AI_LIMIT?700:400}}>{autoFillCount}/{AI_LIMIT} uses</span>
           </div>
-          <div style={{display:"flex",gap:8,marginBottom:8}}>
-            <input
-              className="form-input"
-              style={{flex:1,fontSize:12,padding:"7px 10px"}}
-              placeholder="e.g. Brazilian, American, French (comma-separated)"
-              value={aiNationalities}
-              onChange={e=>setAiNationalities(e.target.value)}
-              disabled={aiLoading||autoFillCount>=AI_LIMIT}
-            />
+          {/* Destination input */}
+          <div style={{marginBottom:10}}>
+            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>📍 Destination</label>
+            <div style={{position:"relative"}}>
+              <input
+                className="form-input"
+                style={{fontSize:12,padding:"7px 10px",paddingRight:destinations.length>0?"90px":"10px"}}
+                placeholder="Enter destination country or city…"
+                value={selectedDest}
+                onChange={e=>setSelectedDest(e.target.value)}
+                disabled={aiLoading}
+              />
+              {destinations.length>0&&(
+                <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",display:"flex",gap:4}}>
+                  {destinations.slice(0,3).map((d,i)=>{
+                    const net=(d.upvotes||[]).length-(d.downvotes||[]).length;
+                    return(
+                      <button key={d.id} onClick={()=>setSelectedDest(d.name)}
+                        title={`${d.name} (${net>=0?"+":""}${net} net)`}
+                        style={{padding:"2px 7px",borderRadius:4,border:"1px solid",fontSize:9,fontWeight:600,cursor:"pointer",
+                          background:selectedDest===d.name?"var(--accent)":"var(--surface2)",
+                          color:selectedDest===d.name?"#fff":"var(--muted)",
+                          borderColor:selectedDest===d.name?"var(--accent)":"var(--border)"}}>
+                        {d.name.length>8?d.name.slice(0,7)+"…":d.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {destinations.length>0&&<p style={{fontSize:10,color:"var(--muted)",margin:"4px 0 0"}}>
+              Defaulting to top-voted destination. Click a button to switch or type manually.
+            </p>}
+          </div>
+
+          {/* Nationality selector */}
+          <div style={{marginBottom:8}} ref={natDropdownRef}>
+            {/* Selected nationality chips */}
+            <div
+              onClick={()=>setNatDropdownOpen(o=>!o)}
+              style={{minHeight:38,padding:"5px 10px",border:"1.5px solid var(--border)",borderRadius:7,background:"var(--surface)",cursor:"pointer",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",position:"relative"}}
+            >
+              {selectedNats.length === 0 && <span style={{fontSize:12,color:"var(--muted)"}}>Select nationalities…</span>}
+              {selectedNats.map(n=>(
+                <span key={n} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600}}>
+                  {n}
+                  <span onClick={e=>{e.stopPropagation();toggleNat(n);}} style={{cursor:"pointer",fontWeight:700,fontSize:12,lineHeight:1}}>×</span>
+                </span>
+              ))}
+              <span style={{marginLeft:"auto",fontSize:12,color:"var(--muted)",flexShrink:0}}>▾</span>
+            </div>
+            {/* Dropdown */}
+            {natDropdownOpen && (
+              <div style={{position:"absolute",zIndex:100,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,boxShadow:"var(--shadow-md)",width:"100%",maxWidth:380,marginTop:4,overflow:"hidden"}}>
+                <div style={{padding:"8px 10px",borderBottom:"1px solid var(--border)"}}>
+                  <input
+                    autoFocus
+                    className="form-input"
+                    style={{fontSize:12,padding:"6px 10px"}}
+                    placeholder="Search nationality…"
+                    value={natSearch}
+                    onChange={e=>setNatSearch(e.target.value)}
+                    onClick={e=>e.stopPropagation()}
+                  />
+                </div>
+                <div style={{maxHeight:200,overflowY:"auto"}}>
+                  {filteredNats.length === 0
+                    ? <div style={{padding:"12px 14px",fontSize:12,color:"var(--muted)"}}>No results found</div>
+                    : filteredNats.map(n=>(
+                        <div key={n} onClick={()=>{toggleNat(n);setNatSearch("");}}
+                          style={{padding:"8px 14px",fontSize:12,cursor:"pointer",color:"var(--text)",borderBottom:"1px solid var(--border)"}}
+                          onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
+                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                        >{n}</div>
+                      ))
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button
               className="btn btn-primary btn-sm"
               onClick={handleAutoFill}
-              disabled={aiLoading||autoFillCount>=AI_LIMIT||!aiNationalities.trim()}
+              disabled={aiLoading||autoFillCount>=AI_LIMIT||!selectedNats.length||!selectedDest.trim()}
               style={{flexShrink:0,opacity:(autoFillCount>=AI_LIMIT)?0.5:1}}
             >
               {aiLoading ? "⏳ Loading…" : autoFillCount>=AI_LIMIT ? "🚫 Limit reached" : "✨ Auto-fill"}
             </button>
+            {selectedNats.length > 0 && <span style={{fontSize:11,color:"var(--muted)"}}>{selectedNats.length} nationalit{selectedNats.length===1?"y":"ies"} selected</span>}
           </div>
-          <p style={{fontSize:11,color:"var(--muted)",margin:0}}>
-            Enter nationalities of your group members. AI will fill all 9 fields for each.
-            {autoFillCount>=AI_LIMIT && <span style={{color:"var(--red)",fontWeight:600}}> Trip limit of {AI_LIMIT} uses reached.</span>}
-          </p>
           {aiError && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:7,padding:"7px 10px",marginTop:8}}>⚠️ {aiError}</div>}
 
           {/* Overwrite confirmation */}
