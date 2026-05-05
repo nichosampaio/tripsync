@@ -3920,7 +3920,7 @@ function AppInner() {
                   })()}
                   <div className="trip-card-header" style={{marginTop: trip.isDemo ? 20 : 0}}>
                     <div className="trip-name">{trip.name}</div>
-                    <span className={`badge ${t.status==="confirmed"?"badge-green":"badge-yellow"}`}>{t.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
+                    <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
                   </div>
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
