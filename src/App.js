@@ -2514,9 +2514,21 @@ function TripInfoTab({trip,setTrip,db}) {
 // ─── COUNTRY TAB ─────────────────────────────────────────────────────────────
 function CountryTab({trip,setTrip,db,user}) {
   const c=trip.country||{};
+
+  // ── Entry requirements form state (9 fields) ──
+  const BLANK_FORM = {visa:"",passport:"",advisory:"",currency:"",language:"",timezone:"",power:"",vaccinations:"",emergency:""};
   const [editing,setEditing] = useState(false);
-  const [form,setForm] = useState({visa:c.visa||"",passport:c.passport||"",advisory:c.advisory||"",currency:c.currency||"",language:c.language||"",notes:c.notes||""});
-  useMemo(()=>{const cc=trip.country||{};setForm({visa:cc.visa||"",passport:cc.passport||"",advisory:cc.advisory||"",currency:cc.currency||"",language:cc.language||"",notes:cc.notes||""});},[trip.id]);
+  const [form,setForm] = useState({...BLANK_FORM,...c});
+  useMemo(()=>setForm({...BLANK_FORM,...(trip.country||{})}),[trip.id]);
+
+  // ── AI auto-fill state ──
+  const [aiNationalities, setAiNationalities] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
+  const [aiResults, setAiResults] = useState(null); // array of {nationality, fields}
+  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
+  const autoFillCount = trip.country?.autoFillCount || 0;
+  const AI_LIMIT = 6;
 
   // ── Boarding passes state ──
   const [docs, setDocs] = useState(trip.documents||[]);
@@ -2527,12 +2539,110 @@ function CountryTab({trip,setTrip,db,user}) {
   useMemo(()=>setDocs(trip.documents||[]),[trip.id]);
 
   const save=()=>{
-    if(db) db.updateTrip(trip.id, { country_info: {...form, destination_votes: trip.country?.destination_votes} });
+    if(db) db.updateTrip(trip.id, { country_info: {...form, destination_votes: trip.country?.destination_votes, autoFillCount: trip.country?.autoFillCount||0} });
     setTrip(t=>({...t,country:{...(t.country||{}),...form}}));
     setEditing(false);
   };
 
-  // ── Upload handler — PDF only ──
+  // ── AI auto-fill ──
+  const hasContent = Object.keys(BLANK_FORM).some(k=>form[k]&&form[k].trim());
+
+  const runAutoFill = async () => {
+    const nats = aiNationalities.trim();
+    if(!nats) { setAiError("Please enter at least one nationality."); return; }
+    if(autoFillCount >= AI_LIMIT) { setAiError(`This trip has reached the ${AI_LIMIT}-use auto-fill limit.`); return; }
+    const dest = trip.destinations?.[0]?.name || trip.name || "the destination";
+    setAiLoading(true); setAiError(""); setAiResults(null);
+    try {
+      const natList = nats.split(",").map(n=>n.trim()).filter(Boolean);
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 1000,
+          messages:[{
+            role:"user",
+            content:`You are a travel requirements assistant. For each nationality listed, provide accurate entry requirements for traveling to ${dest}.
+
+Nationalities: ${natList.join(", ")}
+Destination: ${dest}
+
+Return ONLY a valid JSON array, no markdown, no extra text. Format:
+[
+  {
+    "nationality": "Brazilian",
+    "visa": "...",
+    "passport": "...",
+    "advisory": "...",
+    "currency": "...",
+    "language": "...",
+    "timezone": "...",
+    "power": "...",
+    "vaccinations": "...",
+    "emergency": "..."
+  }
+]
+
+For each field:
+- visa: visa requirements for this nationality
+- passport: minimum passport validity required
+- advisory: current travel advisory level and any key warnings
+- currency: local currency name, symbol, and rough USD exchange rate
+- language: official language(s) spoken
+- timezone: timezone name and UTC offset
+- power: outlet types, voltage, and frequency
+- vaccinations: recommended or required vaccinations
+- emergency: key emergency numbers (police, ambulance, tourist helpline)
+
+Be concise but complete. One sentence per field maximum.`
+          }]
+        })
+      });
+      const data = await response.json();
+      if(data.error) throw new Error(data.error.message||"API error");
+      const text = data.content?.[0]?.text||"";
+      const clean = text.replace(/```json|```/g,"").trim();
+      const parsed = JSON.parse(clean);
+      setAiResults(parsed);
+    } catch(err) {
+      setAiError(`Auto-fill failed: ${err.message||"Please try again."}`);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const applyResults = () => {
+    if(!aiResults||!aiResults.length) return;
+    // Use first nationality's data as the base form fill
+    const first = aiResults[0];
+    const newForm = {
+      visa:         first.visa||form.visa,
+      passport:     first.passport||form.passport,
+      advisory:     first.advisory||form.advisory,
+      currency:     first.currency||form.currency,
+      language:     first.language||form.language,
+      timezone:     first.timezone||form.timezone,
+      power:        first.power||form.power,
+      vaccinations: first.vaccinations||form.vaccinations,
+      emergency:    first.emergency||form.emergency,
+    };
+    const newCount = autoFillCount + 1;
+    const newCountryInfo = {...(trip.country||{}), ...newForm, autoFillCount: newCount, destination_votes: trip.country?.destination_votes};
+    if(db) db.updateTrip(trip.id, { country_info: newCountryInfo });
+    setForm(newForm);
+    setTrip(t=>({...t,country:newCountryInfo}));
+    setShowOverwriteConfirm(false);
+    setAiResults(null);
+    setAiNationalities("");
+  };
+
+  const handleAutoFill = () => {
+    if(hasContent) { setShowOverwriteConfirm(true); }
+    else { runAutoFill(); }
+  };
+
+  // ── Upload handler ──
   const handleUpload = async (e) => {
     const file = e.target.files?.[0];
     if(!file) return;
@@ -2548,11 +2658,9 @@ function CountryTab({trip,setTrip,db,user}) {
         const { error: upErr } = await supabase.storage.from("trip-files").upload(path, file, { upsert: false });
         if(upErr) throw upErr;
         const { data: { publicUrl } } = supabase.storage.from("trip-files").getPublicUrl(path);
-        newDoc.path = path;
-        newDoc.url = publicUrl;
+        newDoc.path = path; newDoc.url = publicUrl;
       } else {
-        newDoc.path = file.name;
-        newDoc.url = URL.createObjectURL(file);
+        newDoc.path = file.name; newDoc.url = URL.createObjectURL(file);
       }
       const updatedDocs = [...docs, newDoc];
       if(!db?.isMock) await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
@@ -2574,8 +2682,7 @@ function CountryTab({trip,setTrip,db,user}) {
       if(doc.path) await supabase.storage.from("trip-files").remove([doc.path]);
       await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
     }
-    setDocs(updatedDocs);
-    setTrip(t=>({...t, documents: updatedDocs}));
+    setDocs(updatedDocs); setTrip(t=>({...t, documents: updatedDocs}));
   };
 
   const fmtSize = (bytes) => {
@@ -2584,44 +2691,126 @@ function CountryTab({trip,setTrip,db,user}) {
     return `${(bytes/(1024*1024)).toFixed(1)} MB`;
   };
 
-  // Group boarding passes by uploader
   const boardingPasses = docs.filter(d=>d.category==="boarding_pass"||d.type==="application/pdf");
-  const byMember = boardingPasses.reduce((acc,doc)=>{
-    const key = doc.uploadedBy||"Unknown";
-    if(!acc[key]) acc[key]=[];
-    acc[key].push(doc);
-    return acc;
-  },{});
+  const byMember = boardingPasses.reduce((acc,doc)=>{ const k=doc.uploadedBy||"Unknown"; if(!acc[k])acc[k]=[]; acc[k].push(doc); return acc; },{});
   const members = Object.keys(byMember);
-
   const myUploadCount = boardingPasses.filter(d=>d.uploadedBy===user&&!d.expired).length;
   const atLimit = myUploadCount >= 4;
   const tripEnd = trip.endDate ? new Date(trip.endDate) : null;
   const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
   const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date())/(1000*60*60*24)) : null;
 
-  const FIELDS=[{key:"visa",icon:"🛂",label:"Visa Requirements"},{key:"passport",icon:"📘",label:"Passport Validity"},{key:"advisory",icon:"⚠️",label:"Travel Advisory"},{key:"currency",icon:"💱",label:"Currency"},{key:"language",icon:"🗣️",label:"Language"}];
+  const FIELDS=[
+    {key:"visa",icon:"🛂",label:"Visa Requirements"},
+    {key:"passport",icon:"📘",label:"Passport Validity"},
+    {key:"advisory",icon:"⚠️",label:"Travel Advisory"},
+    {key:"currency",icon:"💱",label:"Currency"},
+    {key:"language",icon:"🗣️",label:"Language"},
+    {key:"timezone",icon:"🕐",label:"Time Zone"},
+    {key:"power",icon:"🔌",label:"Power Outlets & Voltage"},
+    {key:"vaccinations",icon:"💉",label:"Vaccinations / Health"},
+    {key:"emergency",icon:"🚑",label:"Emergency Numbers"},
+  ];
 
   return (
     <div>
       {/* ── Entry Requirements ── */}
       <div className="country-card" style={{marginBottom:18}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
           <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🌍 Entry Requirements and Documents</h4>
-          {!editing && <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>}
-          {editing && <div style={{display:"flex",gap:8}}>
-            <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
-            <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
-          </div>}
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            {!editing && <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>}
+            {editing && <>
+              <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
+              <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
+            </>}
+          </div>
         </div>
+
+        {/* ── AI Auto-fill panel ── */}
+        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 16px",marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <span style={{fontSize:16}}>✨</span>
+            <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>Auto-fill with AI</span>
+            <span style={{marginLeft:"auto",fontSize:11,color:autoFillCount>=AI_LIMIT?"var(--red)":"var(--muted)",fontWeight:autoFillCount>=AI_LIMIT?700:400}}>{autoFillCount}/{AI_LIMIT} uses</span>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:8}}>
+            <input
+              className="form-input"
+              style={{flex:1,fontSize:12,padding:"7px 10px"}}
+              placeholder="e.g. Brazilian, American, French (comma-separated)"
+              value={aiNationalities}
+              onChange={e=>setAiNationalities(e.target.value)}
+              disabled={aiLoading||autoFillCount>=AI_LIMIT}
+            />
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={handleAutoFill}
+              disabled={aiLoading||autoFillCount>=AI_LIMIT||!aiNationalities.trim()}
+              style={{flexShrink:0,opacity:(autoFillCount>=AI_LIMIT)?0.5:1}}
+            >
+              {aiLoading ? "⏳ Loading…" : autoFillCount>=AI_LIMIT ? "🚫 Limit reached" : "✨ Auto-fill"}
+            </button>
+          </div>
+          <p style={{fontSize:11,color:"var(--muted)",margin:0}}>
+            Enter nationalities of your group members. AI will fill all 9 fields for each.
+            {autoFillCount>=AI_LIMIT && <span style={{color:"var(--red)",fontWeight:600}}> Trip limit of {AI_LIMIT} uses reached.</span>}
+          </p>
+          {aiError && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:7,padding:"7px 10px",marginTop:8}}>⚠️ {aiError}</div>}
+
+          {/* Overwrite confirmation */}
+          {showOverwriteConfirm && (
+            <div style={{background:"var(--yellow-soft)",border:"1px solid rgba(160,112,0,0.22)",borderRadius:8,padding:"10px 12px",marginTop:10}}>
+              <p style={{fontSize:12,color:"var(--yellow)",fontWeight:600,marginBottom:8}}>⚠️ Fields already have content — overwrite with AI results?</p>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-primary btn-sm" onClick={()=>{setShowOverwriteConfirm(false);runAutoFill();}}>Yes, overwrite</button>
+                <button className="btn btn-ghost btn-sm" onClick={()=>setShowOverwriteConfirm(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+
+          {/* AI Results — one section per nationality */}
+          {aiResults && aiResults.length > 0 && (
+            <div style={{marginTop:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>Results — review before applying:</div>
+              {aiResults.map((r,i)=>(
+                <div key={i} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
+                  <div style={{fontSize:12,fontWeight:700,color:"var(--accent)",marginBottom:6}}>🌐 {r.nationality}</div>
+                  {FIELDS.map(f=>(
+                    <div key={f.key} style={{display:"flex",gap:6,fontSize:11,marginBottom:3}}>
+                      <span style={{flexShrink:0}}>{f.icon}</span>
+                      <span style={{color:"var(--muted)",minWidth:120,flexShrink:0}}>{f.label}:</span>
+                      <span style={{color:"var(--text)"}}>{r[f.key]||"—"}</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <div style={{background:"rgba(160,112,0,0.07)",border:"1px solid rgba(160,112,0,0.18)",borderRadius:7,padding:"7px 10px",marginBottom:10,fontSize:11,color:"var(--yellow)"}}>
+                ⚠️ Always verify entry requirements with official embassy and government sources before travel.
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button className="btn btn-primary btn-sm" onClick={applyResults}>Apply first nationality's data to fields</button>
+                <button className="btn btn-ghost btn-sm" onClick={()=>setAiResults(null)}>Dismiss</button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Field display / edit ── */}
         {!editing && FIELDS.map(f=>(
-          <div key={f.key} className="info-row"><span className="info-icon">{f.icon}</span><div><div className="info-lbl">{f.label}</div><div className="info-txt">{form[f.key]||<span style={{color:"var(--muted)",fontStyle:"italic"}}>Not set</span>}</div></div></div>
+          <div key={f.key} className="info-row">
+            <span className="info-icon">{f.icon}</span>
+            <div><div className="info-lbl">{f.label}</div><div className="info-txt">{form[f.key]||<span style={{color:"var(--muted)",fontStyle:"italic"}}>Not set</span>}</div></div>
+          </div>
         ))}
         {editing && <>
           {FIELDS.map(f=>(
-            <div key={f.key} className="form-group"><label className="form-label">{f.icon} {f.label}</label><input className="form-input" value={form[f.key]} onChange={e=>setForm(ff=>({...ff,[f.key]:e.target.value}))} placeholder={`Enter ${f.label.toLowerCase()}…`}/></div>
+            <div key={f.key} className="form-group">
+              <label className="form-label">{f.icon} {f.label}</label>
+              <input className="form-input" value={form[f.key]||""} onChange={e=>setForm(ff=>({...ff,[f.key]:e.target.value}))} placeholder={`Enter ${f.label.toLowerCase()}…`}/>
+            </div>
           ))}
-          <div className="form-group"><label className="form-label">📝 Notes</label><textarea className="form-input form-textarea" value={form.notes} onChange={e=>setForm(ff=>({...ff,notes:e.target.value}))} placeholder="Additional details…"/></div>
+          <div className="form-group"><label className="form-label">📝 Notes</label><textarea className="form-input form-textarea" value={form.notes||""} onChange={e=>setForm(ff=>({...ff,notes:e.target.value}))} placeholder="Additional details…"/></div>
         </>}
       </div>
 
@@ -2633,92 +2822,59 @@ function CountryTab({trip,setTrip,db,user}) {
             <p style={{fontSize:12,color:"var(--muted)",marginTop:4}}>PDF only · visible to all trip members · max 5MB per file</p>
           </div>
           <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={()=>!uploading&&!atLimit&&fileInputRef.current?.click()}
-              disabled={uploading||atLimit}
-              style={{flexShrink:0,marginTop:2,opacity:atLimit?0.5:1,cursor:atLimit?"not-allowed":"pointer"}}
-            >
+            <button className="btn btn-primary btn-sm" onClick={()=>!uploading&&!atLimit&&fileInputRef.current?.click()} disabled={uploading||atLimit} style={{flexShrink:0,marginTop:2,opacity:atLimit?0.5:1,cursor:atLimit?"not-allowed":"pointer"}}>
               {uploading ? "⏳ Uploading…" : atLimit ? "🚫 Limit reached" : "⬆️ Upload"}
             </button>
             <span style={{fontSize:10,color:atLimit?"var(--red)":"var(--muted)",fontWeight:atLimit?600:400}}>{myUploadCount}/4 uploaded</span>
           </div>
           <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
         </div>
-
         {uploadErr && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:8,padding:"8px 12px",margin:"10px 0"}}>⚠️ {uploadErr}</div>}
         {uploadSuccess && <div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.18)",borderRadius:8,padding:"8px 12px",margin:"10px 0"}}>✅ {uploadSuccess}</div>}
-
-        {/* Expiry notice */}
         {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 14 && boardingPasses.length > 0 && (
           <div style={{fontSize:12,color:"var(--yellow)",background:"var(--yellow-soft)",border:"1px solid rgba(160,112,0,0.22)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>
-            ⚠️ Boarding passes will be deleted in <strong>{daysUntilExpiry} days</strong> (1 month after trip end). Download any files you need to keep.
+            ⚠️ Boarding passes will be deleted in <strong>{daysUntilExpiry} days</strong>. Download any files you need to keep.
           </div>
         )}
-
-        {boardingPasses.length === 0 ? (
-          <div style={{textAlign:"center",padding:"28px 0",color:"var(--muted)",fontSize:13}}>
-            <div style={{fontSize:32,marginBottom:8}}>🛫</div>
-            No boarding passes uploaded yet.<br/>
-            <span style={{fontSize:12}}>Be the first to upload yours.</span>
-          </div>
-        ) : (
-          <div style={{display:"flex",flexDirection:"column",gap:18,marginTop:14}}>
-            {members.map(memberName=>(
-              <div key={memberName}>
-                {/* Member header */}
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                  <div style={{width:26,height:26,borderRadius:"50%",background:memberName===user?"linear-gradient(135deg,#c96a28,#e8924a)":"linear-gradient(135deg,#2a527a,#3a72aa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>
-                    {memberName.slice(0,2).toUpperCase()}
+        {boardingPasses.length === 0
+          ? <div style={{textAlign:"center",padding:"28px 0",color:"var(--muted)",fontSize:13}}><div style={{fontSize:32,marginBottom:8}}>🛫</div>No boarding passes uploaded yet.<br/><span style={{fontSize:12}}>Be the first to upload yours.</span></div>
+          : <div style={{display:"flex",flexDirection:"column",gap:18,marginTop:14}}>
+              {members.map(memberName=>(
+                <div key={memberName}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <div style={{width:26,height:26,borderRadius:"50%",background:memberName===user?"linear-gradient(135deg,#c96a28,#e8924a)":"linear-gradient(135deg,#2a527a,#3a72aa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>{memberName.slice(0,2).toUpperCase()}</div>
+                    <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{memberName}{memberName===user&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}</span>
+                    <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{byMember[memberName].length} file{byMember[memberName].length!==1?"s":""}</span>
                   </div>
-                  <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>
-                    {memberName}{memberName===user&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}
-                  </span>
-                  <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{byMember[memberName].length} file{byMember[memberName].length!==1?"s":""}</span>
-                </div>
-                {/* Files for this member */}
-                <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:34}}>
-                  {byMember[memberName].map(doc=>{
-                    const isExpired = doc.expired===true;
-                    return (
-                      <div key={doc.id} style={{display:"flex",alignItems:"center",gap:10,background:isExpired?"var(--surface3)":"var(--surface2)",border:`1px solid ${isExpired?"rgba(192,57,43,0.18)":"var(--border)"}`,borderRadius:9,padding:"9px 12px",opacity:isExpired?0.65:1}}>
-                        <span style={{fontSize:18,flexShrink:0}}>📄</span>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                            <span style={{fontSize:12,fontWeight:600,color:isExpired?"var(--muted)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isExpired?"line-through":"none"}}>{doc.name}</span>
-                            {isExpired && <span style={{padding:"1px 6px",borderRadius:4,background:"var(--red-soft)",color:"var(--red)",fontSize:10,fontWeight:700,border:"1px solid rgba(192,57,43,0.18)",flexShrink:0}}>EXPIRED</span>}
+                  <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:34}}>
+                    {byMember[memberName].map(doc=>{
+                      const isExpired=doc.expired===true;
+                      return (
+                        <div key={doc.id} style={{display:"flex",alignItems:"center",gap:10,background:isExpired?"var(--surface3)":"var(--surface2)",border:`1px solid ${isExpired?"rgba(192,57,43,0.18)":"var(--border)"}`,borderRadius:9,padding:"9px 12px",opacity:isExpired?0.65:1}}>
+                          <span style={{fontSize:18,flexShrink:0}}>📄</span>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                              <span style={{fontSize:12,fontWeight:600,color:isExpired?"var(--muted)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isExpired?"line-through":"none"}}>{doc.name}</span>
+                              {isExpired && <span style={{padding:"1px 6px",borderRadius:4,background:"var(--red-soft)",color:"var(--red)",fontSize:10,fontWeight:700,border:"1px solid rgba(192,57,43,0.18)",flexShrink:0}}>EXPIRED</span>}
+                            </div>
+                            <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>{isExpired?"Deleted — re-upload to restore":`${fmtSize(doc.size)} · ${doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString():""}`}</div>
                           </div>
-                          <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>
-                            {isExpired ? "Deleted — re-upload to restore" : `${fmtSize(doc.size)} · ${doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ""}`}
+                          <div style={{display:"flex",gap:6,flexShrink:0}}>
+                            {!isExpired && <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name} style={{padding:"4px 10px",borderRadius:6,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3}}>⬇️</a>}
+                            {(memberName===user||!doc.uploadedBy) && <button onClick={()=>handleDelete(doc)} style={{padding:"4px 8px",borderRadius:6,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>🗑️</button>}
                           </div>
                         </div>
-                        <div style={{display:"flex",gap:6,flexShrink:0}}>
-                          {!isExpired && (
-                            <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name}
-                              style={{padding:"4px 10px",borderRadius:6,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3}}>
-                              ⬇️
-                            </a>
-                          )}
-                          {(memberName===user||!doc.uploadedBy) && (
-                            <button onClick={()=>handleDelete(doc)}
-                              style={{padding:"4px 8px",borderRadius:6,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                              🗑️
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+        }
       </div>
     </div>
   );
 }
-
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
 function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest}) {
