@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import React from "react";
 import { supabase } from "./supabase";
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&display=swap');`;
@@ -2853,7 +2854,26 @@ const DEMO_TRIP = {
 const INITIAL_TRIPS = [DEMO_TRIP];
 
 // ─── APP ──────────────────────────────────────────────────────────────────────
-export default function App() {
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if(this.state.error) return (
+      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f0ede8",fontFamily:"Inter,sans-serif",padding:24}}>
+        <div style={{background:"#fff",border:"1px solid rgba(100,70,40,0.15)",borderRadius:16,padding:36,maxWidth:540,width:"100%",boxShadow:"0 4px 24px rgba(0,0,0,0.08)"}}>
+          <div style={{fontSize:32,marginBottom:16}}>⚠️</div>
+          <h2 style={{fontSize:20,fontWeight:700,marginBottom:8,color:"#1c1410"}}>Something went wrong</h2>
+          <p style={{fontSize:13,color:"#7a6a58",marginBottom:16,lineHeight:1.6}}>TripSync hit an unexpected error. Please refresh the page to try again.</p>
+          <pre style={{fontSize:11,background:"#f4f1eb",borderRadius:8,padding:12,overflowX:"auto",color:"#c0392b",marginBottom:16}}>{this.state.error?.message}</pre>
+          <button onClick={()=>window.location.reload()} style={{padding:"8px 18px",borderRadius:7,background:"#c96a28",color:"#fff",border:"none",cursor:"pointer",fontWeight:600,fontSize:13}}>Refresh Page</button>
+        </div>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
+function AppInner() {
   const [page,setPage]         = useState("landing");
   const [trips,setTrips]       = useState([]);
   const [tripsLoading,setTripsLoading] = useState(false);
@@ -4081,5 +4101,13 @@ export default function App() {
         )}
       </div>
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppInner />
+    </ErrorBoundary>
   );
 }
