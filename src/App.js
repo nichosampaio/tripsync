@@ -2376,9 +2376,9 @@ function VehicleTab({trip,setTrip,db}) {
 // ─── TRIP INFO TAB ────────────────────────────────────────────────────────────
 function TripInfoTab({trip,setTrip,db}) {
   const [editing,setEditing] = useState(false);
-  const [form,setForm] = useState({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});
+  const [form,setForm] = useState({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||"",status:trip.status||"planning"});
   const [errs,setErrs] = useState({});
-  useMemo(()=>setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""}),[trip.id]);
+  useMemo(()=>setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||"",status:trip.status||"planning"}),[trip.id]);
 
   const validate=()=>{
     const e={};
@@ -2398,12 +2398,13 @@ function TripInfoTab({trip,setTrip,db}) {
       start_date:  form.startDate,
       end_date:    form.endDate,
       description: form.description,
+      status:      form.status,
     });
-    setTrip(t=>({...t,name:form.name.trim(),startDate:form.startDate,endDate:form.endDate,description:form.description,
+    setTrip(t=>({...t,name:form.name.trim(),startDate:form.startDate,endDate:form.endDate,description:form.description,status:form.status,
       destinations:t.destinations.map((d,i)=>i===0?{...d,name:form.destination.trim()}:d)}));
     setEditing(false);
   };
-  const cancel=()=>{setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||""});setErrs({});setEditing(false);};
+  const cancel=()=>{setForm({name:trip.name,destination:trip.destinations[0]?.name||"",startDate:trip.startDate||"",endDate:trip.endDate||"",description:trip.description||"",status:trip.status||"planning"});setErrs({});setEditing(false);};
 
   return (
     <div>
@@ -2425,7 +2426,11 @@ function TripInfoTab({trip,setTrip,db}) {
             <div className="info-view-cell"><div className="info-view-label">Start Date</div><div className="info-view-val">{trip.startDate?fmtDate(trip.startDate):"—"}</div></div>
             <div className="info-view-cell"><div className="info-view-label">End Date</div><div className="info-view-val">{trip.endDate?fmtDate(trip.endDate):"—"}</div></div>
             <div className="info-view-cell"><div className="info-view-label">Duration</div><div className="info-view-val">{trip.startDate&&trip.endDate?`${nightsBetween(trip.startDate,trip.endDate)} nights`:"-"}</div></div>
-            <div className="info-view-cell"><div className="info-view-label">Status</div><div className="info-view-val"><span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span></div></div>
+            <div className="info-view-cell"><div className="info-view-label">Status</div><div className="info-view-val">
+              {trip.status==="confirmed"
+                ? <span className="badge badge-green">✓ Confirmed</span>
+                : <span className="badge badge-yellow">⏳ Planning</span>}
+            </div></div>
             <div className="info-view-cell full"><div className="info-view-label">Members</div><div className="members-row" style={{marginTop:8}}>{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
           </div>
         ):(
@@ -2433,6 +2438,38 @@ function TripInfoTab({trip,setTrip,db}) {
             <div className="form-group"><label className="form-label">Trip Name *</label><input className={`form-input${errs.name?" err":""}`} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))} placeholder="e.g. Spring Break 2026"/>{errs.name&&<div className="err-msg">{errs.name}</div>}</div>
             <div className="form-group"><label className="form-label">Destination *</label><input className={`form-input${errs.destination?" err":""}`} value={form.destination} onChange={e=>setForm(f=>({...f,destination:e.target.value}))} placeholder="e.g. Cancun, Mexico"/>{errs.destination&&<div className="err-msg">{errs.destination}</div>}</div>
             <div className="form-group"><label className="form-label">Trip Dates *</label>{errs.dates&&<div className="err-msg" style={{marginBottom:8}}>{errs.dates}</div>}<DatePicker startDate={form.startDate||null} endDate={form.endDate||null} onChange={(s,e)=>setForm(f=>({...f,startDate:s||"",endDate:e||""}))}/></div>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <div style={{display:"flex",gap:8}}>
+                {[
+                  {value:"planning",  label:"⏳ Planning"},
+                  {value:"confirmed", label:"✓ Confirmed"},
+                ].map(s=>(
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={()=>setForm(f=>({...f,status:s.value}))}
+                    style={{
+                      padding:"7px 20px",
+                      borderRadius:7,
+                      border:"1.5px solid",
+                      cursor:"pointer",
+                      fontFamily:"Inter,sans-serif",
+                      fontSize:13,
+                      fontWeight:600,
+                      transition:"all 0.15s",
+                      ...(form.status===s.value
+                        ? s.value==="planning"
+                          ? {background:"rgba(160,112,0,0.12)",color:"#a07000",borderColor:"rgba(160,112,0,0.30)"}
+                          : {background:"rgba(30,122,69,0.12)",color:"#1e7a45",borderColor:"rgba(30,122,69,0.28)"}
+                        : {background:"transparent",color:"var(--muted)",borderColor:"var(--border)"}),
+                    }}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className="form-group"><label className="form-label">Description</label><textarea className="form-input form-textarea" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="Any notes…"/></div>
           </div>
         )}
@@ -3701,10 +3738,10 @@ export default function App() {
   );
 
   const TABS = [
-    {id:"info",l:"ℹ️ Trip Info"},{id:"schedule",l:"📅 Schedule"},{id:"map",l:"🗺️ Map"},
-    {id:"voting",l:"🗳️ Vote"},{id:"budget",l:"💰 Budget"},{id:"accommodations",l:"🏨 Stays"},
-    {id:"activities",l:"🎯 Items"},{id:"vehicles",l:"🚗 Vehicles"},{id:"members",l:"👥 Members"},{id:"country",l:"🌍 Entry"},
-    {id:"summary",l:"✅ Summary"},
+    {id:"info",l:"ℹ️ Trip Info"},{id:"members",l:"👥 Members"},{id:"schedule",l:"📅 Schedule"},
+    {id:"map",l:"🗺️ Map"},{id:"accommodations",l:"🏨 Stays"},{id:"vehicles",l:"🚗 Vehicles"},
+    {id:"activities",l:"🎯 Items"},{id:"budget",l:"💰 Budget"},{id:"country",l:"🌍 Entry"},
+    {id:"voting",l:"🗳️ Vote"},{id:"summary",l:"✅ Summary"},
   ];
 
   // Count join requests for the active trip
@@ -3863,7 +3900,7 @@ export default function App() {
                   })()}
                   <div className="trip-card-header" style={{marginTop: trip.isDemo ? 20 : 0}}>
                     <div className="trip-name">{trip.name}</div>
-                    <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"Confirmed ✓":"Planning ⏳"}</span>
+                    <span className={`badge ${t.status==="confirmed"?"badge-green":"badge-yellow"}`}>{t.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
                   </div>
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
@@ -3890,7 +3927,7 @@ export default function App() {
             <div className="trip-detail-header">
               <button className="back-btn" onClick={()=>setPage("dashboard")}>← Back</button>
               <h2>{active.name}</h2>
-              <span className={`badge ${active.status==="confirmed"?"badge-green":"badge-yellow"}`}>{active.status==="confirmed"?"Confirmed":"Planning"}</span>
+              <span className={`badge ${active.status==="confirmed"?"badge-green":"badge-yellow"}`}>{active.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
               {active.startDate&&<span className="badge" style={{fontSize:12}}>📅 {fmtRange(active.startDate,active.endDate)}</span>}
               <button className="btn btn-ghost btn-sm" style={{marginLeft:"auto"}} onClick={()=>setTab("info")}>✏️ Edit Trip</button>
             </div>
