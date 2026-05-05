@@ -2384,7 +2384,17 @@ function VehicleTab({trip,setTrip,db}) {
                     </div>
                     {v.seats&&<div className="card-meta-row">💺 <strong>{v.seats} seats</strong> · {v.transmission}</div>}
                     {v.rating&&<div className="card-meta-row"><span className="stars">{renderStars(v.rating)}</span></div>}
-                    {((v.upvotes||[]).length>0||(v.downvotes||[]).length>0)&&<div className="card-meta-row">🗳️ <strong>{(v.upvotes||[]).length} yes · {(v.downvotes||[]).length} no</strong></div>}
+                    {((v.upvotes||[]).length>0||(v.downvotes||[]).length>0)&&(()=>{
+                      const upV=(v.upvotes||[]).length, downV=(v.downvotes||[]).length, netV=upV-downV;
+                      return (
+                        <div className="card-meta-row" style={{fontSize:12}}>
+                          🗳️ <strong style={{color:"var(--green)"}}>{upV} yes</strong>
+                          <span style={{color:"var(--muted)"}}>·</span>
+                          <strong style={{color:"var(--red)"}}>{downV} no</strong>
+                          {netV!==0&&<span style={{color:netV>0?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>({netV>0?"+":""}{netV} net)</span>}
+                        </div>
+                      );
+                    })()}
                   </div>
                   {v.notes&&<div className="card-notes">{v.notes}</div>}
                 </div>
