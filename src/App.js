@@ -2547,18 +2547,37 @@ function CountryTab({trip,setTrip,db,user}) {
   const hasContent = Object.keys(BLANK_FORM).some(k=>form[k]&&form[k].trim());
 
   // Default destination = highest net-voted destination
-  const topDest = [...(trip.destinations||[])].sort((a,b)=>
+  const topDestName = [...(trip.destinations||[])].sort((a,b)=>
     ((b.upvotes||[]).length-(b.downvotes||[]).length) -
     ((a.upvotes||[]).length-(a.downvotes||[]).length)
-  )[0]?.name || trip.name || "";
-  const [selectedDest, setSelectedDest] = useState(topDest);
-  useMemo(()=>setSelectedDest(topDest),[trip.id]);
+  )[0]?.name || "";
+  const [selectedDests, setSelectedDests] = useState(topDestName ? [topDestName] : []);
+  const [destSearch, setDestSearch] = useState("");
+  const [destDropdownOpen, setDestDropdownOpen] = useState(false);
+  const destDropdownRef = useRef(null);
+  useMemo(()=>setSelectedDests(topDestName ? [topDestName] : []),[trip.id]);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if(destDropdownRef.current && !destDropdownRef.current.contains(e.target)) setDestDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filteredDests = ALL_NATIONALITIES.filter(n =>
+    n.toLowerCase().includes(destSearch.toLowerCase()) && !selectedDests.includes(n)
+  );
+
+  const toggleDest = (d) => {
+    setSelectedDests(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d]);
+  };
 
   const runAutoFill = async () => {
-    if(!selectedNats.length) { setAiError("Please select at least one nationality."); return; }
-    if(!selectedDest.trim()) { setAiError("Please enter a destination."); return; }
+    if(!selectedNats.length) { setAiError("Please select at least one country."); return; }
+    if(!selectedDests.length) { setAiError("Please select at least one destination."); return; }
     if(autoFillCount >= AI_LIMIT) { setAiError(`This trip has reached the ${AI_LIMIT}-use auto-fill limit.`); return; }
-    const dest = selectedDest.trim();
+    const dest = selectedDests.join(" and ");
     setAiLoading(true); setAiError(""); setAiResults(null);
     try {
       const natList = selectedNats;
@@ -2797,43 +2816,57 @@ Be concise but complete. One sentence per field maximum.`
             <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>Auto-fill with AI</span>
             <span style={{marginLeft:"auto",fontSize:11,color:autoFillCount>=AI_LIMIT?"var(--red)":"var(--muted)",fontWeight:autoFillCount>=AI_LIMIT?700:400}}>{autoFillCount}/{AI_LIMIT} uses</span>
           </div>
-          {/* Destination input */}
+          {/* Destination selector */}
           <div style={{marginBottom:10}}>
-            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>🌍 Countries (passport holders)</label>
-            <div style={{position:"relative"}}>
-              <input
-                className="form-input"
-                style={{fontSize:12,padding:"7px 10px",paddingRight:destinations.length>0?"90px":"10px"}}
-                placeholder="Enter destination country or city…"
-                value={selectedDest}
-                onChange={e=>setSelectedDest(e.target.value)}
-                disabled={aiLoading}
-              />
-              {destinations.length>0&&(
-                <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",display:"flex",gap:4}}>
-                  {destinations.slice(0,3).map((d,i)=>{
-                    const net=(d.upvotes||[]).length-(d.downvotes||[]).length;
-                    return(
-                      <button key={d.id} onClick={()=>setSelectedDest(d.name)}
-                        title={`${d.name} (${net>=0?"+":""}${net} net)`}
-                        style={{padding:"2px 7px",borderRadius:4,border:"1px solid",fontSize:9,fontWeight:600,cursor:"pointer",
-                          background:selectedDest===d.name?"var(--accent)":"var(--surface2)",
-                          color:selectedDest===d.name?"#fff":"var(--muted)",
-                          borderColor:selectedDest===d.name?"var(--accent)":"var(--border)"}}>
-                        {d.name.length>8?d.name.slice(0,7)+"…":d.name}
-                      </button>
-                    );
-                  })}
+            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>📍 Destination Countries</label>
+            <div ref={destDropdownRef} style={{position:"relative"}}>
+              <div
+                onClick={()=>setDestDropdownOpen(o=>!o)}
+                style={{minHeight:38,padding:"5px 10px",border:"1.5px solid var(--border)",borderRadius:7,background:"var(--surface)",cursor:"pointer",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}
+              >
+                {selectedDests.length===0 && <span style={{fontSize:12,color:"var(--muted)"}}>Select destination countries…</span>}
+                {selectedDests.map(d=>(
+                  <span key={d} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,background:"rgba(42,82,122,0.10)",color:"#2a527a",border:"1px solid rgba(42,82,122,0.22)",fontSize:11,fontWeight:600}}>
+                    {d}
+                    <span onClick={e=>{e.stopPropagation();toggleDest(d);}} style={{cursor:"pointer",fontWeight:700,fontSize:12,lineHeight:1}}>×</span>
+                  </span>
+                ))}
+                <span style={{marginLeft:"auto",fontSize:12,color:"var(--muted)",flexShrink:0}}>▾</span>
+              </div>
+              {destDropdownOpen && (
+                <div style={{position:"absolute",zIndex:101,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,boxShadow:"var(--shadow-md)",width:"100%",marginTop:4,overflow:"hidden"}}>
+                  <div style={{padding:"8px 10px",borderBottom:"1px solid var(--border)"}}>
+                    <input
+                      autoFocus
+                      className="form-input"
+                      style={{fontSize:12,padding:"6px 10px"}}
+                      placeholder="Search country…"
+                      value={destSearch}
+                      onChange={e=>setDestSearch(e.target.value)}
+                      onClick={e=>e.stopPropagation()}
+                    />
+                  </div>
+                  <div style={{maxHeight:200,overflowY:"auto"}}>
+                    {filteredDests.length===0
+                      ? <div style={{padding:"12px 14px",fontSize:12,color:"var(--muted)"}}>No results found</div>
+                      : filteredDests.map(d=>(
+                          <div key={d} onClick={()=>{toggleDest(d);setDestSearch("");}}
+                            style={{padding:"8px 14px",fontSize:12,cursor:"pointer",color:"var(--text)",borderBottom:"1px solid var(--border)"}}
+                            onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                          >{d}</div>
+                        ))
+                    }
+                  </div>
                 </div>
               )}
             </div>
-            {destinations.length>0&&<p style={{fontSize:10,color:"var(--muted)",margin:"4px 0 0"}}>
-              Defaulting to top-voted destination. Click a button to switch or type manually.
-            </p>}
+            {topDestName && <p style={{fontSize:10,color:"var(--muted)",margin:"4px 0 0"}}>Defaulting to top-voted destination. Add more if visiting multiple countries.</p>}
           </div>
 
-          {/* Nationality selector */}
+          {/* Country selector (passport) */}
           <div style={{marginBottom:8}} ref={natDropdownRef}>
+            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>🌍 Countries (passport holders)</label>
             {/* Selected country chips */}
             <div
               onClick={()=>setNatDropdownOpen(o=>!o)}
@@ -2881,7 +2914,7 @@ Be concise but complete. One sentence per field maximum.`
             <button
               className="btn btn-primary btn-sm"
               onClick={handleAutoFill}
-              disabled={aiLoading||autoFillCount>=AI_LIMIT||!selectedNats.length||!selectedDest.trim()}
+              disabled={aiLoading||autoFillCount>=AI_LIMIT||!selectedNats.length||!selectedDests.length}
               style={{flexShrink:0,opacity:(autoFillCount>=AI_LIMIT)?0.5:1}}
             >
               {aiLoading ? "⏳ Loading…" : autoFillCount>=AI_LIMIT ? "🚫 Limit reached" : "✨ Auto-fill"}
