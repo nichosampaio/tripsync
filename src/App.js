@@ -2575,15 +2575,15 @@ function CountryTab({trip,setTrip,db,user}) {
           max_tokens: 1000,
           messages:[{
             role:"user",
-            content:`You are a travel requirements assistant. For each nationality listed, provide accurate entry requirements for traveling to ${dest}.
+            content:`You are a travel requirements assistant. For each country listed, provide accurate entry requirements for a passport holder from that country traveling to ${dest}.
 
-Nationalities: ${natList.join(", ")}
+Countries: ${natList.join(", ")}
 Destination: ${dest}
 
 Return ONLY a valid JSON array, no markdown, no extra text. Format:
 [
   {
-    "nationality": "Brazilian",
+    "nationality": "Brazil",
     "visa": "...",
     "passport": "...",
     "advisory": "...",
@@ -2597,7 +2597,7 @@ Return ONLY a valid JSON array, no markdown, no extra text. Format:
 ]
 
 For each field:
-- visa: visa requirements for this nationality
+- visa: visa requirements for a passport holder from this country
 - passport: minimum passport validity required
 - advisory: current travel advisory level and any key warnings
 - currency: local currency name, symbol, and rough USD exchange rate
@@ -2659,33 +2659,32 @@ Be concise but complete. One sentence per field maximum.`
   const natDropdownRef = useRef(null);
 
   const ALL_NATIONALITIES = [
-    "Afghan","Albanian","Algerian","American","Andorran","Angolan","Antiguan","Argentine",
-    "Armenian","Australian","Austrian","Azerbaijani","Bahamian","Bahraini","Bangladeshi",
-    "Barbadian","Belarusian","Belgian","Belizean","Beninese","Bhutanese","Bolivian",
-    "Bosnian","Botswanan","Brazilian","British","Bruneian","Bulgarian","Burkinabe",
-    "Burundian","Cambodian","Cameroonian","Canadian","Cape Verdean","Central African",
-    "Chadian","Chilean","Chinese","Colombian","Comoran","Congolese","Costa Rican",
-    "Croatian","Cuban","Cypriot","Czech","Danish","Djiboutian","Dominican","Dutch",
-    "East Timorese","Ecuadorian","Egyptian","Emirati","Equatorial Guinean","Eritrean",
-    "Estonian","Eswatini","Ethiopian","Fijian","Finnish","French","Gabonese","Gambian",
-    "Georgian","German","Ghanaian","Greek","Grenadian","Guatemalan","Guinean",
-    "Guinea-Bissauan","Guyanese","Haitian","Honduran","Hungarian","Icelandic","Indian",
-    "Indonesian","Iranian","Iraqi","Irish","Israeli","Italian","Ivorian","Jamaican",
-    "Japanese","Jordanian","Kazakhstani","Kenyan","Kiribatian","Korean","Kuwaiti",
-    "Kyrgyz","Lao","Latvian","Lebanese","Lesothan","Liberian","Libyan","Liechtensteiner",
-    "Lithuanian","Luxembourger","Macedonian","Malagasy","Malawian","Malaysian","Maldivian",
-    "Malian","Maltese","Marshallese","Mauritanian","Mauritian","Mexican","Micronesian",
-    "Moldovan","Monacan","Mongolian","Montenegrin","Moroccan","Mozambican","Namibian",
-    "Nauruan","Nepali","New Zealander","Nicaraguan","Nigerian","Nigerien","Norwegian",
-    "Omani","Pakistani","Palauan","Palestinian","Panamanian","Papua New Guinean",
-    "Paraguayan","Peruvian","Filipino","Polish","Portuguese","Qatari","Romanian","Russian",
-    "Rwandan","Saint Lucian","Salvadoran","Samoan","Saudi","Senegalese","Serbian",
-    "Seychellois","Sierra Leonean","Singaporean","Slovak","Slovenian","Solomon Islander",
-    "Somali","South African","South Sudanese","Spanish","Sri Lankan","Sudanese",
-    "Surinamese","Swedish","Swiss","Syrian","São Toméan","Taiwanese","Tajik","Tanzanian",
-    "Thai","Togolese","Tongan","Trinidadian","Tunisian","Turkish","Turkmen","Tuvaluan",
-    "Ugandan","Ukrainian","Uruguayan","Uzbek","Vanuatuan","Venezuelan","Vietnamese",
-    "Yemeni","Zambian","Zimbabwean"
+    "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina",
+    "Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados",
+    "Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina",
+    "Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon",
+    "Canada","Cape Verde","Central African Republic","Chad","Chile","China","Colombia",
+    "Comoros","Congo","Costa Rica","Croatia","Cuba","Cyprus","Czech Republic","Denmark",
+    "Djibouti","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea",
+    "Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia",
+    "Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guinea-Bissau",
+    "Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran","Iraq",
+    "Ireland","Israel","Italy","Ivory Coast","Jamaica","Japan","Jordan","Kazakhstan",
+    "Kenya","Kiribati","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia",
+    "Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia",
+    "Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico",
+    "Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique",
+    "Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria",
+    "North Korea","North Macedonia","Norway","Oman","Pakistan","Palau","Palestine",
+    "Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal",
+    "Qatar","Romania","Russia","Rwanda","Saint Lucia","Samoa","San Marino",
+    "São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone",
+    "Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa",
+    "South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden",
+    "Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste",
+    "Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu",
+    "Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay",
+    "Uzbekistan","Vanuatu","Vatican City","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"
   ];
 
   const filteredNats = ALL_NATIONALITIES.filter(n =>
@@ -2800,7 +2799,7 @@ Be concise but complete. One sentence per field maximum.`
           </div>
           {/* Destination input */}
           <div style={{marginBottom:10}}>
-            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>📍 Destination</label>
+            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>🌍 Countries (passport holders)</label>
             <div style={{position:"relative"}}>
               <input
                 className="form-input"
@@ -2835,12 +2834,12 @@ Be concise but complete. One sentence per field maximum.`
 
           {/* Nationality selector */}
           <div style={{marginBottom:8}} ref={natDropdownRef}>
-            {/* Selected nationality chips */}
+            {/* Selected country chips */}
             <div
               onClick={()=>setNatDropdownOpen(o=>!o)}
               style={{minHeight:38,padding:"5px 10px",border:"1.5px solid var(--border)",borderRadius:7,background:"var(--surface)",cursor:"pointer",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",position:"relative"}}
             >
-              {selectedNats.length === 0 && <span style={{fontSize:12,color:"var(--muted)"}}>Select nationalities…</span>}
+              {selectedNats.length === 0 && <span style={{fontSize:12,color:"var(--muted)"}}>Select countries your group members are from…</span>}
               {selectedNats.map(n=>(
                 <span key={n} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600}}>
                   {n}
@@ -2857,7 +2856,7 @@ Be concise but complete. One sentence per field maximum.`
                     autoFocus
                     className="form-input"
                     style={{fontSize:12,padding:"6px 10px"}}
-                    placeholder="Search nationality…"
+                    placeholder="Search country…"
                     value={natSearch}
                     onChange={e=>setNatSearch(e.target.value)}
                     onClick={e=>e.stopPropagation()}
@@ -2887,7 +2886,7 @@ Be concise but complete. One sentence per field maximum.`
             >
               {aiLoading ? "⏳ Loading…" : autoFillCount>=AI_LIMIT ? "🚫 Limit reached" : "✨ Auto-fill"}
             </button>
-            {selectedNats.length > 0 && <span style={{fontSize:11,color:"var(--muted)"}}>{selectedNats.length} nationalit{selectedNats.length===1?"y":"ies"} selected</span>}
+            {selectedNats.length > 0 && <span style={{fontSize:11,color:"var(--muted)"}}>{selectedNats.length} countr{selectedNats.length===1?"y":"ies"} selected</span>}
           </div>
           {aiError && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:7,padding:"7px 10px",marginTop:8}}>⚠️ {aiError}</div>}
 
@@ -2902,7 +2901,7 @@ Be concise but complete. One sentence per field maximum.`
             </div>
           )}
 
-          {/* AI Results — one section per nationality */}
+          {/* AI Results — one section per country */}
           {aiResults && aiResults.length > 0 && (
             <div style={{marginTop:12}}>
               <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>Results — review before applying:</div>
@@ -2922,7 +2921,7 @@ Be concise but complete. One sentence per field maximum.`
                 ⚠️ Always verify entry requirements with official embassy and government sources before travel.
               </div>
               <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary btn-sm" onClick={applyResults}>Apply first nationality's data to fields</button>
+                <button className="btn btn-primary btn-sm" onClick={applyResults}>Apply first country's data to fields</button>
                 <button className="btn btn-ghost btn-sm" onClick={()=>setAiResults(null)}>Dismiss</button>
               </div>
             </div>
