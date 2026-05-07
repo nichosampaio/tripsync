@@ -4076,7 +4076,17 @@ export default function App() {
         created_by:     item.metadata?.createdBy || null,
         location:       item.location || null,
         duration_min:   item.durationMin || 60,
-        metadata:       item.metadata || {},
+        metadata: {
+          notes:              item.metadata?.notes || "",
+          description:        item.metadata?.description || "",
+          checkIn:            item.metadata?.checkIn || null,
+          checkOut:           item.metadata?.checkOut || null,
+          transportationTime: item.metadata?.transportationTime || "",
+          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
+          upvotes:            item.metadata?.upvotes || [],
+          downvotes:          item.metadata?.downvotes || [],
+          createdBy:          item.metadata?.createdBy || "",
+        },
       }).select().single();
       if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
@@ -4084,17 +4094,41 @@ export default function App() {
 
     updateItem: async (item) => {
       if(isMock) return;
-      await supabase.from("activities").update({
+      // Base fields that always exist
+      const baseFields = {
         title:          item.title,
         category:       toDbCategory(item.type),
         scheduled_date: item.day || null,
         scheduled_time: item.startTime || null,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
-        location:       item.location || null,
-        duration_min:   item.durationMin || 60,
-        metadata:       item.metadata || {},
-      }).eq("id", item.id);
+      };
+      // Extended fields — written separately so base fields always save even if columns missing
+      const extFields = {
+        location:     item.location || null,
+        duration_min: item.durationMin || 60,
+        metadata:     {
+          notes:              item.metadata?.notes || "",
+          description:        item.metadata?.description || "",
+          checkIn:            item.metadata?.checkIn || null,
+          checkOut:           item.metadata?.checkOut || null,
+          transportationTime: item.metadata?.transportationTime || "",
+          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
+          upvotes:            item.metadata?.upvotes || [],
+          downvotes:          item.metadata?.downvotes || [],
+          createdBy:          item.metadata?.createdBy || "",
+        },
+      };
+      const { error } = await supabase.from("activities")
+        .update({ ...baseFields, ...extFields })
+        .eq("id", item.id);
+      if(error) {
+        console.error("updateItem error:", error.message, error.code);
+        // Fallback: save only base fields if extended fields caused the error
+        if(error.code === "PGRST204" || error.message?.includes("column")) {
+          await supabase.from("activities").update(baseFields).eq("id", item.id);
+        }
+      }
     },
 
     deleteItem: async (id) => {
