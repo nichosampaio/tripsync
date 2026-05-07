@@ -1,5 +1,4 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import React from "react";
 import { supabase } from "./supabase";
 
 const FONT = `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Playfair+Display:ital,wght@0,600;0,700;1,400;1,600&display=swap');`;
@@ -1486,17 +1485,6 @@ function ActivityTab({trip,setTrip,user,db}) {
                   {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
                 </div>
                 {ci.metadata?.notes&&<div style={{fontSize:12,color:"var(--muted)",marginTop:8,padding:"7px 10px",background:"rgba(255,255,255,0.03)",borderRadius:7,borderLeft:"2px solid var(--border)"}}>📝 {ci.metadata.notes}</div>}
-                {((ci.metadata?.upvotes||[]).length>0||(ci.metadata?.downvotes||[]).length>0)&&(()=>{
-                  const upV=(ci.metadata?.upvotes||[]).length, downV=(ci.metadata?.downvotes||[]).length, netV=upV-downV;
-                  return (
-                    <div className="card-meta-row" style={{marginTop:8,fontSize:12}}>
-                      🗳️ <strong style={{color:"var(--green)"}}>{upV} yes</strong>
-                      <span style={{color:"var(--muted)"}}>·</span>
-                      <strong style={{color:"var(--red)"}}>{downV} no</strong>
-                      {netV!==0&&<span style={{color:netV>0?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>({netV>0?"+":""}{netV} net)</span>}
-                    </div>
-                  );
-                })()}
                 {ci.metadata?.createdBy&&(()=>{
                   const raw = ci.metadata.createdBy;
                   // If it looks like a UUID, resolve to display name via tripMembers
@@ -2197,17 +2185,6 @@ function AccommodationTab({trip,setTrip,db}) {
                 {a.priceType!=="full"&&a.pricePerNight!==""&&<div className="card-meta-row">💰 <strong>${a.pricePerNight}/night</strong>{calcAccomNights(a)>0&&<> × {calcAccomNights(a)}n = <strong>${calcAccomTotal(a).toLocaleString()}</strong></>}</div>}
                 {a.rating!==""&&<div className="card-meta-row"><span className="stars">{renderStars(a.rating)}</span></div>}
                 {(a.checkIn||a.checkOut)&&<div className="card-meta-row">🗓️ <strong>{a.checkIn?fmtDate(a.checkIn):"?"}</strong> → <strong>{a.checkOut?fmtDate(a.checkOut):"?"}</strong></div>}
-                {((a.upvotes||[]).length>0||(a.downvotes||[]).length>0)&&(()=>{
-                  const upV=(a.upvotes||[]).length, downV=(a.downvotes||[]).length, netV=upV-downV;
-                  return (
-                    <div className="card-meta-row" style={{fontSize:12}}>
-                      🗳️ <strong style={{color:"var(--green)"}}>{upV} yes</strong>
-                      <span style={{color:"var(--muted)"}}>·</span>
-                      <strong style={{color:"var(--red)"}}>{downV} no</strong>
-                      {netV!==0&&<span style={{color:netV>0?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>({netV>0?"+":""}{netV} net)</span>}
-                    </div>
-                  );
-                })()}
               </div>
               {a.notes&&<div className="card-notes">{a.notes}</div>}
             </div>
@@ -2384,17 +2361,7 @@ function VehicleTab({trip,setTrip,db}) {
                     </div>
                     {v.seats&&<div className="card-meta-row">💺 <strong>{v.seats} seats</strong> · {v.transmission}</div>}
                     {v.rating&&<div className="card-meta-row"><span className="stars">{renderStars(v.rating)}</span></div>}
-                    {((v.upvotes||[]).length>0||(v.downvotes||[]).length>0)&&(()=>{
-                      const upV=(v.upvotes||[]).length, downV=(v.downvotes||[]).length, netV=upV-downV;
-                      return (
-                        <div className="card-meta-row" style={{fontSize:12}}>
-                          🗳️ <strong style={{color:"var(--green)"}}>{upV} yes</strong>
-                          <span style={{color:"var(--muted)"}}>·</span>
-                          <strong style={{color:"var(--red)"}}>{downV} no</strong>
-                          {netV!==0&&<span style={{color:netV>0?"var(--green)":"var(--red)",fontWeight:600,marginLeft:4}}>({netV>0?"+":""}{netV} net)</span>}
-                        </div>
-                      );
-                    })()}
+                    {((v.upvotes||[]).length>0||(v.downvotes||[]).length>0)&&<div className="card-meta-row">🗳️ <strong>{(v.upvotes||[]).length} yes · {(v.downvotes||[]).length} no</strong></div>}
                   </div>
                   {v.notes&&<div className="card-notes">{v.notes}</div>}
                 </div>
@@ -2512,533 +2479,47 @@ function TripInfoTab({trip,setTrip,db}) {
 }
 
 // ─── COUNTRY TAB ─────────────────────────────────────────────────────────────
-function CountryTab({trip,setTrip,db,user}) {
+function CountryTab({trip,setTrip,db}) {
   const c=trip.country||{};
-
-  // ── Entry requirements form state (9 fields) ──
-  const BLANK_FORM = {visa:"",passport:"",advisory:"",currency:"",language:"",timezone:"",power:"",vaccinations:"",emergency:""};
   const [editing,setEditing] = useState(false);
-  const [form,setForm] = useState({...BLANK_FORM,...c});
-  useMemo(()=>setForm({...BLANK_FORM,...(trip.country||{})}),[trip.id]);
-
-  // ── AI auto-fill state ──
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState("");
-  const [aiResults, setAiResults] = useState(null); // array of {nationality, fields}
-  const [showOverwriteConfirm, setShowOverwriteConfirm] = useState(false);
-  const autoFillCount = trip.country?.autoFillCount || 0;
-  const AI_LIMIT = 6;
-
-  // ── Boarding passes state ──
-  const [docs, setDocs] = useState(trip.documents||[]);
-  const [uploading, setUploading] = useState(false);
-  const [uploadErr, setUploadErr] = useState("");
-  const [uploadSuccess, setUploadSuccess] = useState("");
-  const fileInputRef = useRef(null);
-  useMemo(()=>setDocs(trip.documents||[]),[trip.id]);
-
+  const [form,setForm] = useState({visa:c.visa||"",passport:c.passport||"",advisory:c.advisory||"",currency:c.currency||"",language:c.language||"",notes:c.notes||""});
+  useMemo(()=>{const cc=trip.country||{};setForm({visa:cc.visa||"",passport:cc.passport||"",advisory:cc.advisory||"",currency:cc.currency||"",language:cc.language||"",notes:cc.notes||""});},[trip.id]);
   const save=()=>{
-    if(db) db.updateTrip(trip.id, { country_info: {...form, destination_votes: trip.country?.destination_votes, autoFillCount: trip.country?.autoFillCount||0} });
+    if(db) db.updateTrip(trip.id, { country_info: form });
     setTrip(t=>({...t,country:{...(t.country||{}),...form}}));
     setEditing(false);
   };
-
-  // ── AI auto-fill ──
-  const hasContent = Object.keys(BLANK_FORM).some(k=>form[k]&&form[k].trim());
-
-  const ALL_NATIONALITIES = [
-    "Afghanistan","Albania","Algeria","Andorra","Angola","Antigua and Barbuda","Argentina",
-    "Armenia","Australia","Austria","Azerbaijan","Bahamas","Bahrain","Bangladesh","Barbados",
-    "Belarus","Belgium","Belize","Benin","Bhutan","Bolivia","Bosnia and Herzegovina",
-    "Botswana","Brazil","Brunei","Bulgaria","Burkina Faso","Burundi","Cambodia","Cameroon",
-    "Canada","Cape Verde","Central African Republic","Chad","Chile","China","Colombia",
-    "Comoros","Congo","Costa Rica","Croatia","Cuba","Cyprus","Czech Republic","Denmark",
-    "Djibouti","Dominican Republic","Ecuador","Egypt","El Salvador","Equatorial Guinea",
-    "Eritrea","Estonia","Eswatini","Ethiopia","Fiji","Finland","France","Gabon","Gambia",
-    "Georgia","Germany","Ghana","Greece","Grenada","Guatemala","Guinea","Guinea-Bissau",
-    "Guyana","Haiti","Honduras","Hungary","Iceland","India","Indonesia","Iran","Iraq",
-    "Ireland","Israel","Italy","Ivory Coast","Jamaica","Japan","Jordan","Kazakhstan",
-    "Kenya","Kiribati","Kuwait","Kyrgyzstan","Laos","Latvia","Lebanon","Lesotho","Liberia",
-    "Libya","Liechtenstein","Lithuania","Luxembourg","Madagascar","Malawi","Malaysia",
-    "Maldives","Mali","Malta","Marshall Islands","Mauritania","Mauritius","Mexico",
-    "Micronesia","Moldova","Monaco","Mongolia","Montenegro","Morocco","Mozambique",
-    "Namibia","Nauru","Nepal","Netherlands","New Zealand","Nicaragua","Niger","Nigeria",
-    "North Korea","North Macedonia","Norway","Oman","Pakistan","Palau","Palestine",
-    "Panama","Papua New Guinea","Paraguay","Peru","Philippines","Poland","Portugal",
-    "Qatar","Romania","Russia","Rwanda","Saint Lucia","Samoa","San Marino",
-    "São Tomé and Príncipe","Saudi Arabia","Senegal","Serbia","Seychelles","Sierra Leone",
-    "Singapore","Slovakia","Slovenia","Solomon Islands","Somalia","South Africa",
-    "South Korea","South Sudan","Spain","Sri Lanka","Sudan","Suriname","Sweden",
-    "Switzerland","Syria","Taiwan","Tajikistan","Tanzania","Thailand","Timor-Leste",
-    "Togo","Tonga","Trinidad and Tobago","Tunisia","Turkey","Turkmenistan","Tuvalu",
-    "Uganda","Ukraine","United Arab Emirates","United Kingdom","United States","Uruguay",
-    "Uzbekistan","Vanuatu","Vatican City","Venezuela","Vietnam","Yemen","Zambia","Zimbabwe"
-  ];
-
-  // Default destination = highest net-voted destination
-  const topDestName = [...(trip.destinations||[])].sort((a,b)=>
-    ((b.upvotes||[]).length-(b.downvotes||[]).length) -
-    ((a.upvotes||[]).length-(a.downvotes||[]).length)
-  )[0]?.name || "";
-  const [selectedDests, setSelectedDests] = useState(topDestName ? [topDestName] : []);
-  const [destSearch, setDestSearch] = useState("");
-  const [destDropdownOpen, setDestDropdownOpen] = useState(false);
-  const destDropdownRef = useRef(null);
-  useMemo(()=>setSelectedDests(topDestName ? [topDestName] : []),[trip.id]);
-
-  useEffect(() => {
-    const handleClick = (e) => {
-      if(destDropdownRef.current && !destDropdownRef.current.contains(e.target)) setDestDropdownOpen(false);
-    };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-
-  const filteredDests = ALL_NATIONALITIES.filter(n =>
-    n.toLowerCase().includes(destSearch.toLowerCase()) && !selectedDests.includes(n)
+  const FIELDS=[{key:"visa",icon:"🛂",label:"Visa Requirements"},{key:"passport",icon:"📘",label:"Passport Validity"},{key:"advisory",icon:"⚠️",label:"Travel Advisory"},{key:"currency",icon:"💱",label:"Currency"},{key:"language",icon:"🗣️",label:"Language"}];
+  if(!editing) return (
+    <div className="country-card">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+        <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🌍 Entry Requirements</h4>
+        <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>
+      </div>
+      {FIELDS.map(f=>(
+        <div key={f.key} className="info-row"><span className="info-icon">{f.icon}</span><div><div className="info-lbl">{f.label}</div><div className="info-txt">{form[f.key]||<span style={{color:"var(--muted)",fontStyle:"italic"}}>Not set</span>}</div></div></div>
+      ))}
+    </div>
   );
-
-  const toggleDest = (d) => {
-    setSelectedDests(prev => prev.includes(d) ? prev.filter(x=>x!==d) : [...prev, d]);
-  };
-
-  const runAutoFill = async () => {
-    if(!selectedNats.length) { setAiError("Please select at least one country."); return; }
-    if(!selectedDests.length) { setAiError("Please select at least one destination."); return; }
-    if(autoFillCount >= AI_LIMIT) { setAiError(`This trip has reached the ${AI_LIMIT}-use auto-fill limit.`); return; }
-    const dest = selectedDests.join(" and ");
-    setAiLoading(true); setAiError(""); setAiResults(null);
-    try {
-      const natList = selectedNats;
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{
-          "Content-Type":"application/json",
-          "x-api-key": process.env.REACT_APP_ANTHROPIC_API_KEY||"",
-          "anthropic-version":"2023-06-01",
-          "anthropic-dangerous-direct-browser-calls":"true",
-        },
-        body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
-          max_tokens: 1000,
-          messages:[{
-            role:"user",
-            content:`You are a travel requirements assistant. For each country listed, provide accurate entry requirements for a passport holder from that country traveling to ${dest}.
-
-Countries: ${natList.join(", ")}
-Destination: ${dest}
-
-Return ONLY a valid JSON array, no markdown, no extra text. Format:
-[
-  {
-    "nationality": "Brazil",
-    "visa": "...",
-    "passport": "...",
-    "advisory": "...",
-    "currency": "...",
-    "language": "...",
-    "timezone": "...",
-    "power": "...",
-    "vaccinations": "...",
-    "emergency": "..."
-  }
-]
-
-For each field:
-- visa: visa requirements for a passport holder from this country
-- passport: minimum passport validity required
-- advisory: current travel advisory level and any key warnings
-- currency: local currency name, symbol, and rough USD exchange rate
-- language: official language(s) spoken
-- timezone: timezone name and UTC offset
-- power: outlet types, voltage, and frequency
-- vaccinations: recommended or required vaccinations
-- emergency: key emergency numbers (police, ambulance, tourist helpline)
-
-Be concise but complete. One sentence per field maximum.`
-          }]
-        })
-      });
-      const data = await response.json();
-      if(data.error) throw new Error(data.error.message||"API error");
-      const text = data.content?.[0]?.text||"";
-      const clean = text.replace(/```json|```/g,"").trim();
-      const parsed = JSON.parse(clean);
-      setAiResults(parsed);
-    } catch(err) {
-      setAiError(`Auto-fill failed: ${err.message||"Please try again."}`);
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const applyResults = () => {
-    if(!aiResults||!aiResults.length) return;
-    // Use first nationality's data as the base form fill
-    const first = aiResults[0];
-    const newForm = {
-      visa:         first.visa||form.visa,
-      passport:     first.passport||form.passport,
-      advisory:     first.advisory||form.advisory,
-      currency:     first.currency||form.currency,
-      language:     first.language||form.language,
-      timezone:     first.timezone||form.timezone,
-      power:        first.power||form.power,
-      vaccinations: first.vaccinations||form.vaccinations,
-      emergency:    first.emergency||form.emergency,
-    };
-    const newCount = autoFillCount + 1;
-    const newCountryInfo = {...(trip.country||{}), ...newForm, autoFillCount: newCount, destination_votes: trip.country?.destination_votes};
-    if(db) db.updateTrip(trip.id, { country_info: newCountryInfo });
-    setForm(newForm);
-    setTrip(t=>({...t,country:newCountryInfo}));
-    setShowOverwriteConfirm(false);
-    setAiResults(null);
-    setAiNationalities("");
-  };
-
-  const handleAutoFill = () => {
-    if(hasContent) { setShowOverwriteConfirm(true); }
-    else { runAutoFill(); }
-  };
-  const [selectedNats, setSelectedNats] = useState([]);
-  const [natSearch, setNatSearch] = useState("");
-  const [natDropdownOpen, setNatDropdownOpen] = useState(false);
-  const natDropdownRef = useRef(null);
-
-  const toggleNat = (nat) => {
-    setSelectedNats(prev => prev.includes(nat) ? prev.filter(n=>n!==nat) : [...prev, nat]);
-  };
-
-  useEffect(() => {
-    const handleClick = (e) => { if(natDropdownRef.current && !natDropdownRef.current.contains(e.target)) setNatDropdownOpen(false); };
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
-  }, []);
-  const handleUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if(!file) return;
-    if(file.type !== "application/pdf") { setUploadErr("Only PDF files are accepted for boarding passes."); return; }
-    if(file.size > 5 * 1024 * 1024) { setUploadErr("File must be under 5MB."); return; }
-    const myUploads = docs.filter(d=>(d.category==="boarding_pass"||d.type==="application/pdf")&&d.uploadedBy===user&&!d.expired);
-    if(myUploads.length >= 4) { setUploadErr("You have reached the maximum of 4 boarding passes. Delete one to upload a new one."); return; }
-    setUploadErr(""); setUploading(true); setUploadSuccess("");
-    try {
-      const newDoc = { id: uid(), name: file.name, size: file.size, type: file.type, uploadedBy: user, uploadedAt: new Date().toISOString(), category: "boarding_pass" };
-      if(!db?.isMock) {
-        const path = `${trip.id}/boarding-passes/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g,"_")}`;
-        const { error: upErr } = await supabase.storage.from("trip-files").upload(path, file, { upsert: false });
-        if(upErr) throw upErr;
-        const { data: { publicUrl } } = supabase.storage.from("trip-files").getPublicUrl(path);
-        newDoc.path = path; newDoc.url = publicUrl;
-      } else {
-        newDoc.path = file.name; newDoc.url = URL.createObjectURL(file);
-      }
-      const updatedDocs = [...docs, newDoc];
-      if(!db?.isMock) await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
-      setDocs(updatedDocs);
-      setTrip(t=>({...t, documents: updatedDocs}));
-      setUploadSuccess(`Boarding pass "${file.name}" uploaded.`);
-      setTimeout(()=>setUploadSuccess(""),3500);
-    } catch(err) {
-      setUploadErr(`Upload failed: ${err.message||"Please try again."}`);
-    } finally {
-      setUploading(false);
-      if(fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
-
-  const handleDelete = async (doc) => {
-    const updatedDocs = docs.filter(d=>d.id!==doc.id);
-    if(!db?.isMock) {
-      if(doc.path) await supabase.storage.from("trip-files").remove([doc.path]);
-      await supabase.from("trips").update({ documents: updatedDocs }).eq("id", trip.id);
-    }
-    setDocs(updatedDocs); setTrip(t=>({...t, documents: updatedDocs}));
-  };
-
-  const fmtSize = (bytes) => {
-    if(bytes < 1024) return `${bytes} B`;
-    if(bytes < 1024*1024) return `${(bytes/1024).toFixed(1)} KB`;
-    return `${(bytes/(1024*1024)).toFixed(1)} MB`;
-  };
-
-  const boardingPasses = docs.filter(d=>d.category==="boarding_pass"||d.type==="application/pdf");
-  const byMember = boardingPasses.reduce((acc,doc)=>{ const k=doc.uploadedBy||"Unknown"; if(!acc[k])acc[k]=[]; acc[k].push(doc); return acc; },{});
-  const members = Object.keys(byMember);
-  const myUploadCount = boardingPasses.filter(d=>d.uploadedBy===user&&!d.expired).length;
-  const atLimit = myUploadCount >= 4;
-  const tripEnd = trip.endDate ? new Date(trip.endDate) : null;
-  const expiryDate = tripEnd ? new Date(new Date(tripEnd).setMonth(tripEnd.getMonth()+1)) : null;
-  const daysUntilExpiry = expiryDate ? Math.ceil((expiryDate - new Date())/(1000*60*60*24)) : null;
-
-  // Top-voted destinations sorted by net score for quick-select buttons
-  const destinations = [...(trip.destinations||[])].sort((a,b)=>
-    ((b.upvotes||[]).length-(b.downvotes||[]).length) -
-    ((a.upvotes||[]).length-(a.downvotes||[]).length)
-  );
-
-  const FIELDS=[
-    {key:"visa",icon:"🛂",label:"Visa Requirements"},
-    {key:"passport",icon:"📘",label:"Passport Validity"},
-    {key:"advisory",icon:"⚠️",label:"Travel Advisory"},
-    {key:"currency",icon:"💱",label:"Currency"},
-    {key:"language",icon:"🗣️",label:"Language"},
-    {key:"timezone",icon:"🕐",label:"Time Zone"},
-    {key:"power",icon:"🔌",label:"Power Outlets & Voltage"},
-    {key:"vaccinations",icon:"💉",label:"Vaccinations / Health"},
-    {key:"emergency",icon:"🚑",label:"Emergency Numbers"},
-  ];
-
   return (
-    <div>
-      {/* ── Entry Requirements ── */}
-      <div className="country-card" style={{marginBottom:18}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:8}}>
-          <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🌍 Entry Requirements and Documents</h4>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            {!editing && <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(true)}>✏️ Edit</button>}
-            {editing && <>
-              <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
-            </>}
-          </div>
+    <div className="country-card">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+        <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>✏️ Edit Entry Info</h4>
+        <div style={{display:"flex",gap:8}}>
+          <button className="btn btn-ghost btn-sm" onClick={()=>setEditing(false)}>Cancel</button>
+          <button className="btn btn-primary btn-sm" onClick={save}>Save</button>
         </div>
-
-        {/* ── AI Auto-fill panel ── */}
-        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:"14px 16px",marginBottom:16}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <span style={{fontSize:16}}>✨</span>
-            <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>Auto-fill with AI</span>
-            <span style={{marginLeft:"auto",fontSize:11,color:autoFillCount>=AI_LIMIT?"var(--red)":"var(--muted)",fontWeight:autoFillCount>=AI_LIMIT?700:400}}>{autoFillCount}/{AI_LIMIT} uses</span>
-          </div>
-          {/* Destination selector */}
-          <div style={{marginBottom:10}}>
-            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>📍 Destination Countries</label>
-            <div ref={destDropdownRef} style={{position:"relative"}}>
-              <div
-                onClick={()=>setDestDropdownOpen(o=>!o)}
-                style={{minHeight:38,padding:"5px 10px",border:"1.5px solid var(--border)",borderRadius:7,background:"var(--surface)",cursor:"pointer",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center"}}
-              >
-                {selectedDests.length===0 && <span style={{fontSize:12,color:"var(--muted)"}}>Select destination countries…</span>}
-                {selectedDests.map(d=>(
-                  <span key={d} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,background:"rgba(42,82,122,0.10)",color:"#2a527a",border:"1px solid rgba(42,82,122,0.22)",fontSize:11,fontWeight:600}}>
-                    {d}
-                    <span onClick={e=>{e.stopPropagation();toggleDest(d);}} style={{cursor:"pointer",fontWeight:700,fontSize:12,lineHeight:1}}>×</span>
-                  </span>
-                ))}
-                <span style={{marginLeft:"auto",fontSize:12,color:"var(--muted)",flexShrink:0}}>▾</span>
-              </div>
-              {destDropdownOpen && (
-                <div style={{position:"absolute",zIndex:101,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,boxShadow:"var(--shadow-md)",width:"100%",marginTop:4,overflow:"hidden"}}>
-                  <div style={{padding:"8px 10px",borderBottom:"1px solid var(--border)"}}>
-                    <input
-                      autoFocus
-                      className="form-input"
-                      style={{fontSize:12,padding:"6px 10px"}}
-                      placeholder="Search country…"
-                      value={destSearch}
-                      onChange={e=>setDestSearch(e.target.value)}
-                      onClick={e=>e.stopPropagation()}
-                    />
-                  </div>
-                  <div style={{maxHeight:200,overflowY:"auto"}}>
-                    {filteredDests.length===0
-                      ? <div style={{padding:"12px 14px",fontSize:12,color:"var(--muted)"}}>No results found</div>
-                      : filteredDests.map(d=>(
-                          <div key={d} onClick={()=>{toggleDest(d);setDestSearch("");}}
-                            style={{padding:"8px 14px",fontSize:12,cursor:"pointer",color:"var(--text)",borderBottom:"1px solid var(--border)"}}
-                            onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                          >{d}</div>
-                        ))
-                    }
-                  </div>
-                </div>
-              )}
-            </div>
-            {topDestName && <p style={{fontSize:10,color:"var(--muted)",margin:"4px 0 0"}}>Defaulting to top-voted destination. Add more if visiting multiple countries.</p>}
-          </div>
-
-          {/* Country selector (passport) */}
-          <div style={{marginBottom:8}} ref={natDropdownRef}>
-            <label style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.9px",textTransform:"uppercase",display:"block",marginBottom:4}}>🌍 Countries (passport holders)</label>
-            {/* Selected country chips */}
-            <div
-              onClick={()=>setNatDropdownOpen(o=>!o)}
-              style={{minHeight:38,padding:"5px 10px",border:"1.5px solid var(--border)",borderRadius:7,background:"var(--surface)",cursor:"pointer",display:"flex",flexWrap:"wrap",gap:5,alignItems:"center",position:"relative"}}
-            >
-              {selectedNats.length === 0 && <span style={{fontSize:12,color:"var(--muted)"}}>Select countries your group members are from…</span>}
-              {selectedNats.map(n=>(
-                <span key={n} style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600}}>
-                  {n}
-                  <span onClick={e=>{e.stopPropagation();toggleNat(n);}} style={{cursor:"pointer",fontWeight:700,fontSize:12,lineHeight:1}}>×</span>
-                </span>
-              ))}
-              <span style={{marginLeft:"auto",fontSize:12,color:"var(--muted)",flexShrink:0}}>▾</span>
-            </div>
-            {/* Dropdown */}
-            {natDropdownOpen && (
-              <div style={{position:"absolute",zIndex:100,background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,boxShadow:"var(--shadow-md)",width:"100%",maxWidth:380,marginTop:4,overflow:"hidden"}}>
-                <div style={{padding:"8px 10px",borderBottom:"1px solid var(--border)"}}>
-                  <input
-                    autoFocus
-                    className="form-input"
-                    style={{fontSize:12,padding:"6px 10px"}}
-                    placeholder="Search country…"
-                    value={natSearch}
-                    onChange={e=>setNatSearch(e.target.value)}
-                    onClick={e=>e.stopPropagation()}
-                  />
-                </div>
-                <div style={{maxHeight:200,overflowY:"auto"}}>
-                  {filteredNats.length === 0
-                    ? <div style={{padding:"12px 14px",fontSize:12,color:"var(--muted)"}}>No results found</div>
-                    : filteredNats.map(n=>(
-                        <div key={n} onClick={()=>{toggleNat(n);setNatSearch("");}}
-                          style={{padding:"8px 14px",fontSize:12,cursor:"pointer",color:"var(--text)",borderBottom:"1px solid var(--border)"}}
-                          onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
-                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                        >{n}</div>
-                      ))
-                  }
-                </div>
-              </div>
-            )}
-          </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={handleAutoFill}
-              disabled={aiLoading||autoFillCount>=AI_LIMIT||!selectedNats.length||!selectedDests.length}
-              style={{flexShrink:0,opacity:(autoFillCount>=AI_LIMIT)?0.5:1}}
-            >
-              {aiLoading ? "⏳ Loading…" : autoFillCount>=AI_LIMIT ? "🚫 Limit reached" : "✨ Auto-fill"}
-            </button>
-            {selectedNats.length > 0 && <span style={{fontSize:11,color:"var(--muted)"}}>{selectedNats.length} countr{selectedNats.length===1?"y":"ies"} selected</span>}
-          </div>
-          {aiError && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:7,padding:"7px 10px",marginTop:8}}>⚠️ {aiError}</div>}
-
-          {/* Overwrite confirmation */}
-          {showOverwriteConfirm && (
-            <div style={{background:"var(--yellow-soft)",border:"1px solid rgba(160,112,0,0.22)",borderRadius:8,padding:"10px 12px",marginTop:10}}>
-              <p style={{fontSize:12,color:"var(--yellow)",fontWeight:600,marginBottom:8}}>⚠️ Fields already have content — overwrite with AI results?</p>
-              <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary btn-sm" onClick={()=>{setShowOverwriteConfirm(false);runAutoFill();}}>Yes, overwrite</button>
-                <button className="btn btn-ghost btn-sm" onClick={()=>setShowOverwriteConfirm(false)}>Cancel</button>
-              </div>
-            </div>
-          )}
-
-          {/* AI Results — one section per country */}
-          {aiResults && aiResults.length > 0 && (
-            <div style={{marginTop:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:"var(--text)",marginBottom:8}}>Results — review before applying:</div>
-              {aiResults.map((r,i)=>(
-                <div key={i} style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px",marginBottom:8}}>
-                  <div style={{fontSize:12,fontWeight:700,color:"var(--accent)",marginBottom:6}}>🌐 {r.nationality}</div>
-                  {FIELDS.map(f=>(
-                    <div key={f.key} style={{display:"flex",gap:6,fontSize:11,marginBottom:3}}>
-                      <span style={{flexShrink:0}}>{f.icon}</span>
-                      <span style={{color:"var(--muted)",minWidth:120,flexShrink:0}}>{f.label}:</span>
-                      <span style={{color:"var(--text)"}}>{r[f.key]||"—"}</span>
-                    </div>
-                  ))}
-                </div>
-              ))}
-              <div style={{background:"rgba(160,112,0,0.07)",border:"1px solid rgba(160,112,0,0.18)",borderRadius:7,padding:"7px 10px",marginBottom:10,fontSize:11,color:"var(--yellow)"}}>
-                ⚠️ Always verify entry requirements with official embassy and government sources before travel.
-              </div>
-              <div style={{display:"flex",gap:8}}>
-                <button className="btn btn-primary btn-sm" onClick={applyResults}>Apply first country's data to fields</button>
-                <button className="btn btn-ghost btn-sm" onClick={()=>setAiResults(null)}>Dismiss</button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Field display / edit ── */}
-        {!editing && FIELDS.map(f=>(
-          <div key={f.key} className="info-row">
-            <span className="info-icon">{f.icon}</span>
-            <div><div className="info-lbl">{f.label}</div><div className="info-txt">{form[f.key]||<span style={{color:"var(--muted)",fontStyle:"italic"}}>Not set</span>}</div></div>
-          </div>
-        ))}
-        {editing && <>
-          {FIELDS.map(f=>(
-            <div key={f.key} className="form-group">
-              <label className="form-label">{f.icon} {f.label}</label>
-              <input className="form-input" value={form[f.key]||""} onChange={e=>setForm(ff=>({...ff,[f.key]:e.target.value}))} placeholder={`Enter ${f.label.toLowerCase()}…`}/>
-            </div>
-          ))}
-          <div className="form-group"><label className="form-label">📝 Notes</label><textarea className="form-input form-textarea" value={form.notes||""} onChange={e=>setForm(ff=>({...ff,notes:e.target.value}))} placeholder="Additional details…"/></div>
-        </>}
       </div>
-
-      {/* ── Boarding Passes ── */}
-      <div className="country-card">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
-          <div>
-            <h4 style={{fontFamily:"Inter",fontSize:18,fontWeight:700,margin:0}}>🛫 Boarding Passes</h4>
-            <p style={{fontSize:12,color:"var(--muted)",marginTop:4}}>PDF only · visible to all trip members · max 5MB per file</p>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
-            <button className="btn btn-primary btn-sm" onClick={()=>!uploading&&!atLimit&&fileInputRef.current?.click()} disabled={uploading||atLimit} style={{flexShrink:0,marginTop:2,opacity:atLimit?0.5:1,cursor:atLimit?"not-allowed":"pointer"}}>
-              {uploading ? "⏳ Uploading…" : atLimit ? "🚫 Limit reached" : "⬆️ Upload"}
-            </button>
-            <span style={{fontSize:10,color:atLimit?"var(--red)":"var(--muted)",fontWeight:atLimit?600:400}}>{myUploadCount}/4 uploaded</span>
-          </div>
-          <input ref={fileInputRef} type="file" accept=".pdf,application/pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
-        </div>
-        {uploadErr && <div style={{fontSize:12,color:"var(--red)",background:"var(--red-soft)",border:"1px solid rgba(192,57,43,0.18)",borderRadius:8,padding:"8px 12px",margin:"10px 0"}}>⚠️ {uploadErr}</div>}
-        {uploadSuccess && <div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.18)",borderRadius:8,padding:"8px 12px",margin:"10px 0"}}>✅ {uploadSuccess}</div>}
-        {expiryDate && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 14 && boardingPasses.length > 0 && (
-          <div style={{fontSize:12,color:"var(--yellow)",background:"var(--yellow-soft)",border:"1px solid rgba(160,112,0,0.22)",borderRadius:8,padding:"8px 12px",marginBottom:12}}>
-            ⚠️ Boarding passes will be deleted in <strong>{daysUntilExpiry} days</strong>. Download any files you need to keep.
-          </div>
-        )}
-        {boardingPasses.length === 0
-          ? <div style={{textAlign:"center",padding:"28px 0",color:"var(--muted)",fontSize:13}}><div style={{fontSize:32,marginBottom:8}}>🛫</div>No boarding passes uploaded yet.<br/><span style={{fontSize:12}}>Be the first to upload yours.</span></div>
-          : <div style={{display:"flex",flexDirection:"column",gap:18,marginTop:14}}>
-              {members.map(memberName=>(
-                <div key={memberName}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-                    <div style={{width:26,height:26,borderRadius:"50%",background:memberName===user?"linear-gradient(135deg,#c96a28,#e8924a)":"linear-gradient(135deg,#2a527a,#3a72aa)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:"#fff",flexShrink:0}}>{memberName.slice(0,2).toUpperCase()}</div>
-                    <span style={{fontSize:13,fontWeight:700,color:"var(--text)"}}>{memberName}{memberName===user&&<span style={{fontSize:11,color:"var(--muted)",fontWeight:400}}> (you)</span>}</span>
-                    <span style={{fontSize:11,color:"var(--muted)",marginLeft:2}}>{byMember[memberName].length} file{byMember[memberName].length!==1?"s":""}</span>
-                  </div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6,paddingLeft:34}}>
-                    {byMember[memberName].map(doc=>{
-                      const isExpired=doc.expired===true;
-                      return (
-                        <div key={doc.id} style={{display:"flex",alignItems:"center",gap:10,background:isExpired?"var(--surface3)":"var(--surface2)",border:`1px solid ${isExpired?"rgba(192,57,43,0.18)":"var(--border)"}`,borderRadius:9,padding:"9px 12px",opacity:isExpired?0.65:1}}>
-                          <span style={{fontSize:18,flexShrink:0}}>📄</span>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-                              <span style={{fontSize:12,fontWeight:600,color:isExpired?"var(--muted)":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:isExpired?"line-through":"none"}}>{doc.name}</span>
-                              {isExpired && <span style={{padding:"1px 6px",borderRadius:4,background:"var(--red-soft)",color:"var(--red)",fontSize:10,fontWeight:700,border:"1px solid rgba(192,57,43,0.18)",flexShrink:0}}>EXPIRED</span>}
-                            </div>
-                            <div style={{fontSize:11,color:"var(--muted)",marginTop:1}}>{isExpired?"Deleted — re-upload to restore":`${fmtSize(doc.size)} · ${doc.uploadedAt?new Date(doc.uploadedAt).toLocaleDateString():""}`}</div>
-                          </div>
-                          <div style={{display:"flex",gap:6,flexShrink:0}}>
-                            {!isExpired && <a href={doc.url} target="_blank" rel="noreferrer" download={doc.name} style={{padding:"4px 10px",borderRadius:6,background:"var(--accent-soft)",color:"var(--accent)",border:"1px solid rgba(201,106,40,0.2)",fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:3}}>⬇️</a>}
-                            {(memberName===user||!doc.uploadedBy) && <button onClick={()=>handleDelete(doc)} style={{padding:"4px 8px",borderRadius:6,background:"var(--red-soft)",color:"var(--red)",border:"1px solid rgba(192,57,43,0.16)",fontSize:11,fontWeight:600,cursor:"pointer"}}>🗑️</button>}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-        }
-      </div>
+      {FIELDS.map(f=>(
+        <div key={f.key} className="form-group"><label className="form-label">{f.icon} {f.label}</label><input className="form-input" value={form[f.key]} onChange={e=>setForm(ff=>({...ff,[f.key]:e.target.value}))} placeholder={`Enter ${f.label.toLowerCase()}…`}/></div>
+      ))}
+      <div className="form-group"><label className="form-label">📝 Notes</label><textarea className="form-input form-textarea" value={form.notes} onChange={e=>setForm(ff=>({...ff,notes:e.target.value}))} placeholder="Additional details…"/></div>
     </div>
   );
 }
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
-function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest}) {
+function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest,userTier,onUpgradePrompt}) {
   const [emailInput,setEmailInput] = useState("");
   const [emailErr,setEmailErr] = useState("");
   const [invitedEmails,setInvitedEmails] = useState([]);
@@ -3063,6 +2544,11 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
     if(!email) { setEmailErr("Enter an email address"); return; }
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { setEmailErr("Enter a valid email address"); return; }
     if(invitedEmails.find(i => i.email === email)) { setEmailErr("Already invited"); return; }
+    // 8-member cap for free users
+    if(userTier === "free" && members.length >= 8) {
+      onUpgradePrompt?.("Free trips are limited to 8 members.");
+      return;
+    }
     setEmailErr(""); setSendingInvite(true); setInviteSuccess("");
 
     if(!db?.isMock) {
@@ -3371,27 +2857,53 @@ const DEMO_TRIP = {
 };
 const INITIAL_TRIPS = [DEMO_TRIP];
 
-// ─── APP ──────────────────────────────────────────────────────────────────────
-class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
-  static getDerivedStateFromError(e) { return { error: e }; }
-  render() {
-    if(this.state.error) return (
-      <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"#f0ede8",fontFamily:"Inter,sans-serif",padding:24}}>
-        <div style={{background:"#fff",border:"1px solid rgba(100,70,40,0.15)",borderRadius:16,padding:36,maxWidth:540,width:"100%",boxShadow:"0 4px 24px rgba(0,0,0,0.08)"}}>
-          <div style={{fontSize:32,marginBottom:16}}>⚠️</div>
-          <h2 style={{fontSize:20,fontWeight:700,marginBottom:8,color:"#1c1410"}}>Something went wrong</h2>
-          <p style={{fontSize:13,color:"#7a6a58",marginBottom:16,lineHeight:1.6}}>TripSync hit an unexpected error. Please refresh the page to try again.</p>
-          <pre style={{fontSize:11,background:"#f4f1eb",borderRadius:8,padding:12,overflowX:"auto",color:"#c0392b",marginBottom:16}}>{this.state.error?.message}</pre>
-          <button onClick={()=>window.location.reload()} style={{padding:"8px 18px",borderRadius:7,background:"#c96a28",color:"#fff",border:"none",cursor:"pointer",fontWeight:600,fontSize:13}}>Refresh Page</button>
-        </div>
+// ─── PREMIUM GATE ─────────────────────────────────────────────────────────────
+// Wrap any premium-only UI with this component.
+// If the user is on the free tier, shows an upgrade prompt instead.
+function PremiumGate({ userTier, featureName, children }) {
+  const [showPrompt, setShowPrompt] = React.useState(false);
+  if(userTier === "premium") return children;
+  return (
+    <>
+      <div
+        onClick={() => setShowPrompt(true)}
+        style={{ cursor: "pointer", opacity: 0.5, position: "relative", userSelect: "none" }}
+        title={`${featureName} — Premium feature`}
+      >
+        <div style={{ pointerEvents: "none" }}>{children}</div>
+        <span style={{
+          position: "absolute", top: 6, right: 8,
+          fontSize: 10, fontWeight: 600, background: "#0F6E56", color: "#fff",
+          borderRadius: 4, padding: "2px 7px", letterSpacing: "0.04em"
+        }}>PRO</span>
       </div>
-    );
-    return this.props.children;
-  }
+      {showPrompt && (
+        <div className="modal-overlay" onClick={() => setShowPrompt(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400, textAlign: "center" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>✦</div>
+            <h3 style={{ marginBottom: 8 }}>TripSync Pro feature</h3>
+            <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 20 }}>
+              <strong>{featureName}</strong> is available on the Pro plan. Upgrade to unlock unlimited trips,
+              no ads, PDF exports, expense tracking, vote locking, and more.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+              <button className="btn btn-primary" onClick={() => setShowPrompt(false)}>
+                Upgrade to Pro →
+              </button>
+              <button className="btn btn-ghost" onClick={() => setShowPrompt(false)}>Maybe later</button>
+            </div>
+            <p style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 14 }}>
+              Upgrading is not yet available in this build — contact us to get early access.
+            </p>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
-function AppInner() {
+// ─── APP ──────────────────────────────────────────────────────────────────────
+export default function App() {
   const [page,setPage]         = useState("landing");
   const [trips,setTrips]       = useState([]);
   const [tripsLoading,setTripsLoading] = useState(false);
@@ -3403,6 +2915,8 @@ function AppInner() {
   // ── Real Supabase Auth state ──
   const [authUser,setAuthUser]     = useState(null);   // Supabase user object (null = logged out)
   const [authLoading,setAuthLoading] = useState(true); // true while we wait for session check on load
+  const [userTier,setUserTier]     = useState("free"); // "free" | "premium" — read from profiles table
+  const [upgradePrompt,setUpgradePrompt] = useState({ show: false, reason: "" }); // global upgrade modal
   const authUserIdRef = useRef(null); // tracks the last user ID so token refreshes don't re-trigger loadTrips
   const loggedIn = !!authUser;
   const user = authUser?.user_metadata?.full_name || authUser?.email?.split("@")[0] || "Traveler";
@@ -3431,12 +2945,26 @@ function AppInner() {
   const [joinDone,setJoinDone]           = useState(false);
   const [joinError,setJoinError]         = useState("");
 
+  // ── Fetch tier from profiles table ──
+  const fetchUserTier = async (userId) => {
+    if(!userId) { setUserTier("free"); return; }
+    const { data } = await supabase
+      .from("profiles")
+      .select("tier")
+      .eq("id", userId)
+      .single();
+    setUserTier(data?.tier === "premium" ? "premium" : "free");
+  };
+
   // ── On mount: restore session + listen for auth changes ──
   useEffect(() => {
     // Check if there's already a session stored in the browser (e.g. returning user)
     supabase.auth.getSession().then(({ data: { session } }) => {
       setAuthUser(session?.user ?? null);
-      if(session?.user) setPage(p => p === "landing" ? "dashboard" : p);
+      if(session?.user) {
+        setPage(p => p === "landing" ? "dashboard" : p);
+        fetchUserTier(session.user.id);
+      }
       setAuthLoading(false);
     });
 
@@ -3449,8 +2977,9 @@ function AppInner() {
       setAuthLoading(false);
       if(event === "SIGNED_IN") {
         setPage(p => p === "landing" ? "dashboard" : p);
+        if(session?.user) fetchUserTier(session.user.id);
       } else if(event === "SIGNED_OUT") {
-        setPage("landing"); setActive(null);
+        setPage("landing"); setActive(null); setUserTier("free");
         sessionStorage.removeItem("tripsync_active_id");
         sessionStorage.removeItem("tripsync_active_tab");
       }
@@ -3723,7 +3252,7 @@ function AppInner() {
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
-        google_maps_url, country_info, documents,
+        google_maps_url, country_info,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
       `)
@@ -3759,7 +3288,6 @@ function AppInner() {
       availability:        existing?.availability        ?? {},
       personalBudgets:     existing?.personalBudgets     ?? {},
       country:             t.country_info || null,
-      documents:           Array.isArray(t.documents) ? t.documents : [],
       googleMapsUrl:       t.google_maps_url || "",
       description:         t.description || "",
     });
@@ -4298,7 +3826,7 @@ function AppInner() {
           <div className="nav-logo" onClick={()=>setPage(loggedIn?"dashboard":"landing")}><div className="nav-logo-mark"><svg viewBox="0 0 14 14" style={{width:14,height:14,fill:"none",stroke:"#fff",strokeWidth:2.2,strokeLinecap:"round",strokeLinejoin:"round"}}><path d="M2 7 L5 10 L12 3"/></svg></div>TripSync</div>
           <div className="nav-user">
             {loggedIn
-              ? <><div className="avatar">{user[0].toUpperCase()}</div><span style={{fontSize:14,fontWeight:500}}>{user}</span><button className="btn btn-ghost btn-sm" onClick={handleSignOut}>Sign Out</button></>
+              ? <><div className="avatar">{user[0].toUpperCase()}</div><span style={{fontSize:14,fontWeight:500}}>{user}</span>{userTier==="premium" ? <span style={{fontSize:10,fontWeight:600,background:"#0F6E56",color:"#fff",borderRadius:4,padding:"2px 8px",letterSpacing:"0.04em"}}>PRO</span> : <span style={{fontSize:10,fontWeight:600,background:"#F1EFE8",color:"#5F5E5A",borderRadius:4,padding:"2px 8px",letterSpacing:"0.04em",cursor:"pointer"}} onClick={()=>setUpgradePrompt({show:true,reason:"Upgrade to unlock Pro features."})}>FREE</span>}<button className="btn btn-ghost btn-sm" onClick={handleSignOut}>Sign Out</button></>
               : <button className="btn btn-primary btn-sm" onClick={()=>{setAuthMode("login");setAuthError("");setShowLogin(true);}}>Sign In</button>
             }
           </div>
@@ -4360,13 +3888,41 @@ function AppInner() {
   return (
     <>
       <style>{FONT+CSS}</style>
+
+      {/* ── Global upgrade prompt modal ── */}
+      {upgradePrompt.show && (
+        <div className="modal-overlay" onClick={()=>setUpgradePrompt({show:false,reason:""})}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:420,textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✦</div>
+            <h3 style={{marginBottom:8}}>Upgrade to TripSync Pro</h3>
+            <p style={{color:"var(--text-muted)",fontSize:14,marginBottom:6}}>{upgradePrompt.reason}</p>
+            <p style={{color:"var(--text-muted)",fontSize:14,marginBottom:20}}>
+              Pro unlocks unlimited trips, unlimited members, no ads, PDF exports, expense tracking, vote locking, and more.
+            </p>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button className="btn btn-primary" onClick={()=>setUpgradePrompt({show:false,reason:""})}>Upgrade to Pro →</button>
+              <button className="btn btn-ghost" onClick={()=>setUpgradePrompt({show:false,reason:""})}>Maybe later</button>
+            </div>
+            <p style={{fontSize:11,color:"var(--text-muted)",marginTop:14}}>
+              Upgrading is not yet available in this build — contact us to get early access.
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="app">
         <nav className="nav">
           <div className="nav-logo" onClick={()=>setPage(loggedIn?"dashboard":"landing")}><div className="nav-logo-mark"><svg viewBox="0 0 14 14" style={{width:14,height:14,fill:"none",stroke:"#fff",strokeWidth:2.2,strokeLinecap:"round",strokeLinejoin:"round"}}><path d="M2 7 L5 10 L12 3"/></svg></div>TripSync</div>
           {loggedIn && (
             <div className="nav-tabs">
               <button className={`nav-tab ${safePage==="dashboard"?"active":""}`} onClick={()=>setPage("dashboard")}>My Trips</button>
-              <button className="nav-tab" onClick={()=>setShowNew(true)}>+ New Trip</button>
+              <button className="nav-tab" onClick={()=>{
+                if(userTier === "free" && trips.filter(t=>typeof t.id !== "number").length >= 3) {
+                  setUpgradePrompt({ show: true, reason: "You’ve reached the 3-trip limit on the free plan." });
+                } else {
+                  setShowNew(true);
+                }
+              }}>+ New Trip</button>
             </div>
           )}
           <div className="nav-user">
@@ -4410,8 +3966,23 @@ function AppInner() {
           <div className="dashboard">
             <div style={{marginBottom:32}} className="flex-between">
               <div><h2 style={{fontFamily:"'Inter',sans-serif",fontSize:28,fontWeight:800,marginBottom:6,letterSpacing:"-0.7px"}}>My Trips</h2><p style={{color:"var(--muted)",fontSize:15}}>Welcome back, {user}.</p></div>
-              <button className="btn btn-primary" onClick={()=>setShowNew(true)}>+ New Trip</button>
+              <button className="btn btn-primary" onClick={()=>{
+                const realTrips = trips.filter(t=>typeof t.id !== "number");
+                if(userTier === "free" && realTrips.length >= 3) {
+                  setUpgradePrompt({show:true, reason:"You've reached the 3-trip limit on the free plan."});
+                } else { setShowNew(true); }
+              }}>+ New Trip</button>
             </div>
+            {userTier === "free" && (() => {
+              const count = trips.filter(t=>typeof t.id !== "number").length;
+              if(count < 2) return null;
+              return (
+                <div style={{background:"#FAEEDA",border:"0.5px solid #EF9F27",borderRadius:8,padding:"10px 16px",marginBottom:20,fontSize:13,color:"#633806",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span>⚠️ You're using <strong>{count}/3</strong> trips on the free plan.</span>
+                  <button className="btn btn-sm" style={{fontSize:12,background:"#0F6E56",color:"#fff",border:"none",borderRadius:4,padding:"4px 12px",cursor:"pointer"}} onClick={()=>setUpgradePrompt({show:true,reason:"Upgrade to get unlimited trips."})}>Upgrade to Pro</button>
+                </div>
+              );
+            })()}
             {tripsLoading ? (
               <div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"80px 0",gap:12}}>
                 <div style={{width:22,height:22,border:"3px solid var(--border)",borderTopColor:"var(--accent)",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
@@ -4439,7 +4010,7 @@ function AppInner() {
                   })()}
                   <div className="trip-card-header" style={{marginTop: trip.isDemo ? 20 : 0}}>
                     <div className="trip-name">{trip.name}</div>
-                    <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
+                    <span className={`badge ${t.status==="confirmed"?"badge-green":"badge-yellow"}`}>{t.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
                   </div>
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
@@ -4495,8 +4066,8 @@ function AppInner() {
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
-              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest}/>}
-              {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db} user={user}/>}
+              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest} userTier={userTier} onUpgradePrompt={(reason)=>setUpgradePrompt({show:true,reason})}/>}
+              {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
             </>
@@ -4620,13 +4191,5 @@ function AppInner() {
         )}
       </div>
     </>
-  );
-}
-
-export default function App() {
-  return (
-    <ErrorBoundary>
-      <AppInner />
-    </ErrorBoundary>
   );
 }
