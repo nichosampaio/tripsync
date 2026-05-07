@@ -1489,9 +1489,9 @@ function ActivityTab({trip,setTrip,user,db}) {
                   if(up===0&&down===0) return null;
                   return (
                     <div style={{display:"flex",alignItems:"center",gap:8,fontSize:12,marginTop:6}}>
-                      <span>🗳️ <strong>{up} yes</strong></span>
+                      <span>🗳️ <span style={{color:"var(--green)",fontWeight:500}}>{up} yes</span></span>
                       <span style={{color:"var(--muted)"}}>·</span>
-                      <span><strong>{down} no</strong></span>
+                      <span style={{color:"var(--red)",fontWeight:500}}>{down} no</span>
                       <span style={{color:"var(--muted)"}}>·</span>
                       <span style={{color:net>0?"var(--green)":net<0?"var(--red)":"var(--muted)",fontWeight:600}}>({net>0?"+":""}{net} net)</span>
                     </div>
@@ -2390,9 +2390,9 @@ function AccommodationTab({trip,setTrip,db}) {
                 if(up===0&&down===0) return null;
                 return (
                   <div className="card-meta-row" style={{marginTop:6,display:"flex",alignItems:"center",gap:8,fontSize:12}}>
-                    <span>🗳️ <strong>{up} yes</strong></span>
+                    <span>🗳️ <span style={{color:"var(--green)",fontWeight:500}}>{up} yes</span></span>
                     <span style={{color:"var(--muted)"}}>·</span>
-                    <span><strong>{down} no</strong></span>
+                    <span style={{color:"var(--red)",fontWeight:500}}>{down} no</span>
                     <span style={{color:"var(--muted)"}}>·</span>
                     <span style={{color:net>0?"var(--green)":net<0?"var(--red)":"var(--muted)",fontWeight:600}}>({net>0?"+":""}{net} net)</span>
                   </div>
@@ -2578,9 +2578,9 @@ function VehicleTab({trip,setTrip,db}) {
                       if(up===0&&down===0) return null;
                       return (
                         <div className="card-meta-row" style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}>
-                          <span>🗳️ <strong>{up} yes</strong></span>
+                          <span>🗳️ <span style={{color:"var(--green)",fontWeight:500}}>{up} yes</span></span>
                           <span style={{color:"var(--muted)"}}>·</span>
-                          <span><strong>{down} no</strong></span>
+                          <span style={{color:"var(--red)",fontWeight:500}}>{down} no</span>
                           <span style={{color:"var(--muted)"}}>·</span>
                           <span style={{color:net>0?"var(--green)":net<0?"var(--red)":"var(--muted)",fontWeight:600}}>({net>0?"+":""}{net} net)</span>
                         </div>
