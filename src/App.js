@@ -3230,31 +3230,110 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
 // ─── SUMMARY TAB ─────────────────────────────────────────────────────────────
 function SummaryTab({trip}) {
   const exportPDF = () => {
-    const lines = [
-      `TRIP SUMMARY — ${trip.name}`,
-      `Status: ${trip.status}`,
-      `Destination: ${trip.destinations?.[0]?.name||"TBD"}`,
-      `Dates: ${fmtRange(trip.startDate,trip.endDate)}`,
-      `Members: ${(trip.tripMembers||trip.members||[]).map(m=>m.name||m).join(", ")}`,
-      ``,
-      `── BUDGET ──`,
-      `Total: $${((trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)+calcAllAccomTotal(trip.accommodationOptions||[])+calcAllVehicleTotal(trip.vehicleRentals||[])).toLocaleString()}`,
-      `Per person: $${Math.ceil(((trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)+calcAllAccomTotal(trip.accommodationOptions||[])+calcAllVehicleTotal(trip.vehicleRentals||[]))/((trip.tripMembers||trip.members||[]).length||1)).toLocaleString()}`,
-      ``,
-      `── ACCOMMODATIONS ──`,
-      ...(trip.accommodationOptions||[]).map(a=>`  ${a.name} — ${a.address||""} — $${calcAccomTotal(a).toLocaleString()}`),
-      ``,
-      `── VEHICLES ──`,
-      ...(trip.vehicleRentals||[]).map(v=>`  ${v.company} ${v.model||""} — $${calcVehicleTotal(v).toLocaleString()}`),
-      ``,
-      `── ITEMS ──`,
-      ...(trip.calendarItems||[]).map(ci=>`  [${ci.day||"?"}] ${ci.title}${ci.price>0?" — $"+ci.price:""}`),
-    ];
-    const blob = new Blob([lines.join("\n")], {type:"text/plain"});
+    const members = (trip.tripMembers||trip.members||[]).map(m=>m.name||m).join(", ");
+    const totalBudget = (trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)
+      + calcAllAccomTotal(trip.accommodationOptions||[])
+      + calcAllVehicleTotal(trip.vehicleRentals||[]);
+    const perPerson = Math.ceil(totalBudget / ((trip.tripMembers||trip.members||[]).length||1));
+
+    const accent = "#c96a28";
+    const muted  = "#888";
+    const border = "#e8e0d4";
+
+    const accomRows = (trip.accommodationOptions||[]).map(a=>`
+      <tr>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border}">${a.name}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${a.address||"—"}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};text-align:right;font-weight:600">$${calcAccomTotal(a).toLocaleString()}</td>
+      </tr>`).join("");
+
+    const vehicleRows = (trip.vehicleRentals||[]).map(v=>`
+      <tr>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border}">${v.company} ${v.model||""}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${v.pickupDate||""}${v.returnDate?" → "+v.returnDate:""}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};text-align:right;font-weight:600">$${calcVehicleTotal(v).toLocaleString()}</td>
+      </tr>`).join("");
+
+    const itemRows = (trip.calendarItems||[]).map(ci=>`
+      <tr>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border}">${ci.title}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${ci.day||"—"} ${ci.startTime||""}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};text-align:right;font-weight:600">${ci.price>0?"$"+ci.price.toLocaleString():"—"}</td>
+      </tr>`).join("");
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>${trip.name} — Trip Summary</title>
+<style>
+  body { font-family: -apple-system, 'Inter', sans-serif; color: #2a1f14; background: #fff; padding: 40px; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 800; color: ${accent}; margin: 0 0 4px; }
+  .subtitle { font-size: 13px; color: ${muted}; margin-bottom: 28px; }
+  .section { margin-bottom: 28px; }
+  .section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: ${muted}; border-bottom: 2px solid ${accent}; padding-bottom: 5px; margin-bottom: 12px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .meta-item { background: #faf8f5; border-radius: 8px; padding: 10px 14px; }
+  .meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: ${muted}; margin-bottom: 2px; }
+  .meta-value { font-size: 14px; font-weight: 600; }
+  .budget-highlight { background: ${accent}; color: #fff; border-radius: 10px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .budget-highlight .amount { font-size: 28px; font-weight: 800; }
+  .budget-highlight .label { font-size: 12px; opacity: 0.85; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; background: #faf8f5; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: ${muted}; }
+  @media print { body { padding: 20px; } }
+</style>
+</head>
+<body>
+  <h1>${trip.name}</h1>
+  <div class="subtitle">Generated by TripSync · ${new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"})}</div>
+
+  <div class="section">
+    <div class="section-title">Trip Overview</div>
+    <div class="meta-grid">
+      <div class="meta-item"><div class="meta-label">Destination</div><div class="meta-value">${trip.destinations?.[0]?.name||"TBD"}</div></div>
+      <div class="meta-item"><div class="meta-label">Dates</div><div class="meta-value">${fmtRange(trip.startDate,trip.endDate)}</div></div>
+      <div class="meta-item"><div class="meta-label">Status</div><div class="meta-value">${trip.status}</div></div>
+      <div class="meta-item"><div class="meta-label">Members</div><div class="meta-value" style="font-size:12px">${members||"—"}</div></div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Budget</div>
+    <div class="budget-highlight">
+      <div><div class="label">Total estimated cost</div><div class="amount">$${totalBudget.toLocaleString()}</div></div>
+      <div style="text-align:right"><div class="label">Per person</div><div class="amount">$${perPerson.toLocaleString()}</div></div>
+    </div>
+  </div>
+
+  ${accomRows ? `<div class="section">
+    <div class="section-title">🏨 Accommodations</div>
+    <table><thead><tr><th>Name</th><th>Address</th><th style="text-align:right">Cost</th></tr></thead><tbody>${accomRows}</tbody></table>
+  </div>` : ""}
+
+  ${vehicleRows ? `<div class="section">
+    <div class="section-title">🚗 Vehicles</div>
+    <table><thead><tr><th>Vehicle</th><th>Dates</th><th style="text-align:right">Cost</th></tr></thead><tbody>${vehicleRows}</tbody></table>
+  </div>` : ""}
+
+  ${itemRows ? `<div class="section">
+    <div class="section-title">🎯 Items & Activities</div>
+    <table><thead><tr><th>Title</th><th>Date / Time</th><th style="text-align:right">Cost</th></tr></thead><tbody>${itemRows}</tbody></table>
+  </div>` : ""}
+</body>
+</html>`;
+
+    const blob = new Blob([html], {type: "text/html"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href=url; a.download=`${trip.name.replace(/\s+/g,"-")}-summary.txt`; a.click();
+    a.href = url;
+    a.download = `${trip.name.replace(/\s+/g, "-")}-summary.html`;
+    a.click();
     URL.revokeObjectURL(url);
+
+    // Open print dialog so user can Save as PDF from browser
+    const win = window.open(url, "_blank");
+    if(win) setTimeout(()=>win.print(), 800);
   };
   const topDest=[...trip.destinations].sort((a,b)=>
     ((b.upvotes||[]).length-(b.downvotes||[]).length) -
