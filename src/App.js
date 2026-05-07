@@ -3934,19 +3934,19 @@ export default function App() {
       day:         a.scheduled_date || null,
       startTime:   a.scheduled_time || null,
       startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: 60,
-      location:    "",
+      durationMin: a.duration_min || 60,
+      location:    a.location || "",
       price:       parseFloat(a.cost) || 0,
       priceType:   a.price_type || "flat",
       metadata: {
-        description: "",
-        notes:       "",
-        upvotes:     Array.isArray(a.upvotes) ? a.upvotes : [],
-        downvotes:   Array.isArray(a.downvotes) ? a.downvotes : [],
-        createdBy:   a.created_by || "",
-        checkIn:     null,
-        checkOut:    null,
-        transportationTime: "",
+        description:        a.metadata?.description || "",
+        notes:              a.metadata?.notes || "",
+        upvotes:            Array.isArray(a.metadata?.upvotes) ? a.metadata.upvotes : (Array.isArray(a.upvotes) ? a.upvotes : []),
+        downvotes:          Array.isArray(a.metadata?.downvotes) ? a.metadata.downvotes : (Array.isArray(a.downvotes) ? a.downvotes : []),
+        createdBy:          a.metadata?.createdBy || a.created_by || "",
+        checkIn:            a.metadata?.checkIn || null,
+        checkOut:           a.metadata?.checkOut || null,
+        transportationTime: a.metadata?.transportationTime || "",
       },
     }));
 
@@ -4074,6 +4074,9 @@ export default function App() {
         price_type:     item.priceType || "flat",
         status:         "proposed",
         created_by:     item.metadata?.createdBy || null,
+        location:       item.location || null,
+        duration_min:   item.durationMin || 60,
+        metadata:       item.metadata || {},
       }).select().single();
       if(error) { console.error("db.addItem:", error); return item; }
       return { ...item, id: data.id };
@@ -4088,6 +4091,9 @@ export default function App() {
         scheduled_time: item.startTime || null,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
+        location:       item.location || null,
+        duration_min:   item.durationMin || 60,
+        metadata:       item.metadata || {},
       }).eq("id", item.id);
     },
 
