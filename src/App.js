@@ -874,7 +874,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
   const dayOfWeek=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"][d.getDay()];
   const dateLabel=`${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
 
-  const removeItem=id=>{ if(db) db.deleteItem(id); setTrip(t=>({...t,calendarItems:t.calendarItems.filter(ci=>ci.id!==id)})); };
+  const removeItem=id=>{ const ci=trip.calendarItems.find(x=>x.id===id); if(db) db.deleteItem(id, ci?.type); setTrip(t=>({...t,calendarItems:t.calendarItems.filter(ci=>ci.id!==id)})); };
 
   const addItem=async ()=>{
     if(!newTitle.trim()) return;
@@ -1379,7 +1379,7 @@ function ActivityTab({trip,setTrip,user,db}) {
     setShowAdd(false);
   };
 
-  const del=id=>{ db.deleteItem(id); setTrip(t=>({...t,calendarItems:t.calendarItems.filter(c=>c.id!==id)})); };
+  const del=id=>{ const ci=trip.calendarItems.find(x=>x.id===id); if(db) db.deleteItem(id, ci?.type); setTrip(t=>({...t,calendarItems:t.calendarItems.filter(c=>c.id!==id)})); };
   const F=k=>({value:form[k],onChange:e=>setForm(f=>({...f,[k]:e.target.value})),className:"form-input"});
 
   return (
@@ -1600,7 +1600,7 @@ function VotingTab({trip,setTrip,user,userId,db}) {
     setTrip({...trip,calendarItems:newItems});
     if(!db?.isMock){
       const ci=newItems.find(x=>x.id===id);
-      if(ci) supabase.from("activities").update({upvotes:ci.metadata.upvotes,downvotes:ci.metadata.downvotes}).eq("id",id)
+      if(ci) supabase.from(itemTypeToTable(ci.type)).update({upvotes:ci.metadata.upvotes,downvotes:ci.metadata.downvotes}).eq("id",id)
         .then(({error})=>{ if(error) console.error("voteCI supabase error:",error); });
     }
   };
@@ -3916,17 +3916,27 @@ export default function App() {
   const loadTripDetails = async (trip) => {
     setTripLoading(true);
 
-    // Load calendar items (activities) + activity_details from trips row
-    const { data: items } = await supabase
-      .from("activities")
-      .select("*")
-      .eq("trip_id", trip.id)
-      .order("created_at", { ascending: true });
-
-    // Load activity_details from trips table (stores notes, location, check-in/out, etc.)
-    const { data: tripDetails } = await supabase
-      .from("trips").select("activity_details").eq("id", trip.id).single();
-    const activityDetails = tripDetails?.activity_details || {};
+    // Load all item types from their dedicated tables in parallel
+    const [
+      { data: rawActivities },
+      { data: rawMeals },
+      { data: rawTransport },
+      { data: rawCheckins },
+      { data: rawNotes },
+    ] = await Promise.all([
+      supabase.from("item_activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+      supabase.from("item_meals").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+      supabase.from("item_transport").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+      supabase.from("item_checkins").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+      supabase.from("item_notes").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+    ]);
+    const items = [
+      ...(rawActivities||[]).map(r => mapRowToItem(r, "activity")),
+      ...(rawMeals||[]).map(r => mapRowToItem(r, "meal")),
+      ...(rawTransport||[]).map(r => mapRowToItem(r, "transport")),
+      ...(rawCheckins||[]).map(r => mapRowToItem(r, "hotel")),
+      ...(rawNotes||[]).map(r => mapRowToItem(r, "note")),
+    ].sort((a,b) => (a.day||"") < (b.day||"") ? -1 : (a.day||"") > (b.day||"") ? 1 : 0);
 
     // Load accommodations
     const { data: accoms } = await supabase
@@ -3934,32 +3944,7 @@ export default function App() {
       .select("*")
       .eq("trip_id", trip.id);
 
-    const calendarItems = (items||[]).map(a => {
-      const d = activityDetails[String(a.id)] || {};
-      return {
-        id:          a.id,
-        type:        fromDbCategory(a.category),
-        title:       a.title,
-        day:         a.scheduled_date || null,
-        startTime:   a.scheduled_time || null,
-        startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-        durationMin: d.durationMin || 60,
-        location:    d.location || "",
-        price:       parseFloat(a.cost) || 0,
-        priceType:   a.price_type || "flat",
-        metadata: {
-          description:        d.description || "",
-          notes:              d.notes || "",
-          upvotes:            Array.isArray(a.upvotes) ? a.upvotes : [],
-          downvotes:          Array.isArray(a.downvotes) ? a.downvotes : [],
-          createdBy:          a.created_by || "",
-          checkIn:            d.checkIn || null,
-          checkOut:           d.checkOut || null,
-          transportationTime: d.transportationTime || "",
-          travelTimeFromPrev: d.travelTimeFromPrev || 0,
-        },
-      };
-    });
+    const calendarItems = items; // already mapped by mapRowToItem above
 
     const accommodationOptions = (accoms||[]).map(a => ({
       id:            a.id,
@@ -4070,104 +4055,110 @@ export default function App() {
     general:       "note",
   }[cat] || "activity");
 
+  // ── Item table routing helpers ──
+  const itemTypeToTable = (type) => ({
+    activity:  "item_activities",
+    meal:      "item_meals",
+    transport: "item_transport",
+    hotel:     "item_checkins",
+    note:      "item_notes",
+  }[type] || "item_activities");
+
+  const buildItemRow = (tripId, item) => {
+    const base = {
+      title:      item.title,
+      day:        item.day || null,
+      start_time: item.startTime || null,
+      price:      item.price || 0,
+      price_type: item.priceType || "flat",
+      notes:      item.metadata?.notes || "",
+      upvotes:    item.metadata?.upvotes || [],
+      downvotes:  item.metadata?.downvotes || [],
+      ...(tripId ? { trip_id: tripId } : {}),
+      ...(item.metadata?.createdBy ? { created_by: item.metadata.createdBy } : {}),
+    };
+    if(item.type === "activity" || item.type === "meal") {
+      return { ...base,
+        duration_min: item.durationMin || 60,
+        location:     item.location || "",
+        description:  item.metadata?.description || "",
+      };
+    }
+    if(item.type === "transport") {
+      return { ...base,
+        duration_min:          item.durationMin || 60,
+        location:              item.location || "",
+        transportation_time:   item.metadata?.transportationTime ? parseInt(item.metadata.transportationTime) : null,
+        travel_time_from_prev: item.metadata?.travelTimeFromPrev ? parseInt(item.metadata.travelTimeFromPrev) : 0,
+      };
+    }
+    if(item.type === "hotel") {
+      return { ...base,
+        location:  item.location || "",
+        check_in:  item.metadata?.checkIn || null,
+        check_out: item.metadata?.checkOut || null,
+      };
+    }
+    if(item.type === "note") {
+      return { ...base, body: item.metadata?.description || "" };
+    }
+    return base;
+  };
+
+  const mapRowToItem = (row, type) => ({
+    id:          row.id,
+    type,
+    title:       row.title,
+    day:         row.day || null,
+    startTime:   row.start_time || null,
+    startMin:    row.start_time ? timeStrToMin(row.start_time) : null,
+    durationMin: row.duration_min || 60,
+    location:    row.location || "",
+    price:       parseFloat(row.price) || 0,
+    priceType:   row.price_type || "flat",
+    metadata: {
+      notes:              row.notes || "",
+      description:        row.description || row.body || "",
+      upvotes:            Array.isArray(row.upvotes) ? row.upvotes : [],
+      downvotes:          Array.isArray(row.downvotes) ? row.downvotes : [],
+      createdBy:          row.created_by || "",
+      checkIn:            row.check_in || null,
+      checkOut:           row.check_out || null,
+      transportationTime: row.transportation_time ? String(row.transportation_time) : "",
+      travelTimeFromPrev: row.travel_time_from_prev || 0,
+    },
+  });
+
   const db = {
     isMock,
     // ── Activities (calendar items) ──
     addItem: async (tripId, item) => {
       if(isMock) return item;
-      const { data, error } = await supabase.from("activities").insert({
-        trip_id:        tripId,
-        title:          item.title,
-        category:       toDbCategory(item.type),
-        scheduled_date: item.day || null,
-        scheduled_time: item.startTime || null,
-        cost:           item.price || 0,
-        price_type:     item.priceType || "flat",
-        status:         "proposed",
-        created_by:     item.metadata?.createdBy || null,
-        upvotes:        [],
-        downvotes:      [],
-        details: {
-          location:           item.location || "",
-          durationMin:        item.durationMin || 60,
-          description:        item.metadata?.description || "",
-          notes:              item.metadata?.notes || "",
-          checkIn:            item.metadata?.checkIn || null,
-          checkOut:           item.metadata?.checkOut || null,
-          transportationTime: item.metadata?.transportationTime || "",
-          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
-        },
-      }).select().single();
-      if(error) { console.error("addItem:", error.message); return item; }
-      const realItem = data ? { ...item, id: data.id } : item;
-
-      // Store extra detail fields in trips.activity_details jsonb
-      if(data?.id) {
-        const detail = {
-          location:           item.location || "",
-          durationMin:        item.durationMin || 60,
-          notes:              item.metadata?.notes || "",
-          description:        item.metadata?.description || "",
-          checkIn:            item.metadata?.checkIn || null,
-          checkOut:           item.metadata?.checkOut || null,
-          transportationTime: item.metadata?.transportationTime || "",
-          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
-        };
-        const { data: tripRow } = await supabase
-          .from("trips").select("activity_details").eq("id", tripId).single();
-        const existing = tripRow?.activity_details || {};
-        await supabase.from("trips")
-          .update({ activity_details: { ...existing, [String(data.id)]: detail } })
-          .eq("id", tripId);
-      }
-      return realItem;
+      const table = itemTypeToTable(item.type);
+      const row = buildItemRow(tripId, item);
+      const { data, error } = await supabase.from(table).insert(row).select().single();
+      if(error) { console.error("addItem error:", error.message, error.code); return item; }
+      return data ? { ...item, id: data.id } : item;
     },
 
     updateItem: async (item) => {
       if(isMock) return;
-      // Update core fields on activities table (all exist in original schema)
-      const { error } = await supabase.from("activities").update({
-        title:          item.title,
-        category:       toDbCategory(item.type),
-        scheduled_date: item.day || null,
-        scheduled_time: item.startTime || null,
-        cost:           item.price || 0,
-        price_type:     item.priceType || "flat",
-      }).eq("id", item.id);
-      if(error) console.error("updateItem core error:", error.message);
-
-      // Store extra fields (notes, location, check-in/out, transport) in
-      // trips.activity_details jsonb — keyed by activity id.
-      // This uses a column we control without schema changes on activities.
-      const detailKey = String(item.id);
-      const detail = {
-        location:           item.location || "",
-        durationMin:        item.durationMin || 60,
-        notes:              item.metadata?.notes || "",
-        description:        item.metadata?.description || "",
-        checkIn:            item.metadata?.checkIn || null,
-        checkOut:           item.metadata?.checkOut || null,
-        transportationTime: item.metadata?.transportationTime || "",
-        travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
-      };
-      // Read current activity_details, merge, write back
-      const { data: tripRow } = await supabase
-        .from("trips").select("activity_details").eq("id", item.tripId).single();
-      const existing = tripRow?.activity_details || {};
-      const { error: detailErr } = await supabase.from("trips")
-        .update({ activity_details: { ...existing, [detailKey]: detail } })
-        .eq("id", item.tripId);
-      if(detailErr) console.error("updateItem details error:", detailErr.message);
+      const table = itemTypeToTable(item.type);
+      const row = buildItemRow(item.tripId || null, item);
+      const { error } = await supabase.from(table).update(row).eq("id", item.id);
+      if(error) console.error("updateItem error:", error.message, error.code);
     },
 
-    deleteItem: async (id) => {
+    deleteItem: async (id, type) => {
       if(isMock) return;
-      await supabase.from("activities").delete().eq("id", id);
+      const table = itemTypeToTable(type || "activity");
+      await supabase.from(table).delete().eq("id", id);
     },
 
-    updateVotes: async (itemId, upvotes, downvotes) => {
+    updateVotes: async (itemId, upvotes, downvotes, type) => {
       if(isMock) return;
-      await supabase.from("activities").update({ upvotes, downvotes }).eq("id", itemId);
+      const table = itemTypeToTable(type || "activity");
+      await supabase.from(table).update({ upvotes, downvotes }).eq("id", itemId);
     },
 
     // ── Votes table (destination/budget votes) ──
