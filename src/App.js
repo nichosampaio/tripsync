@@ -4106,7 +4106,7 @@ export default function App() {
         travel_time_from_prev: item.metadata?.travelTimeFromPrev || 0,
       }).eq("id", item.id);
       if(error) console.error("updateItem:", error.message, error.code);
-    },,
+    },
 
     deleteItem: async (id) => {
       if(isMock) return;
