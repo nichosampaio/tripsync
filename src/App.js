@@ -4262,12 +4262,19 @@ export default function App() {
     const trip = trips.find(t=>t.id===tripId);
     if(!trip) return;
     const newStatus = trip.status === "archived" ? "planning" : "archived";
+    // Optimistic local update
     setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:newStatus}:t));
+    if(active?.id===tripId) setActive(a=>({...a,status:newStatus}));
     if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
       const {error} = await supabase.from("trips").update({status:newStatus}).eq("id",tripId);
-      if(error) console.error("toggleArchive:", error);
+      if(error) {
+        console.error("toggleArchive failed:", error.message, error.code);
+        // Revert local state if DB write failed
+        setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
+        if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
+        alert("Could not archive trip. See console for details.");
+      }
     }
-    if(active?.id===tripId) setActive(a=>({...a,status:newStatus}));
   };
 
   const leaveTrip = async (tripId) => {
