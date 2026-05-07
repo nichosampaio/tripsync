@@ -3741,7 +3741,7 @@ export default function App() {
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
-        google_maps_url, country_info, expense_log, locked_votes, documents,
+        google_maps_url, country_info, expense_log, locked_votes, documents, is_archived,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
       `)
@@ -3753,7 +3753,7 @@ export default function App() {
     const buildTrip = (t, existing) => ({
       id:          t.id,
       name:        t.title,
-      status:      t.country_info?.archived ? "archived" : (t.status || "planning"),
+      status:      (t.is_archived === true) ? "archived" : (t.status || "planning"),
       startDate:   t.start_date,
       endDate:     t.end_date,
       members:     (t.trip_members||[]).map(m => m.profiles?.full_name || m.user_id),
@@ -4214,7 +4214,8 @@ export default function App() {
         id: newId, title: copy.name, destination: copy.destinations?.[0]?.name||"TBD",
         status: "planning", start_date: copy.startDate||null, end_date: copy.endDate||null,
         created_by: authUser.id,
-        country_info: trip.country ? {...trip.country, archived: false} : null,
+        country_info: trip.country || null,
+        is_archived: false,
         expense_log: [], locked_votes: {}, documents: [],
       });
       if(!tripErr) {
@@ -4263,22 +4264,20 @@ export default function App() {
     if(!trip) return;
     const isArchived = trip.status === "archived";
     const newStatus = isArchived ? "planning" : "archived";
-    // Optimistic local update
+    // Optimistic local update immediately
     setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:newStatus}:t));
     if(active?.id===tripId) setActive(a=>({...a,status:newStatus}));
     if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
-      // Store archived flag in country_info (JSONB) to avoid CHECK constraint on status column.
-      // Also attempt to update status — if the DB has the constraint fixed it will persist there too.
-      const currentCountryInfo = trip.country || {};
-      const updatedCountryInfo = {...currentCountryInfo, archived: !isArchived};
-      const { error } = await supabase.from("trips")
-        .update({ country_info: updatedCountryInfo })
+      const { error } = await supabase
+        .from("trips")
+        .update({ is_archived: !isArchived })
         .eq("id", tripId);
       if(error) {
-        console.error("toggleArchive failed:", error.message);
-        // Revert
+        console.error("toggleArchive error:", error.message, error.code, error.details);
+        // Revert on failure
         setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
         if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
+        alert(`Archive failed: ${error.message}`);
       }
     }
   };
