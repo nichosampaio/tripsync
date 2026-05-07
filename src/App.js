@@ -3741,10 +3741,12 @@ export default function App() {
     // Fetch user's personal archived list from profiles
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("archived_trips")
+      .select("archived_trips, personal_budget")
       .eq("id", uid)
       .single();
-    const myArchivedIds = profileData?.archived_trips || [];
+    const myArchivedIds = Array.isArray(profileData?.archived_trips)
+      ? profileData.archived_trips
+      : [];
     setArchivedTripIds(myArchivedIds);
 
     const { data, error } = await supabase
@@ -4265,7 +4267,7 @@ export default function App() {
       }
     }
     setTrips(ts=>[copy,...ts]);
-    setActive(copy); setTab("schedule"); setPage("trip");
+    // Stay on dashboard — user can open the copy themselves
   };
 
   // ── Archive / unarchive trip (Premium) ──
@@ -4287,15 +4289,16 @@ export default function App() {
     if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
       const { error } = await supabase
         .from("profiles")
-        .update({ archived_trips: newArchived })
-        .eq("id", authUser.id);
+        .upsert(
+          { id: authUser.id, archived_trips: newArchived },
+          { onConflict: "id" }
+        );
       if(error) {
-        console.error("toggleArchive error:", error.message);
-        // Revert
+        console.error("toggleArchive error:", error.message, error.code);
+        // Revert local state
         setArchivedTripIds(archivedTripIds);
         setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
         if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
-        alert(`Archive failed: ${error.message}`);
       }
     }
   };
