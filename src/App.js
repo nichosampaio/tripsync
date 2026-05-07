@@ -3939,14 +3939,15 @@ export default function App() {
       price:       parseFloat(a.cost) || 0,
       priceType:   a.price_type || "flat",
       metadata: {
-        description:        a.metadata?.description || "",
-        notes:              a.metadata?.notes || "",
-        upvotes:            Array.isArray(a.metadata?.upvotes) ? a.metadata.upvotes : (Array.isArray(a.upvotes) ? a.upvotes : []),
-        downvotes:          Array.isArray(a.metadata?.downvotes) ? a.metadata.downvotes : (Array.isArray(a.downvotes) ? a.downvotes : []),
-        createdBy:          a.metadata?.createdBy || a.created_by || "",
-        checkIn:            a.metadata?.checkIn || null,
-        checkOut:           a.metadata?.checkOut || null,
-        transportationTime: a.metadata?.transportationTime || "",
+        description:        a.description || "",
+        notes:              a.notes || "",
+        upvotes:            Array.isArray(a.upvotes) ? a.upvotes : [],
+        downvotes:          Array.isArray(a.downvotes) ? a.downvotes : [],
+        createdBy:          a.created_by || "",
+        checkIn:            a.check_in || null,
+        checkOut:           a.check_out || null,
+        transportationTime: a.transportation_time || "",
+        travelTimeFromPrev: a.travel_time_from_prev || 0,
       },
     }));
 
@@ -4065,71 +4066,47 @@ export default function App() {
     addItem: async (tripId, item) => {
       if(isMock) return item;
       const { data, error } = await supabase.from("activities").insert({
-        trip_id:        tripId,
-        title:          item.title,
-        category:       toDbCategory(item.type),
-        scheduled_date: item.day || null,
-        scheduled_time: item.startTime || null,
-        cost:           item.price || 0,
-        price_type:     item.priceType || "flat",
-        status:         "proposed",
-        created_by:     item.metadata?.createdBy || null,
-        location:       item.location || null,
-        duration_min:   item.durationMin || 60,
-        metadata: {
-          notes:              item.metadata?.notes || "",
-          description:        item.metadata?.description || "",
-          checkIn:            item.metadata?.checkIn || null,
-          checkOut:           item.metadata?.checkOut || null,
-          transportationTime: item.metadata?.transportationTime || "",
-          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
-          upvotes:            item.metadata?.upvotes || [],
-          downvotes:          item.metadata?.downvotes || [],
-          createdBy:          item.metadata?.createdBy || "",
-        },
-      }).select().single();
-      if(error) { console.error("db.addItem:", error); return item; }
-      return { ...item, id: data.id };
-    },
+        trip_id:            tripId,
+        title:              item.title,
+        category:           toDbCategory(item.type),
+        scheduled_date:     item.day || null,
+        scheduled_time:     item.startTime || null,
+        duration_min:       item.durationMin || 60,
+        cost:               item.price || 0,
+        price_type:         item.priceType || "flat",
+        status:             "proposed",
+        created_by:         item.metadata?.createdBy || null,
+        location:           item.location || "",
+        description:        item.metadata?.description || "",
+        notes:              item.metadata?.notes || "",
+        check_in:           item.metadata?.checkIn || null,
+        check_out:          item.metadata?.checkOut || null,
+        transportation_time: item.metadata?.transportationTime || null,
+        travel_time_from_prev: item.metadata?.travelTimeFromPrev || 0,
+        upvotes:            item.metadata?.upvotes || [],
+        downvotes:          item.metadata?.downvotes || [],
+      }).select().single();,
 
     updateItem: async (item) => {
       if(isMock) return;
-      // Base fields that always exist
-      const baseFields = {
-        title:          item.title,
-        category:       toDbCategory(item.type),
-        scheduled_date: item.day || null,
-        scheduled_time: item.startTime || null,
-        cost:           item.price || 0,
-        price_type:     item.priceType || "flat",
-      };
-      // Extended fields — written separately so base fields always save even if columns missing
-      const extFields = {
-        location:     item.location || null,
-        duration_min: item.durationMin || 60,
-        metadata:     {
-          notes:              item.metadata?.notes || "",
-          description:        item.metadata?.description || "",
-          checkIn:            item.metadata?.checkIn || null,
-          checkOut:           item.metadata?.checkOut || null,
-          transportationTime: item.metadata?.transportationTime || "",
-          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
-          upvotes:            item.metadata?.upvotes || [],
-          downvotes:          item.metadata?.downvotes || [],
-          createdBy:          item.metadata?.createdBy || "",
-        },
-      };
-      const { error } = await supabase.from("activities")
-        .update({ ...baseFields, ...extFields })
-        .eq("id", item.id);
-      if(error) {
-        console.error("updateItem error:", error.message, error.code);
-        // Fallback: save only base fields if extended fields caused the error
-        if(error.code === "PGRST204" || error.message?.includes("column")) {
-          await supabase.from("activities").update(baseFields).eq("id", item.id);
-        }
-      }
-    },
+      const { error } = await supabase.from("activities").update({
+        title:              item.title,
+        category:           toDbCategory(item.type),
+        scheduled_date:     item.day || null,
+        scheduled_time:     item.startTime || null,
+        duration_min:       item.durationMin || 60,
+        cost:               item.price || 0,
+        price_type:         item.priceType || "flat",
+        location:           item.location || "",
+        description:        item.metadata?.description || "",
+        notes:              item.metadata?.notes || "",
+        check_in:           item.metadata?.checkIn || null,
+        check_out:          item.metadata?.checkOut || null,
+        transportation_time: item.metadata?.transportationTime || null,
+        travel_time_from_prev: item.metadata?.travelTimeFromPrev || 0,
+      }).eq("id", item.id);
+      if(error) console.error("updateItem:", error.message, error.code);
+    },,
 
     deleteItem: async (id) => {
       if(isMock) return;
