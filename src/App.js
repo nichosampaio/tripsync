@@ -3417,6 +3417,7 @@ export default function App() {
   const [tab,setTab]           = useState("schedule");
   const [showNew,setShowNew]   = useState(false);
   const [showArchived,setShowArchived] = useState(false);
+  const [archivedTripIds,setArchivedTripIds] = useState([]); // per-user, stored in profiles
 
   // ── Real Supabase Auth state ──
   const [authUser,setAuthUser]     = useState(null);   // Supabase user object (null = logged out)
@@ -3468,7 +3469,7 @@ export default function App() {
       if(event === "SIGNED_IN") {
         setPage(p => p === "landing" ? "dashboard" : p);
       } else if(event === "SIGNED_OUT") {
-        setPage("landing"); setActive(null);
+        setPage("landing"); setActive(null); setArchivedTripIds([]);
         sessionStorage.removeItem("tripsync_active_id");
         sessionStorage.removeItem("tripsync_active_tab");
       }
@@ -3737,11 +3738,20 @@ export default function App() {
     const uid = userId || authUserIdRef.current;
     if(!uid) { setTripsLoading(false); return; }
     setTripsLoading(true);
+    // Fetch user's personal archived list from profiles
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("archived_trips")
+      .eq("id", uid)
+      .single();
+    const myArchivedIds = profileData?.archived_trips || [];
+    setArchivedTripIds(myArchivedIds);
+
     const { data, error } = await supabase
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
-        google_maps_url, country_info, expense_log, locked_votes, documents, is_archived,
+        google_maps_url, country_info, expense_log, locked_votes, documents,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
       `)
@@ -3753,7 +3763,7 @@ export default function App() {
     const buildTrip = (t, existing) => ({
       id:          t.id,
       name:        t.title,
-      status:      (t.is_archived === true) ? "archived" : (t.status || "planning"),
+      status:      myArchivedIds.includes(t.id) ? "archived" : (t.status || "planning"),
       startDate:   t.start_date,
       endDate:     t.end_date,
       members:     (t.trip_members||[]).map(m => m.profiles?.full_name || m.user_id),
@@ -4262,19 +4272,27 @@ export default function App() {
   const toggleArchive = async (tripId) => {
     const trip = trips.find(t=>t.id===tripId);
     if(!trip) return;
-    const isArchived = trip.status === "archived";
+    const isArchived = archivedTripIds.includes(tripId);
+    const newArchived = isArchived
+      ? archivedTripIds.filter(id => id !== tripId)
+      : [...archivedTripIds, tripId];
     const newStatus = isArchived ? "planning" : "archived";
-    // Optimistic local update immediately
+
+    // Optimistic local update — only affects this user's view
+    setArchivedTripIds(newArchived);
     setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:newStatus}:t));
     if(active?.id===tripId) setActive(a=>({...a,status:newStatus}));
+
+    // Persist to profiles table — only this user's row, never touches trips table
     if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
       const { error } = await supabase
-        .from("trips")
-        .update({ is_archived: !isArchived })
-        .eq("id", tripId);
+        .from("profiles")
+        .update({ archived_trips: newArchived })
+        .eq("id", authUser.id);
       if(error) {
-        console.error("toggleArchive error:", error.message, error.code, error.details);
-        // Revert on failure
+        console.error("toggleArchive error:", error.message);
+        // Revert
+        setArchivedTripIds(archivedTripIds);
         setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
         if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
         alert(`Archive failed: ${error.message}`);
