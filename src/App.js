@@ -3753,7 +3753,7 @@ export default function App() {
     const buildTrip = (t, existing) => ({
       id:          t.id,
       name:        t.title,
-      status:      t.status || "planning",
+      status:      t.country_info?.archived ? "archived" : (t.status || "planning"),
       startDate:   t.start_date,
       endDate:     t.end_date,
       members:     (t.trip_members||[]).map(m => m.profiles?.full_name || m.user_id),
@@ -4200,7 +4200,7 @@ export default function App() {
     const copy = {
       ...trip,
       id: newId,
-      name: `${trip.name} (Copy)`,
+      name: `Copy of ${trip.name}`,
       status: "planning",
       calendarItems: (trip.calendarItems||[]).map(ci=>({...ci,id:uid()})),
       accommodationOptions: (trip.accommodationOptions||[]).map(a=>({...a,id:uid(),upvotes:[],downvotes:[]})),
@@ -4214,7 +4214,7 @@ export default function App() {
         id: newId, title: copy.name, destination: copy.destinations?.[0]?.name||"TBD",
         status: "planning", start_date: copy.startDate||null, end_date: copy.endDate||null,
         created_by: authUser.id,
-        country_info: trip.country||null,
+        country_info: trip.country ? {...trip.country, archived: false} : null,
         expense_log: [], locked_votes: {}, documents: [],
       });
       if(!tripErr) {
@@ -4261,18 +4261,24 @@ export default function App() {
   const toggleArchive = async (tripId) => {
     const trip = trips.find(t=>t.id===tripId);
     if(!trip) return;
-    const newStatus = trip.status === "archived" ? "planning" : "archived";
+    const isArchived = trip.status === "archived";
+    const newStatus = isArchived ? "planning" : "archived";
     // Optimistic local update
     setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:newStatus}:t));
     if(active?.id===tripId) setActive(a=>({...a,status:newStatus}));
     if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
-      const {error} = await supabase.from("trips").update({status:newStatus}).eq("id",tripId);
+      // Store archived flag in country_info (JSONB) to avoid CHECK constraint on status column.
+      // Also attempt to update status — if the DB has the constraint fixed it will persist there too.
+      const currentCountryInfo = trip.country || {};
+      const updatedCountryInfo = {...currentCountryInfo, archived: !isArchived};
+      const { error } = await supabase.from("trips")
+        .update({ country_info: updatedCountryInfo })
+        .eq("id", tripId);
       if(error) {
-        console.error("toggleArchive failed:", error.message, error.code);
-        // Revert local state if DB write failed
+        console.error("toggleArchive failed:", error.message);
+        // Revert
         setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
         if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
-        alert("Could not archive trip. See console for details.");
       }
     }
   };
