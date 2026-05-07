@@ -3242,15 +3242,18 @@ function SummaryTab({trip}) {
 
     const accomRows = (trip.accommodationOptions||[]).map(a=>`
       <tr>
-        <td style="padding:7px 10px;border-bottom:1px solid ${border}">${a.name}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};font-weight:600">${a.name}</td>
         <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${a.address||"—"}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${a.checkIn||"—"} → ${a.checkOut||"—"}</td>
         <td style="padding:7px 10px;border-bottom:1px solid ${border};text-align:right;font-weight:600">$${calcAccomTotal(a).toLocaleString()}</td>
       </tr>`).join("");
 
     const vehicleRows = (trip.vehicleRentals||[]).map(v=>`
       <tr>
-        <td style="padding:7px 10px;border-bottom:1px solid ${border}">${v.company} ${v.model||""}</td>
-        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${v.pickupDate||""}${v.returnDate?" → "+v.returnDate:""}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};font-weight:600">${v.company} ${v.model||""}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${v.pickupDate||"—"} → ${v.returnDate||"—"}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${v.pickupLocation||"—"}</td>
+        <td style="padding:7px 10px;border-bottom:1px solid ${border};color:${muted}">${v.dropoffLocation||"—"}</td>
         <td style="padding:7px 10px;border-bottom:1px solid ${border};text-align:right;font-weight:600">$${calcVehicleTotal(v).toLocaleString()}</td>
       </tr>`).join("");
 
@@ -3308,12 +3311,12 @@ function SummaryTab({trip}) {
 
   ${accomRows ? `<div class="section">
     <div class="section-title">🏨 Accommodations</div>
-    <table><thead><tr><th>Name</th><th>Address</th><th style="text-align:right">Cost</th></tr></thead><tbody>${accomRows}</tbody></table>
+    <table><thead><tr><th>Name</th><th>Address</th><th>Check-in → Check-out</th><th style="text-align:right">Cost</th></tr></thead><tbody>${accomRows}</tbody></table>
   </div>` : ""}
 
   ${vehicleRows ? `<div class="section">
     <div class="section-title">🚗 Vehicles</div>
-    <table><thead><tr><th>Vehicle</th><th>Dates</th><th style="text-align:right">Cost</th></tr></thead><tbody>${vehicleRows}</tbody></table>
+    <table><thead><tr><th>Vehicle</th><th>Dates</th><th>Pick-up Location</th><th>Drop-off Location</th><th style="text-align:right">Cost</th></tr></thead><tbody>${vehicleRows}</tbody></table>
   </div>` : ""}
 
   ${itemRows ? `<div class="section">
