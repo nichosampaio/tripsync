@@ -2553,7 +2553,14 @@ function CountryTab({trip,setTrip,db,authUserId}) {
 
   // ── Destination dropdown (top-voted or all trip destinations) ──
   const destinations = (trip.destinations||[]).map(d=>d.name||d).filter(Boolean);
-  const [destCountry, setDestCountry] = useState(destinations[0]||"");
+  // Default to top net-voted destination
+  const topDest = (()=>{
+    const dests = trip.destinations||[];
+    if(!dests.length) return "";
+    const sorted = [...dests].sort((a,b)=>((b.upvotes||[]).length-(b.downvotes||[]).length)-((a.upvotes||[]).length-(a.downvotes||[]).length));
+    return sorted[0]?.name || sorted[0] || "";
+  })();
+  const [destCountry, setDestCountry] = useState(topDest||destinations[0]||"");
   const [nationalities, setNationalities] = useState([]);
   const [natInput, setNatInput] = useState("");
   const [natOpen, setNatOpen] = useState(false);
@@ -2694,7 +2701,7 @@ function CountryTab({trip,setTrip,db,authUserId}) {
         </div>
 
         {/* AI Auto-fill panel */}
-        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r-md)",padding:"16px 18px",marginBottom:18}}>
+        <div style={{background:"#edeae4",border:"1px solid rgba(100,70,40,0.18)",borderRadius:"var(--r-md)",padding:"16px 18px",marginBottom:18}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <span style={{fontSize:17}}>✨</span>
@@ -2705,22 +2712,22 @@ function CountryTab({trip,setTrip,db,authUserId}) {
 
           {/* Destination */}
           <div style={{marginBottom:14}}>
-            <div style={{fontSize:10,fontWeight:700,color:"var(--accent)",letterSpacing:"0.09em",textTransform:"uppercase",marginBottom:7,display:"flex",alignItems:"center",gap:5}}>
+            <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.09em",textTransform:"uppercase",marginBottom:7,display:"flex",alignItems:"center",gap:5}}>
               <span style={{fontSize:11}}>📍</span> Destination Countries
             </div>
-            <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"8px 10px",background:"#fff",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",minHeight:40}}>
+            <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"8px 10px",background:"#fff",border:"1px solid rgba(100,70,40,0.15)",borderRadius:"var(--r-sm)",minHeight:40}}>
               {destCountry&&(
-                <span style={{display:"inline-flex",alignItems:"center",gap:5,background:"#fff",color:"var(--text)",border:"1px solid var(--border-strong)",borderRadius:5,padding:"3px 10px",fontSize:13,fontWeight:500}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:5,background:"#e8f0fe",color:"#1a56a0",border:"1px solid #c3d4f7",borderRadius:5,padding:"3px 10px",fontSize:13,fontWeight:500}}>
                   {destCountry}
-                  <span style={{cursor:"pointer",fontSize:16,lineHeight:1,color:"var(--muted)"}} onClick={()=>setDestCountry("")}>×</span>
+                  <span style={{cursor:"pointer",fontSize:16,lineHeight:1,color:"#5a80c8"}} onClick={()=>setDestCountry("")}>×</span>
                 </span>
               )}
               <select
                 value=""
                 onChange={e=>{ if(e.target.value) setDestCountry(e.target.value); }}
-                style={{border:"none",outline:"none",background:"transparent",fontSize:13,color:"var(--muted)",cursor:"pointer",flex:1,minWidth:60,appearance:"auto"}}
+                style={{border:"none",outline:"none",background:"transparent",fontSize:13,color:"var(--muted)",cursor:"pointer",flex:1,minWidth:60}}
               >
-                <option value="">▾</option>
+                <option value="">﹢ add</option>
                 {ALL_COUNTRIES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -2730,21 +2737,21 @@ function CountryTab({trip,setTrip,db,authUserId}) {
           {/* Passport holders */}
           <div style={{marginBottom:16}}>
             <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.09em",textTransform:"uppercase",marginBottom:7,display:"flex",alignItems:"center",gap:5}}>
-              <span style={{fontSize:11}}>🌐</span> Countries (Passport Holders)
+              <span style={{fontSize:13}}>🌐</span> Countries (Passport Holders)
             </div>
             <div style={{position:"relative"}}>
-              <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"8px 10px",background:"#fff",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",minHeight:40,cursor:"pointer"}} onClick={()=>setNatOpen(o=>!o)}>
+              <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"8px 10px",background:"#fff",border:"1px solid rgba(100,70,40,0.15)",borderRadius:"var(--r-sm)",minHeight:40,cursor:"pointer"}} onClick={()=>setNatOpen(o=>!o)}>
                 {nationalities.map(n=>(
-                  <span key={n} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#fff",color:"var(--text)",border:"1px solid var(--border-strong)",borderRadius:5,padding:"3px 10px",fontSize:13,fontWeight:500}}>
+                  <span key={n} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#e8f0fe",color:"#1a56a0",border:"1px solid #c3d4f7",borderRadius:5,padding:"3px 10px",fontSize:13,fontWeight:500}}>
                     {n}
-                    <span style={{cursor:"pointer",fontSize:16,lineHeight:1,color:"var(--muted)"}} onClick={e=>{e.stopPropagation();removeNat(n);}}>×</span>
+                    <span style={{cursor:"pointer",fontSize:16,lineHeight:1,color:"#5a80c8"}} onClick={e=>{e.stopPropagation();removeNat(n);}}>×</span>
                   </span>
                 ))}
                 {!nationalities.length&&<span style={{fontSize:13,color:"var(--muted)"}}>Select countries your group members are from…</span>}
                 <span style={{marginLeft:"auto",fontSize:11,color:"var(--muted)"}}>▾</span>
               </div>
               {natOpen&&(
-                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",zIndex:60,maxHeight:200,overflowY:"auto",boxShadow:"var(--shadow-md)"}}>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",border:"1px solid rgba(100,70,40,0.15)",borderRadius:"var(--r-sm)",zIndex:60,maxHeight:200,overflowY:"auto",boxShadow:"var(--shadow-md)"}}>
                   <div style={{padding:"7px 10px",borderBottom:"1px solid var(--border)"}}>
                     <input
                       autoFocus
