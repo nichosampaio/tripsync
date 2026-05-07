@@ -898,8 +898,8 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     const ci=trip.calendarItems.find(c=>c.id===id);
     if(!ci) return;
     if(ci.day!==dayYMD) {
-      supabase.from("activities")
-        .update({ scheduled_date: dayYMD })
+      supabase.from(itemTypeToTable(ci.type))
+        .update({ day: dayYMD })
         .eq("id", id)
         .then(({error}) => { if(error) console.error("handleDayDrop:", error.message); });
     }
@@ -916,8 +916,8 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     const newTime=minToTimeStr(newStartMin);
     const ci=trip.calendarItems.find(c=>c.id===id);
     if(!ci) return;
-    supabase.from("activities")
-      .update({ scheduled_date: dayYMD, scheduled_time: newTime })
+    supabase.from(itemTypeToTable(ci.type))
+      .update({ day: dayYMD, start_time: newTime })
       .eq("id", id)
       .then(({error}) => { if(error) console.error("handleSlotDrop:", error.message); });
     setTrip(t=>({...t,calendarItems:t.calendarItems.map(c=>c.id!==id?c:{...c,day:dayYMD,startMin:newStartMin,startTime:newTime})}));
@@ -4436,20 +4436,18 @@ export default function App() {
       });
 
       // Step 4: activities (calendar items)
-      const actRows = (trip.calendarItems||[]).map(ci=>({
-        trip_id:        realId,
-        title:          ci.title,
-        category:       ci.type || "sightseeing",
-        scheduled_date: ci.day || null,
-        scheduled_time: ci.startTime || null,
-        cost:           ci.price || 0,
-        price_type:     ci.priceType || "flat",
-        status:         "proposed",
-        created_by:     authUser.id,
-      }));
-      if(actRows.length) {
-        const {error: actErr} = await supabase.from("activities").insert(actRows);
-        if(actErr) console.error("duplicateTrip activities:", actErr.message);
+      // Duplicate items into their dedicated tables grouped by type
+      const itemsByType = {};
+      (trip.calendarItems||[]).forEach(ci => {
+        const t = ci.type || "activity";
+        if(!itemsByType[t]) itemsByType[t] = [];
+        itemsByType[t].push(ci);
+      });
+      for(const [type, items] of Object.entries(itemsByType)) {
+        const rows = items.map(ci => buildItemRow(realId, { ...ci, metadata: { ...ci.metadata, createdBy: authUser.id } }));
+        const table = itemTypeToTable(type);
+        const { error: itemErr } = await supabase.from(table).insert(rows);
+        if(itemErr) console.error(`duplicateTrip ${table}:`, itemErr.message);
       }
 
       // Step 5: accommodations
