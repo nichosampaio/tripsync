@@ -1519,6 +1519,17 @@ function ActivityTab({trip,setTrip,user,db}) {
 function VotingTab({trip,setTrip,user,userId,db}) {
   // Use UUID for DB storage, fall back to display name for demo
   const voteUserId = userId || user;
+  const [lockedSections, setLockedSections] = useState(trip.lockedVotes||{});
+
+  const toggleLock = (section) => {
+    const updated = {...lockedSections, [section]: !lockedSections[section]};
+    setLockedSections(updated);
+    setTrip(t=>({...t, lockedVotes: updated}));
+    if(!db?.isMock) {
+      supabase.from("trips").update({locked_votes: updated}).eq("id", trip.id)
+        .then(({error})=>{ if(error) console.error("toggleLock error:", error); });
+    }
+  };
 
   // ── Destination yes/no vote — persists to trips.country_info.destination_votes ──
   const voteSection=(section,id,dir)=>{
@@ -1631,14 +1642,20 @@ function VotingTab({trip,setTrip,user,userId,db}) {
       {/* ── Destinations ── */}
       {trip.destinations.length > 0 && (
         <div className="vote-card">
-          <h4>📍 Destination</h4>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <h4 style={{margin:0}}>📍 Destination</h4>
+            <button className={`btn btn-sm ${lockedSections.destinations?"btn-primary":"btn-ghost"}`} style={{fontSize:11,padding:"3px 10px",gap:4,display:"flex",alignItems:"center"}} onClick={()=>toggleLock("destinations")}>
+              {lockedSections.destinations?"🔒 Locked":"🔓 Lock"}
+            </button>
+          </div>
+          {lockedSections.destinations&&<div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.2)",borderRadius:6,padding:"6px 10px",marginBottom:10}}>✅ This vote is locked. Winner: <strong>{sortByNet(trip.destinations)[0]?.name}</strong></div>}
           {sortByNet(trip.destinations).map(dest=>{
             const up=(dest.upvotes||[]).length, down=(dest.downvotes||[]).length;
             const hasUp=(dest.upvotes||[]).includes(voteUserId), hasDown=(dest.downvotes||[]).includes(voteUserId);
             return(
               <YesNoCard key={dest.id} up={up} down={down} hasUp={hasUp} hasDown={hasDown}
-                onUp={()=>voteSection("destinations",dest.id,"up")}
-                onDown={()=>voteSection("destinations",dest.id,"down")}>
+                onUp={lockedSections.destinations?null:()=>voteSection("destinations",dest.id,"up")}
+                onDown={lockedSections.destinations?null:()=>voteSection("destinations",dest.id,"down")}>
                 <div style={{fontWeight:600,fontSize:14,marginBottom:2}}>{dest.name}</div>
               </YesNoCard>
             );
@@ -1649,7 +1666,11 @@ function VotingTab({trip,setTrip,user,userId,db}) {
       {/* ── Vehicle Rentals ── */}
       {(trip.vehicleRentals||[]).length > 0 && (
         <div className="vote-card">
-          <h4>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <h4 style={{margin:0}}>🚗 Vehicle Rentals ({(trip.vehicleRentals||[]).length})</h4>
+            <button className={`btn btn-sm ${lockedSections.vehicles?"btn-primary":"btn-ghost"}`} style={{fontSize:11,padding:"3px 10px"}} onClick={()=>toggleLock("vehicles")}>{lockedSections.vehicles?"🔒 Locked":"🔓 Lock"}</button>
+          </div>
+          {lockedSections.vehicles&&<div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.2)",borderRadius:6,padding:"6px 10px",marginBottom:10}}>✅ Vote locked. Winner: <strong>{sortByNet(trip.vehicleRentals||[])[0]?.company}</strong></div>}
           {sortByNet(trip.vehicleRentals||[]).map(v=>{
             const up=(v.upvotes||[]).length, down=(v.downvotes||[]).length;
             const hasUp=(v.upvotes||[]).includes(voteUserId), hasDown=(v.downvotes||[]).includes(voteUserId);
@@ -1683,7 +1704,11 @@ function VotingTab({trip,setTrip,user,userId,db}) {
       {/* ── Accommodations ── */}
       {(trip.accommodationOptions||[]).length > 0 && (
         <div className="vote-card">
-          <h4>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <h4 style={{margin:0}}>🏨 Accommodations ({(trip.accommodationOptions||[]).length})</h4>
+            <button className={`btn btn-sm ${lockedSections.accommodations?"btn-primary":"btn-ghost"}`} style={{fontSize:11,padding:"3px 10px"}} onClick={()=>toggleLock("accommodations")}>{lockedSections.accommodations?"🔒 Locked":"🔓 Lock"}</button>
+          </div>
+          {lockedSections.accommodations&&<div style={{fontSize:12,color:"var(--green)",background:"var(--green-soft)",border:"1px solid rgba(30,122,69,0.2)",borderRadius:6,padding:"6px 10px",marginBottom:10}}>✅ Vote locked. Winner: <strong>{sortByNet(trip.accommodationOptions||[])[0]?.name}</strong></div>}
           {sortByNet(trip.accommodationOptions||[]).map(a=>{
             const up=(a.upvotes||[]).length, down=(a.downvotes||[]).length;
             const hasUp=(a.upvotes||[]).includes(voteUserId), hasDown=(a.downvotes||[]).includes(voteUserId);
@@ -1785,7 +1810,7 @@ function calcAllVehicleTotal(vehicleRentals) {
 }
 
 // ─── BUDGET TAB ───────────────────────────────────────────────────────────────
-function BudgetTab({trip, setTrip, user, onSaveBudget}) {
+function BudgetTab({trip, setTrip, user, onSaveBudget, db}) {
   const memberCount = trip.members.length || 1;
   const items = trip.calendarItems || [];
 
@@ -2076,6 +2101,165 @@ function BudgetTab({trip, setTrip, user, onSaveBudget}) {
         )}
       </div>
 
+      {/* ── Expense Log (Premium) ── */}
+      <ExpenseLog trip={trip} setTrip={setTrip} user={user} members={trip.tripMembers||[]} db={db} grandTotal={grandTotal} memberCount={memberCount}/>
+
+      {/* ── Spending Breakdown Chart (Premium) ── */}
+      <SpendingChart cats={cats} grandTotal={grandTotal}/>
+
+    </div>
+  );
+}
+
+// ─── EXPENSE LOG ─────────────────────────────────────────────────────────────
+function ExpenseLog({trip,setTrip,user,members,db,grandTotal,memberCount}) {
+  const expenses = trip.expenseLog||[];
+  const [showAdd,setShowAdd] = useState(false);
+  const [form,setForm] = useState({description:"",amount:"",paidBy:user,split:"equal"});
+  const [err,setErr] = useState("");
+
+  const save = async () => {
+    if(!form.description.trim()) { setErr("Description required"); return; }
+    if(!form.amount||isNaN(+form.amount)||+form.amount<=0) { setErr("Valid amount required"); return; }
+    setErr("");
+    const entry = {id:uid(),description:form.description.trim(),amount:+form.amount,paidBy:form.paidBy,split:form.split,date:toYMD(new Date())};
+    const updated = [...expenses, entry];
+    setTrip(t=>({...t,expenseLog:updated}));
+    if(!db?.isMock) await supabase.from("trips").update({expense_log:updated}).eq("id",trip.id);
+    setForm({description:"",amount:"",paidBy:user,split:"equal"});
+    setShowAdd(false);
+  };
+
+  const del = async (id) => {
+    const updated = expenses.filter(e=>e.id!==id);
+    setTrip(t=>({...t,expenseLog:updated}));
+    if(!db?.isMock) await supabase.from("trips").update({expense_log:updated}).eq("id",trip.id);
+  };
+
+  // Compute balances — who owes whom
+  const balances = {};
+  const mList = members.length ? members.map(m=>m.name||m.userId) : [user];
+  mList.forEach(m=>{ balances[m]=0; });
+  expenses.forEach(exp=>{
+    const share = exp.split==="equal" ? exp.amount/mList.length : exp.amount;
+    balances[exp.paidBy] = (balances[exp.paidBy]||0) + exp.amount - share;
+    mList.filter(m=>m!==exp.paidBy).forEach(m=>{
+      balances[m] = (balances[m]||0) - share/(mList.length-1||1);
+    });
+  });
+
+  return (
+    <div className="budget-card">
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <h4 style={{margin:0}}>🧾 Expense Log</h4>
+        <button className="btn btn-accent2 btn-sm" onClick={()=>setShowAdd(s=>!s)}>+ Add Expense</button>
+      </div>
+
+      {showAdd&&(
+        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:10,padding:14,marginBottom:14}}>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Description *</label><input className="form-input" value={form.description} onChange={e=>setForm(f=>({...f,description:e.target.value}))} placeholder="e.g. Dinner at Rosarios"/></div>
+            <div className="form-group"><label className="form-label">Amount ($) *</label><input className="form-input" value={form.amount} onChange={e=>setForm(f=>({...f,amount:e.target.value}))} placeholder="45"/></div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Paid by</label>
+              <select className="form-input" value={form.paidBy} onChange={e=>setForm(f=>({...f,paidBy:e.target.value}))}>
+                {mList.map(m=><option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Split</label>
+              <select className="form-input" value={form.split} onChange={e=>setForm(f=>({...f,split:e.target.value}))}>
+                <option value="equal">Equal split</option>
+                <option value="solo">Paid alone (no split)</option>
+              </select>
+            </div>
+          </div>
+          {err&&<div style={{fontSize:12,color:"var(--red)",marginBottom:8}}>{err}</div>}
+          <div className="form-actions">
+            <button className="btn btn-ghost btn-sm" onClick={()=>setShowAdd(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={save}>Add</button>
+          </div>
+        </div>
+      )}
+
+      {expenses.length===0&&!showAdd&&<p className="text-muted" style={{fontSize:13}}>No expenses logged yet. Track who paid what and settle up.</p>}
+
+      {expenses.length>0&&(
+        <>
+          <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
+            {expenses.map(exp=>(
+              <div key={exp.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:"var(--surface2)",borderRadius:9,border:"1px solid var(--border)"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontWeight:600,fontSize:13}}>{exp.description}</div>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:2}}>{fmtDate(exp.date)} · Paid by <strong>{exp.paidBy}</strong> · {exp.split==="equal"?"Equal split":"No split"}</div>
+                </div>
+                <span style={{fontWeight:700,fontSize:14,color:"var(--text)",flexShrink:0}}>${parseFloat(exp.amount).toLocaleString()}</span>
+                <button onClick={()=>del(exp.id)} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"var(--red)",flexShrink:0}}>🗑</button>
+              </div>
+            ))}
+          </div>
+          <div style={{borderTop:"1px solid var(--border)",paddingTop:12}}>
+            <div style={{fontSize:11,fontWeight:700,color:"var(--muted)",letterSpacing:"0.06em",textTransform:"uppercase",marginBottom:8}}>Balances</div>
+            {Object.entries(balances).map(([name,bal])=>(
+              <div key={name} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",fontSize:13}}>
+                <span>{name}</span>
+                <span style={{fontWeight:700,color:bal>0.5?"var(--green)":bal<-0.5?"var(--red)":"var(--muted)"}}>
+                  {bal>0.5?`+$${Math.abs(bal).toFixed(2)} owed to them`:bal<-0.5?`-$${Math.abs(bal).toFixed(2)} owes`:"✓ settled"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── SPENDING CHART ───────────────────────────────────────────────────────────
+function SpendingChart({cats,grandTotal}) {
+  if(grandTotal===0) return null;
+  const COLORS = ["#2a7a55","#5a8a6a","#c4a030","#4a6fa5","#c96a28"];
+  return (
+    <div className="budget-card">
+      <h4 style={{marginBottom:16}}>📊 Spending Breakdown</h4>
+      <div style={{display:"flex",alignItems:"center",gap:24,flexWrap:"wrap"}}>
+        {/* Donut chart via SVG */}
+        <svg width="120" height="120" viewBox="0 0 120 120" style={{flexShrink:0}}>
+          {(()=>{
+            let offset=0;
+            const r=44, cx=60, cy=60, stroke=20;
+            const circ=2*Math.PI*r;
+            return cats.filter(c=>c.total>0).map((cat,i)=>{
+              const pct=cat.total/grandTotal;
+              const dash=pct*circ;
+              const el=(
+                <circle key={cat.label} cx={cx} cy={cy} r={r}
+                  fill="none" stroke={COLORS[i%COLORS.length]} strokeWidth={stroke}
+                  strokeDasharray={`${dash} ${circ-dash}`}
+                  strokeDashoffset={-offset*circ}
+                  style={{transform:"rotate(-90deg)",transformOrigin:"50% 50%"}}/>
+              );
+              offset+=pct;
+              return el;
+            });
+          })()}
+          <text x="60" y="55" textAnchor="middle" style={{fontSize:11,fill:"var(--muted)",fontFamily:"Inter"}}>Total</text>
+          <text x="60" y="70" textAnchor="middle" style={{fontSize:13,fontWeight:700,fill:"var(--text)",fontFamily:"Inter"}}>${grandTotal.toLocaleString()}</text>
+        </svg>
+        {/* Legend */}
+        <div style={{flex:1,display:"flex",flexDirection:"column",gap:8}}>
+          {cats.filter(c=>c.total>0).map((cat,i)=>(
+            <div key={cat.label} style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{width:10,height:10,borderRadius:2,background:COLORS[i%COLORS.length],flexShrink:0}}/>
+              <span style={{fontSize:13,flex:1}}>{cat.icon} {cat.label}</span>
+              <span style={{fontSize:13,fontWeight:600}}>${cat.total.toLocaleString()}</span>
+              <span style={{fontSize:11,color:"var(--muted)",minWidth:34,textAlign:"right"}}>{Math.round(cat.total/grandTotal*100)}%</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -3045,6 +3229,34 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
 
 // ─── SUMMARY TAB ─────────────────────────────────────────────────────────────
 function SummaryTab({trip}) {
+  const exportPDF = () => {
+    const lines = [
+      `TRIP SUMMARY — ${trip.name}`,
+      `Status: ${trip.status}`,
+      `Destination: ${trip.destinations?.[0]?.name||"TBD"}`,
+      `Dates: ${fmtRange(trip.startDate,trip.endDate)}`,
+      `Members: ${(trip.tripMembers||trip.members||[]).map(m=>m.name||m).join(", ")}`,
+      ``,
+      `── BUDGET ──`,
+      `Total: $${((trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)+calcAllAccomTotal(trip.accommodationOptions||[])+calcAllVehicleTotal(trip.vehicleRentals||[])).toLocaleString()}`,
+      `Per person: $${Math.ceil(((trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)+calcAllAccomTotal(trip.accommodationOptions||[])+calcAllVehicleTotal(trip.vehicleRentals||[]))/((trip.tripMembers||trip.members||[]).length||1)).toLocaleString()}`,
+      ``,
+      `── ACCOMMODATIONS ──`,
+      ...(trip.accommodationOptions||[]).map(a=>`  ${a.name} — ${a.address||""} — $${calcAccomTotal(a).toLocaleString()}`),
+      ``,
+      `── VEHICLES ──`,
+      ...(trip.vehicleRentals||[]).map(v=>`  ${v.company} ${v.model||""} — $${calcVehicleTotal(v).toLocaleString()}`),
+      ``,
+      `── ITEMS ──`,
+      ...(trip.calendarItems||[]).map(ci=>`  [${ci.day||"?"}] ${ci.title}${ci.price>0?` — $${ci.price}`:""}`),
+    ];
+    const blob = new Blob([lines.join("
+")], {type:"text/plain"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download=`${trip.name.replace(/\s+/g,"-")}-summary.txt`; a.click();
+    URL.revokeObjectURL(url);
+  };
   const topDest=[...trip.destinations].sort((a,b)=>
     ((b.upvotes||[]).length-(b.downvotes||[]).length) -
     ((a.upvotes||[]).length-(a.downvotes||[]).length)
@@ -3063,7 +3275,10 @@ function SummaryTab({trip}) {
           <p style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Final Trip Summary</p>
           <h3 className="summary-title">{trip.name}</h3>
         </div>
-        <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button className="btn btn-accent2 btn-sm" onClick={exportPDF} style={{fontSize:12}}>⬇️ Export</button>
+          <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
+        </div>
       </div>
       <div className="summary-grid">
         <div className="summary-item"><label>📍 Destination</label><div className="val">{topDest?.name}</div></div>
@@ -3202,6 +3417,7 @@ export default function App() {
   const [tripLoading,setTripLoading] = useState(false);
   const [tab,setTab]           = useState("schedule");
   const [showNew,setShowNew]   = useState(false);
+  const [showArchived,setShowArchived] = useState(false);
 
   // ── Real Supabase Auth state ──
   const [authUser,setAuthUser]     = useState(null);   // Supabase user object (null = logged out)
@@ -3526,7 +3742,7 @@ export default function App() {
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
-        google_maps_url, country_info,
+        google_maps_url, country_info, expense_log, locked_votes, documents,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
       `)
@@ -3562,6 +3778,9 @@ export default function App() {
       availability:        existing?.availability        ?? {},
       personalBudgets:     existing?.personalBudgets     ?? {},
       country:             t.country_info || null,
+      expenseLog:          t.expense_log || [],
+      lockedVotes:         t.locked_votes || {},
+      documents:           t.documents || [],
       googleMapsUrl:       t.google_maps_url || "",
       description:         t.description || "",
     });
@@ -3976,6 +4195,82 @@ export default function App() {
     if(active?.id === tripId) { setActive(null); setPage("dashboard"); }
   };
 
+  // ── Duplicate trip (Premium) ──
+  const duplicateTrip = async (trip) => {
+    const newId = uid();
+    const copy = {
+      ...trip,
+      id: newId,
+      name: `${trip.name} (Copy)`,
+      status: "planning",
+      calendarItems: (trip.calendarItems||[]).map(ci=>({...ci,id:uid()})),
+      accommodationOptions: (trip.accommodationOptions||[]).map(a=>({...a,id:uid(),upvotes:[],downvotes:[]})),
+      vehicleRentals: (trip.vehicleRentals||[]).map(v=>({...v,id:uid(),upvotes:[],downvotes:[]})),
+      destinations: (trip.destinations||[]).map(d=>({...d,id:uid(),upvotes:[],downvotes:[]})),
+      documents: [],
+      tripMembers: [{userId:authUser.id,name:authUser.user_metadata?.full_name||authUser.email,role:"admin",joinedAt:toYMD(new Date())}],
+    };
+    if(!trip.isDemo && typeof trip.id !== "number" && authUser?.id) {
+      const {error: tripErr} = await supabase.from("trips").insert({
+        id: newId, title: copy.name, destination: copy.destinations?.[0]?.name||"TBD",
+        status: "planning", start_date: copy.startDate||null, end_date: copy.endDate||null,
+        created_by: authUser.id,
+        country_info: trip.country||null,
+        expense_log: [], locked_votes: {}, documents: [],
+      });
+      if(!tripErr) {
+        // trip_members
+        await supabase.from("trip_members").insert({trip_id:newId,user_id:authUser.id,role:"admin"});
+        // activities
+        const actRows = (trip.calendarItems||[]).map(ci=>({
+          trip_id: newId, title: ci.title, category: ci.type||"sightseeing",
+          scheduled_date: ci.day||null, scheduled_time: ci.startTime||null,
+          cost: ci.price||0, price_type: ci.priceType||"flat", status:"proposed",
+          created_by: authUser.id,
+        }));
+        if(actRows.length) await supabase.from("activities").insert(actRows);
+        // accommodations
+        const accomRows = (trip.accommodationOptions||[]).map(a=>({
+          trip_id: newId, name: a.name, address: a.address||"",
+          price_type: a.priceType||"nightly",
+          cost_per_night: a.priceType==="full"?0:(a.pricePerNight||0),
+          total_price: a.priceType==="full"?(a.totalPrice||0):0,
+          check_in: a.checkIn||null, check_out: a.checkOut||null,
+          upvotes: [], downvotes: [],
+        }));
+        if(accomRows.length) await supabase.from("accommodations").insert(accomRows);
+        // vehicle rentals
+        const vRows = (trip.vehicleRentals||[]).map(v=>({
+          trip_id: newId, company: v.company, model: v.model||"",
+          vehicle_type: v.vehicleType||"car", pickup_date: v.pickupDate||null,
+          return_date: v.returnDate||null, price_per_day: parseFloat(v.price||v.pricePerDay)||0,
+          price_type: v.priceType||"daily", seats: parseInt(v.seats)||null,
+          transmission: v.transmission||"automatic", notes: v.notes||"",
+          pickup_location: v.pickupLocation||"", dropoff_location: v.dropoffLocation||"",
+          upvotes: [], downvotes: [], created_by: authUser.id,
+        }));
+        if(vRows.length) await supabase.from("vehicle_rentals").insert(vRows);
+      } else {
+        console.error("duplicateTrip insert error:", tripErr);
+      }
+    }
+    setTrips(ts=>[copy,...ts]);
+    setActive(copy); setTab("schedule"); setPage("trip");
+  };
+
+  // ── Archive / unarchive trip (Premium) ──
+  const toggleArchive = async (tripId) => {
+    const trip = trips.find(t=>t.id===tripId);
+    if(!trip) return;
+    const newStatus = trip.status === "archived" ? "planning" : "archived";
+    setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:newStatus}:t));
+    if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
+      const {error} = await supabase.from("trips").update({status:newStatus}).eq("id",tripId);
+      if(error) console.error("toggleArchive:", error);
+    }
+    if(active?.id===tripId) setActive(a=>({...a,status:newStatus}));
+  };
+
   const leaveTrip = async (tripId) => {
     if(tripId === "demo-barcelona") {
       setTrips(ts => ts.filter(t => t.id !== tripId));
@@ -4220,8 +4515,12 @@ export default function App() {
                 <span style={{color:"var(--muted)",fontSize:14}}>Loading your trips…</span>
               </div>
             ) : (
+            <div style={{marginBottom:12,display:"flex",gap:8,alignItems:"center"}}>
+                <button className={`btn btn-sm ${!showArchived?"btn-primary":"btn-ghost"}`} onClick={()=>setShowArchived(false)}>Active</button>
+                <button className={`btn btn-sm ${showArchived?"btn-primary":"btn-ghost"}`} onClick={()=>setShowArchived(true)}>📦 Archived</button>
+              </div>
             <div className="trip-grid">
-              {trips.map(trip=>(
+              {trips.filter(t=>showArchived?(t.status==="archived"):(t.status!=="archived")).map(trip=>(
                 <div key={trip.id} className="trip-card" onClick={()=>openTrip(trip)} style={{position:"relative"}}>
                   {trip.isDemo&&<div style={{position:"absolute",top:12,left:12,fontSize:10,fontWeight:700,letterSpacing:1,textTransform:"uppercase",color:"var(--accent)",background:"rgba(94,234,212,0.1)",border:"1px solid rgba(94,234,212,0.25)",borderRadius:6,padding:"2px 7px"}}>Example Trip</div>}
 {(()=>{
@@ -4240,8 +4539,15 @@ export default function App() {
                     );
                   })()}
                   <div className="trip-card-header" style={{marginTop: trip.isDemo ? 20 : 0}}>
-                    <div className="trip-name">{trip.name}</div>
-                    <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
+                    <div className="trip-name">{trip.status==="archived"?<span style={{textDecoration:"line-through",opacity:0.6}}>{trip.name}</span>:trip.name}</div>
+                    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                      {trip.status==="archived"&&<span style={{fontSize:10,fontWeight:700,background:"var(--surface3)",color:"var(--muted)",borderRadius:4,padding:"2px 7px",letterSpacing:"0.04em"}}>ARCHIVED</span>}
+                      {trip.status!=="archived"&&<span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>}
+                      <button className="btn btn-ghost btn-sm" style={{padding:"3px 7px",fontSize:12}} title="Duplicate trip" onClick={e=>{e.stopPropagation();duplicateTrip(trip);}}>⧉</button>
+                      <button className="btn btn-ghost btn-sm" style={{padding:"3px 7px",fontSize:12}} title={trip.status==="archived"?"Unarchive":"Archive trip"} onClick={e=>{e.stopPropagation();toggleArchive(trip.id);}}>
+                        {trip.status==="archived"?"↩️":"📦"}
+                      </button>
+                    </div>
                   </div>
                   <div className="trip-meta">
                     <div className="trip-meta-item">📍 <strong>{trip.destinations[0]?.name}</strong></div>
@@ -4293,7 +4599,7 @@ export default function App() {
               {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="map"            && <MapTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user} userId={authUser?.id} db={db}/>}
-              {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb}/>}
+              {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb} db={db}/>}
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
