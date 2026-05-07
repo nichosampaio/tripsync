@@ -3931,30 +3931,13 @@ export default function App() {
       { data: rawTransport },
       { data: rawCheckins },
       { data: rawNotes },
-      { data: legacyItems },
     ] = await Promise.all([
       supabase.from("item_activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_meals").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_transport").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_checkins").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_notes").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
-      supabase.from("activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
     ]);
-
-    // Map legacy activities to new format so existing data isn't lost
-    const legacyMapped = (legacyItems||[]).map(a => ({
-      id:          a.id,
-      type:        fromDbCategory(a.category),
-      title:       a.title,
-      day:         a.scheduled_date || null,
-      startTime:   a.scheduled_time || null,
-      startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: 60,
-      location:    "",
-      price:       parseFloat(a.cost) || 0,
-      priceType:   a.price_type || "flat",
-      metadata:    { notes:"", description:"", upvotes:[], downvotes:[], createdBy: a.created_by||"", checkIn:null, checkOut:null, transportationTime:"", travelTimeFromPrev:0 },
-    }));
 
     const items = [
       ...(rawActivities||[]).map(r => mapRowToItem(r, "activity")),
@@ -3962,7 +3945,6 @@ export default function App() {
       ...(rawTransport||[]).map(r => mapRowToItem(r, "transport")),
       ...(rawCheckins||[]).map(r => mapRowToItem(r, "hotel")),
       ...(rawNotes||[]).map(r => mapRowToItem(r, "note")),
-      ...legacyMapped,
     ].sort((a,b) => (a.day||"") < (b.day||"") ? -1 : (a.day||"") > (b.day||"") ? 1 : 0);
 
     // Load accommodations
@@ -4139,13 +4121,13 @@ export default function App() {
     day:         row.day || null,
     startTime:   row.start_time || null,
     startMin:    row.start_time ? timeStrToMin(row.start_time) : null,
-    durationMin: row.duration_min || 60,
+    durationMin: (type === "note" || type === "hotel") ? 0 : (row.duration_min || 60),
     location:    row.location || "",
     price:       parseFloat(row.price) || 0,
     priceType:   row.price_type || "flat",
     metadata: {
       notes:              row.notes || "",
-      description:        row.description || row.body || "",
+      description:        type === "note" ? (row.body || "") : (row.description || ""),
       upvotes:            Array.isArray(row.upvotes) ? row.upvotes : [],
       downvotes:          Array.isArray(row.downvotes) ? row.downvotes : [],
       createdBy:          row.created_by || "",
