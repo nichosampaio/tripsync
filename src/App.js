@@ -4514,7 +4514,8 @@ export default function App() {
                 <span style={{color:"var(--muted)",fontSize:14}}>Loading your trips…</span>
               </div>
             ) : (
-            <div style={{marginBottom:12,display:"flex",gap:8,alignItems:"center"}}>
+            <div>
+              <div style={{marginBottom:12,display:"flex",gap:8,alignItems:"center"}}>
                 <button className={`btn btn-sm ${!showArchived?"btn-primary":"btn-ghost"}`} onClick={()=>setShowArchived(false)}>Active</button>
                 <button className={`btn btn-sm ${showArchived?"btn-primary":"btn-ghost"}`} onClick={()=>setShowArchived(true)}>📦 Archived</button>
               </div>
@@ -4563,6 +4564,7 @@ export default function App() {
               <div className="trip-card" style={{border:"1px dashed var(--border)",display:"flex",alignItems:"center",justifyContent:"center",minHeight:200,cursor:"pointer"}} onClick={()=>setShowNew(true)}>
                 <div style={{textAlign:"center"}}><div style={{fontSize:36,marginBottom:8}}>+</div><div style={{color:"var(--muted)",fontSize:14}}>Create new trip</div></div>
               </div>
+            </div>
             </div>
             )}
           </div>
