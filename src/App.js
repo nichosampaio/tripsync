@@ -4227,9 +4227,11 @@ export default function App() {
         status: "planning", start_date: copy.startDate||null, end_date: copy.endDate||null,
         created_by: authUser.id,
         country_info: trip.country || null,
-        is_archived: false,
         expense_log: [], locked_votes: {}, documents: [],
       });
+      if(tripErr) {
+        console.error("duplicateTrip insert failed:", tripErr.message, tripErr.code, tripErr.details);
+      }
       if(!tripErr) {
         // trip_members
         await supabase.from("trip_members").insert({trip_id:newId,user_id:authUser.id,role:"admin"});
@@ -4289,16 +4291,21 @@ export default function App() {
     if(!trip.isDemo && typeof tripId !== "number" && authUser?.id) {
       const { error } = await supabase
         .from("profiles")
-        .upsert(
-          { id: authUser.id, archived_trips: newArchived },
-          { onConflict: "id" }
-        );
+        .update({ archived_trips: newArchived })
+        .eq("id", authUser.id);
       if(error) {
-        console.error("toggleArchive error:", error.message, error.code);
-        // Revert local state
-        setArchivedTripIds(archivedTripIds);
-        setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
-        if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
+        console.error("toggleArchive error:", error.message, error.code, error.details);
+        // Try upsert as fallback
+        const { error: upsertErr } = await supabase
+          .from("profiles")
+          .upsert({ id: authUser.id, archived_trips: newArchived }, { onConflict: "id" });
+        if(upsertErr) {
+          console.error("toggleArchive upsert also failed:", upsertErr.message);
+          // Revert local state
+          setArchivedTripIds(archivedTripIds);
+          setTrips(ts=>ts.map(t=>t.id===tripId?{...t,status:trip.status}:t));
+          if(active?.id===tripId) setActive(a=>({...a,status:trip.status}));
+        }
       }
     }
   };
