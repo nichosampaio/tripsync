@@ -882,7 +882,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
     const newItem={
       id:uid(),type:newType,title:newTitle.trim(),day:dayYMD,
       startTime:newTime||null,startMin,durationMin:60,
-      location:"",price:0,priceType:"flat",metadata:{notes:"",description:"",upvotes:[],downvotes:[],createdBy:trip.tripMembers?.[0]?.userId||""}
+      location:"",price:0,priceType:"flat",metadata:{notes:"",description:"",upvotes:[],downvotes:[],createdBy:authUserId||trip.tripMembers?.[0]?.userId||""}
     };
     const saved = db ? await db.addItem(trip.id, newItem) : newItem;
     setTrip(t=>({...t,calendarItems:[...t.calendarItems,saved]}));
@@ -1106,7 +1106,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
 }
 
 // ─── SCHEDULE TAB ─────────────────────────────────────────────────────────────
-function ScheduleTab({trip,setTrip,db}) {
+function ScheduleTab({trip,setTrip,db,authUserId}) {
   const {startDate,endDate} = trip;
   const tripDays=useMemo(()=>buildTripDays(startDate,endDate),[startDate,endDate]);
   const [activeDay,setActiveDay] = useState(startDate||null);
@@ -1329,7 +1329,7 @@ function MapTab({trip,setTrip,db}) {
 }
 
 // ─── ACTIVITIES TAB ───────────────────────────────────────────────────────────
-function ActivityTab({trip,setTrip,user,db}) {
+function ActivityTab({trip,setTrip,user,db,authUserId}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
   const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1"});
@@ -1354,7 +1354,7 @@ function ActivityTab({trip,setTrip,user,db}) {
       durationMin:+form.durationMin||60, location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
-      metadata:{description:form.description,notes:form.notes,upvotes:[],downvotes:[],createdBy:user}
+      metadata:{description:form.description,notes:form.notes,upvotes:[],downvotes:[],createdBy:authUserId||user}
     };
     // Build list of days to repeat across
     const savedItems = [];
@@ -4084,7 +4084,7 @@ export default function App() {
       upvotes:    item.metadata?.upvotes || [],
       downvotes:  item.metadata?.downvotes || [],
       ...(tripId ? { trip_id: tripId } : {}),
-      ...(item.metadata?.createdBy ? { created_by: item.metadata.createdBy } : {}),
+      ...(item.metadata?.createdBy && item.metadata.createdBy.includes("-") ? { created_by: item.metadata.createdBy } : {}),
     };
     if(item.type === "activity" || item.type === "meal") {
       return { ...base,
@@ -4870,12 +4870,12 @@ export default function App() {
             </div>
             <div className="section-content">
               {tab==="info"           && <TripInfoTab trip={active} setTrip={updateTrip} db={db}/>}
-              {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="schedule"       && <ScheduleTab trip={active} setTrip={updateTrip} db={db} authUserId={authUser?.id}/>}
               {tab==="map"            && <MapTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="voting"         && <VotingTab trip={active} setTrip={updateTrip} user={user} userId={authUser?.id} db={db}/>}
               {tab==="budget"         && <BudgetTab trip={active} setTrip={updateTrip} user={user} onSaveBudget={savePersonalBudgetToDb} db={db}/>}
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
-              {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db}/>}
+              {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db} authUserId={authUser?.id}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db} authUserId={authUser?.id}/>}
