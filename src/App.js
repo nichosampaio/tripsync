@@ -2635,7 +2635,7 @@ function CountryTab({trip,setTrip,db,authUserId}) {
     if(myUploads.length >= 4) { setUploadErr("Maximum 4 boarding passes per person."); return; }
     setUploading(true); setUploadErr("");
     if(!db?.isMock && authUserId) {
-      const path = \`\${trip.id}/boarding-passes/\${Date.now()}-\${file.name}\`;
+      const path = `${trip.id}/boarding-passes/${Date.now()}-${file.name}`;
       const { error: upErr } = await supabase.storage.from("trip-files").upload(path, file);
       if(upErr) { setUploadErr("Upload failed. Try again."); setUploading(false); return; }
       const { data: { publicUrl } } = supabase.storage.from("trip-files").getPublicUrl(path);
