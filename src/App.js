@@ -4086,6 +4086,9 @@ export default function App() {
         upvotes:            item.metadata?.upvotes || [],
         downvotes:          item.metadata?.downvotes || [],
       }).select().single();
+      if(error) { console.error("addItem:", error.message); return item; }
+      return data ? { ...item, id: data.id } : item;
+    },
 
     updateItem: async (item) => {
       if(isMock) return;
