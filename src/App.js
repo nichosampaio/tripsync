@@ -3248,10 +3248,9 @@ function SummaryTab({trip}) {
       ...(trip.vehicleRentals||[]).map(v=>`  ${v.company} ${v.model||""} — $${calcVehicleTotal(v).toLocaleString()}`),
       ``,
       `── ITEMS ──`,
-      ...(trip.calendarItems||[]).map(ci=>`  [${ci.day||"?"}] ${ci.title}${ci.price>0?` — $${ci.price}`:""}`),
+      ...(trip.calendarItems||[]).map(ci=>`  [${ci.day||"?"}] ${ci.title}${ci.price>0?" — $"+ci.price:""}`),
     ];
-    const blob = new Blob([lines.join("
-")], {type:"text/plain"});
+    const blob = new Blob([lines.join("\n")], {type:"text/plain"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href=url; a.download=`${trip.name.replace(/\s+/g,"-")}-summary.txt`; a.click();
