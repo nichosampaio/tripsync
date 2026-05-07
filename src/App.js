@@ -4085,7 +4085,7 @@ export default function App() {
         travel_time_from_prev: item.metadata?.travelTimeFromPrev || 0,
         upvotes:            item.metadata?.upvotes || [],
         downvotes:          item.metadata?.downvotes || [],
-      }).select().single();,
+      }).select().single();
 
     updateItem: async (item) => {
       if(isMock) return;
