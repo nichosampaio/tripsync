@@ -3838,7 +3838,11 @@ export default function App() {
         id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info, expense_log, locked_votes, documents, activity_details,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
-        activities ( id )
+        item_activities ( id ),
+        item_meals ( id ),
+        item_transport ( id ),
+        item_checkins ( id ),
+        item_notes ( id )
       `)
       .eq("trip_members.user_id", uid)
       .order("created_at", { ascending: false });
@@ -3865,7 +3869,11 @@ export default function App() {
         return baseName ? [{id:1,name:baseName,upvotes:[],downvotes:[]}] : [];
       })(),
       // Preserve full loaded data if this trip is already open — never overwrite with empty shells
-      activityCount:       (t.activities||[]).length,
+      activityCount:       (t.item_activities||[]).length +
+                           (t.item_meals||[]).length +
+                           (t.item_transport||[]).length +
+                           (t.item_checkins||[]).length +
+                           (t.item_notes||[]).length,
       calendarItems:       existing?.calendarItems      ?? [],
       vehicleRentals:      existing?.vehicleRentals     ?? [],
       accommodationOptions:existing?.accommodationOptions ?? [],
@@ -3916,26 +3924,45 @@ export default function App() {
   const loadTripDetails = async (trip) => {
     setTripLoading(true);
 
-    // Load all item types from their dedicated tables in parallel
+    // Load all item types from dedicated tables + legacy activities table in parallel
     const [
       { data: rawActivities },
       { data: rawMeals },
       { data: rawTransport },
       { data: rawCheckins },
       { data: rawNotes },
+      { data: legacyItems },
     ] = await Promise.all([
       supabase.from("item_activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_meals").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_transport").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_checkins").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
       supabase.from("item_notes").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
+      supabase.from("activities").select("*").eq("trip_id", trip.id).order("created_at", { ascending: true }),
     ]);
+
+    // Map legacy activities to new format so existing data isn't lost
+    const legacyMapped = (legacyItems||[]).map(a => ({
+      id:          a.id,
+      type:        fromDbCategory(a.category),
+      title:       a.title,
+      day:         a.scheduled_date || null,
+      startTime:   a.scheduled_time || null,
+      startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
+      durationMin: 60,
+      location:    "",
+      price:       parseFloat(a.cost) || 0,
+      priceType:   a.price_type || "flat",
+      metadata:    { notes:"", description:"", upvotes:[], downvotes:[], createdBy: a.created_by||"", checkIn:null, checkOut:null, transportationTime:"", travelTimeFromPrev:0 },
+    }));
+
     const items = [
       ...(rawActivities||[]).map(r => mapRowToItem(r, "activity")),
       ...(rawMeals||[]).map(r => mapRowToItem(r, "meal")),
       ...(rawTransport||[]).map(r => mapRowToItem(r, "transport")),
       ...(rawCheckins||[]).map(r => mapRowToItem(r, "hotel")),
       ...(rawNotes||[]).map(r => mapRowToItem(r, "note")),
+      ...legacyMapped,
     ].sort((a,b) => (a.day||"") < (b.day||"") ? -1 : (a.day||"") > (b.day||"") ? 1 : 0);
 
     // Load accommodations
