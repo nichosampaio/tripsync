@@ -644,6 +644,7 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
     const durMin = Math.max(+form.durationMin||30, 5);
     const updated = {
       ...item,
+      tripId: trip.id,
       type: form.type, title: form.title.trim(),
       day: form.day||null, startTime: form.startTime||null,
       startMin, durationMin: durMin,
@@ -3835,7 +3836,7 @@ export default function App() {
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
-        google_maps_url, country_info, expense_log, locked_votes, documents,
+        google_maps_url, country_info, expense_log, locked_votes, documents, activity_details,
         trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
         activities ( id )
       `)
@@ -3874,6 +3875,7 @@ export default function App() {
       expenseLog:          t.expense_log || [],
       lockedVotes:         t.locked_votes || {},
       documents:           t.documents || [],
+      activityDetails:     t.activity_details || {},
       googleMapsUrl:       t.google_maps_url || "",
       description:         t.description || "",
     });
@@ -3914,12 +3916,17 @@ export default function App() {
   const loadTripDetails = async (trip) => {
     setTripLoading(true);
 
-    // Load calendar items (activities)
+    // Load calendar items (activities) + activity_details from trips row
     const { data: items } = await supabase
       .from("activities")
       .select("*")
       .eq("trip_id", trip.id)
       .order("created_at", { ascending: true });
+
+    // Load activity_details from trips table (stores notes, location, check-in/out, etc.)
+    const { data: tripDetails } = await supabase
+      .from("trips").select("activity_details").eq("id", trip.id).single();
+    const activityDetails = tripDetails?.activity_details || {};
 
     // Load accommodations
     const { data: accoms } = await supabase
@@ -3927,29 +3934,32 @@ export default function App() {
       .select("*")
       .eq("trip_id", trip.id);
 
-    const calendarItems = (items||[]).map(a => ({
-      id:          a.id,
-      type:        fromDbCategory(a.category),
-      title:       a.title,
-      day:         a.scheduled_date || null,
-      startTime:   a.scheduled_time || null,
-      startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
-      durationMin: a.details?.durationMin || 60,
-      location:    a.details?.location || "",
-      price:       parseFloat(a.cost) || 0,
-      priceType:   a.price_type || "flat",
-      metadata: {
-        description:        a.details?.description || "",
-        notes:              a.details?.notes || "",
-        upvotes:            Array.isArray(a.upvotes) ? a.upvotes : [],
-        downvotes:          Array.isArray(a.downvotes) ? a.downvotes : [],
-        createdBy:          a.created_by || "",
-        checkIn:            a.details?.checkIn || null,
-        checkOut:           a.details?.checkOut || null,
-        transportationTime: a.details?.transportationTime || "",
-        travelTimeFromPrev: a.details?.travelTimeFromPrev || 0,
-      },
-    }));
+    const calendarItems = (items||[]).map(a => {
+      const d = activityDetails[String(a.id)] || {};
+      return {
+        id:          a.id,
+        type:        fromDbCategory(a.category),
+        title:       a.title,
+        day:         a.scheduled_date || null,
+        startTime:   a.scheduled_time || null,
+        startMin:    a.scheduled_time ? timeStrToMin(a.scheduled_time) : null,
+        durationMin: d.durationMin || 60,
+        location:    d.location || "",
+        price:       parseFloat(a.cost) || 0,
+        priceType:   a.price_type || "flat",
+        metadata: {
+          description:        d.description || "",
+          notes:              d.notes || "",
+          upvotes:            Array.isArray(a.upvotes) ? a.upvotes : [],
+          downvotes:          Array.isArray(a.downvotes) ? a.downvotes : [],
+          createdBy:          a.created_by || "",
+          checkIn:            d.checkIn || null,
+          checkOut:           d.checkOut || null,
+          transportationTime: d.transportationTime || "",
+          travelTimeFromPrev: d.travelTimeFromPrev || 0,
+        },
+      };
+    });
 
     const accommodationOptions = (accoms||[]).map(a => ({
       id:            a.id,
@@ -4089,11 +4099,33 @@ export default function App() {
         },
       }).select().single();
       if(error) { console.error("addItem:", error.message); return item; }
-      return data ? { ...item, id: data.id } : item;
+      const realItem = data ? { ...item, id: data.id } : item;
+
+      // Store extra detail fields in trips.activity_details jsonb
+      if(data?.id) {
+        const detail = {
+          location:           item.location || "",
+          durationMin:        item.durationMin || 60,
+          notes:              item.metadata?.notes || "",
+          description:        item.metadata?.description || "",
+          checkIn:            item.metadata?.checkIn || null,
+          checkOut:           item.metadata?.checkOut || null,
+          transportationTime: item.metadata?.transportationTime || "",
+          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
+        };
+        const { data: tripRow } = await supabase
+          .from("trips").select("activity_details").eq("id", tripId).single();
+        const existing = tripRow?.activity_details || {};
+        await supabase.from("trips")
+          .update({ activity_details: { ...existing, [String(data.id)]: detail } })
+          .eq("id", tripId);
+      }
+      return realItem;
     },
 
     updateItem: async (item) => {
       if(isMock) return;
+      // Update core fields on activities table (all exist in original schema)
       const { error } = await supabase.from("activities").update({
         title:          item.title,
         category:       toDbCategory(item.type),
@@ -4101,18 +4133,31 @@ export default function App() {
         scheduled_time: item.startTime || null,
         cost:           item.price || 0,
         price_type:     item.priceType || "flat",
-        details: {
-          location:           item.location || "",
-          durationMin:        item.durationMin || 60,
-          description:        item.metadata?.description || "",
-          notes:              item.metadata?.notes || "",
-          checkIn:            item.metadata?.checkIn || null,
-          checkOut:           item.metadata?.checkOut || null,
-          transportationTime: item.metadata?.transportationTime || "",
-          travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
-        },
       }).eq("id", item.id);
-      if(error) console.error("updateItem error:", error.message, error.code, error.details);
+      if(error) console.error("updateItem core error:", error.message);
+
+      // Store extra fields (notes, location, check-in/out, transport) in
+      // trips.activity_details jsonb — keyed by activity id.
+      // This uses a column we control without schema changes on activities.
+      const detailKey = String(item.id);
+      const detail = {
+        location:           item.location || "",
+        durationMin:        item.durationMin || 60,
+        notes:              item.metadata?.notes || "",
+        description:        item.metadata?.description || "",
+        checkIn:            item.metadata?.checkIn || null,
+        checkOut:           item.metadata?.checkOut || null,
+        transportationTime: item.metadata?.transportationTime || "",
+        travelTimeFromPrev: item.metadata?.travelTimeFromPrev || 0,
+      };
+      // Read current activity_details, merge, write back
+      const { data: tripRow } = await supabase
+        .from("trips").select("activity_details").eq("id", item.tripId).single();
+      const existing = tripRow?.activity_details || {};
+      const { error: detailErr } = await supabase.from("trips")
+        .update({ activity_details: { ...existing, [detailKey]: detail } })
+        .eq("id", item.tripId);
+      if(detailErr) console.error("updateItem details error:", detailErr.message);
     },
 
     deleteItem: async (id) => {
