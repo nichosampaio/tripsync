@@ -2652,7 +2652,7 @@ function CountryTab({trip,setTrip,db,authUserId}) {
   };
 
   const handleDelete = async (doc) => {
-    if(!window.confirm(\`Delete "\${doc.name}"?\`)) return;
+    if(!window.confirm(`Delete "${doc.name}"?`)) return;
     if(!db?.isMock && doc.path) {
       await supabase.storage.from("trip-files").remove([doc.path]);
       const updatedDocs = docs.filter(d=>d.id!==doc.id);
