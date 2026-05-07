@@ -2694,68 +2694,85 @@ function CountryTab({trip,setTrip,db,authUserId}) {
         </div>
 
         {/* AI Auto-fill panel */}
-        <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:"var(--r-md)",padding:"16px 18px",marginBottom:18}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+        <div style={{background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r-md)",padding:"16px 18px",marginBottom:18}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:18}}>✨</span>
-              <span style={{fontWeight:700,fontSize:15}}>Auto-fill with AI</span>
+              <span style={{fontSize:17}}>✨</span>
+              <span style={{fontWeight:700,fontSize:15,color:"var(--text)"}}>Auto-fill with AI</span>
             </div>
             <span style={{fontSize:12,color:"var(--muted)"}}>{autoFillCount}/{MAX_AUTOFILL} uses</span>
           </div>
 
-          {/* Destination — pill tags + dropdown */}
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6,display:"flex",alignItems:"center",gap:5}}>
-              <span style={{color:"var(--accent)",fontSize:10}}>📍</span> Destination Countries
+          {/* Destination */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontWeight:700,color:"var(--accent)",letterSpacing:"0.09em",textTransform:"uppercase",marginBottom:7,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:11}}>📍</span> Destination Countries
             </div>
-            <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"7px 10px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",minHeight:38}}>
+            <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"8px 10px",background:"#fff",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",minHeight:40}}>
               {destCountry&&(
-                <span style={{display:"flex",alignItems:"center",gap:4,background:"var(--accent-soft)",color:"var(--accent)",borderRadius:4,padding:"2px 9px",fontSize:12,fontWeight:600}}>
+                <span style={{display:"inline-flex",alignItems:"center",gap:5,background:"#fff",color:"var(--text)",border:"1px solid var(--border-strong)",borderRadius:5,padding:"3px 10px",fontSize:13,fontWeight:500}}>
                   {destCountry}
-                  <span style={{cursor:"pointer",fontSize:15,lineHeight:1,marginLeft:2}} onClick={()=>setDestCountry("")}>×</span>
+                  <span style={{cursor:"pointer",fontSize:16,lineHeight:1,color:"var(--muted)"}} onClick={()=>setDestCountry("")}>×</span>
                 </span>
               )}
               <select
                 value=""
                 onChange={e=>{ if(e.target.value) setDestCountry(e.target.value); }}
-                style={{border:"none",outline:"none",background:"transparent",fontSize:13,color:"var(--muted)",cursor:"pointer",flex:1,minWidth:80}}
+                style={{border:"none",outline:"none",background:"transparent",fontSize:13,color:"var(--muted)",cursor:"pointer",flex:1,minWidth:60,appearance:"auto"}}
               >
-                <option value="">﹢ Add country</option>
+                <option value="">▾</option>
                 {ALL_COUNTRIES.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div style={{fontSize:11,color:"var(--muted)",marginTop:5}}>Defaulting to top-voted destination. Add more if visiting multiple countries.</div>
           </div>
 
-          {/* Passport holders — pill tags + dropdown */}
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:6,display:"flex",alignItems:"center",gap:5}}>
-              <span style={{fontSize:10}}>🌐</span> Countries (Passport Holders)
+          {/* Passport holders */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:700,color:"var(--muted)",letterSpacing:"0.09em",textTransform:"uppercase",marginBottom:7,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:11}}>🌐</span> Countries (Passport Holders)
             </div>
-            <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"7px 10px",background:"var(--surface)",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",minHeight:38}}>
-              {nationalities.map(n=>(
-                <span key={n} style={{display:"flex",alignItems:"center",gap:4,background:"var(--surface3)",color:"var(--text-secondary)",borderRadius:4,padding:"2px 9px",fontSize:12,fontWeight:500,border:"1px solid var(--border)"}}>
-                  {n}
-                  <span style={{cursor:"pointer",fontSize:15,lineHeight:1,marginLeft:2}} onClick={()=>removeNat(n)}>×</span>
-                </span>
-              ))}
-              <select
-                value=""
-                onChange={e=>{ if(e.target.value) addNat(e.target.value); }}
-                style={{border:"none",outline:"none",background:"transparent",fontSize:13,color:"var(--muted)",cursor:"pointer",flex:1,minWidth:80}}
-              >
-                <option value="">{nationalities.length?"﹢ Add another…":"Select countries your group members are from…"}</option>
-                {ALL_COUNTRIES.filter(c=>!nationalities.includes(c)).map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
+            <div style={{position:"relative"}}>
+              <div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,padding:"8px 10px",background:"#fff",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",minHeight:40,cursor:"pointer"}} onClick={()=>setNatOpen(o=>!o)}>
+                {nationalities.map(n=>(
+                  <span key={n} style={{display:"inline-flex",alignItems:"center",gap:5,background:"#fff",color:"var(--text)",border:"1px solid var(--border-strong)",borderRadius:5,padding:"3px 10px",fontSize:13,fontWeight:500}}>
+                    {n}
+                    <span style={{cursor:"pointer",fontSize:16,lineHeight:1,color:"var(--muted)"}} onClick={e=>{e.stopPropagation();removeNat(n);}}>×</span>
+                  </span>
+                ))}
+                {!nationalities.length&&<span style={{fontSize:13,color:"var(--muted)"}}>Select countries your group members are from…</span>}
+                <span style={{marginLeft:"auto",fontSize:11,color:"var(--muted)"}}>▾</span>
+              </div>
+              {natOpen&&(
+                <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#fff",border:"1px solid var(--border)",borderRadius:"var(--r-sm)",zIndex:60,maxHeight:200,overflowY:"auto",boxShadow:"var(--shadow-md)"}}>
+                  <div style={{padding:"7px 10px",borderBottom:"1px solid var(--border)"}}>
+                    <input
+                      autoFocus
+                      value={natInput}
+                      onChange={e=>setNatInput(e.target.value)}
+                      placeholder="Search…"
+                      style={{width:"100%",border:"none",outline:"none",fontSize:13,background:"transparent",color:"var(--text)"}}
+                    />
+                  </div>
+                  {filteredCountries.slice(0,20).map(c=>(
+                    <div key={c} onMouseDown={()=>addNat(c)} style={{padding:"8px 12px",fontSize:13,cursor:"pointer",borderBottom:"1px solid var(--border)"}}
+                      onMouseEnter={e=>e.currentTarget.style.background="var(--surface2)"}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      {c}
+                    </div>
+                  ))}
+                  {filteredCountries.length===0&&<div style={{padding:"10px 12px",fontSize:13,color:"var(--muted)"}}>No results</div>}
+                </div>
+              )}
             </div>
           </div>
 
-          {aiError&&<div style={{fontSize:12,color:"var(--red)",marginBottom:8}}>{aiError}</div>}
+          {aiError&&<div style={{fontSize:12,color:"var(--red)",marginBottom:10}}>{aiError}</div>}
           <button
-            className="btn btn-accent btn-sm"
+            className="btn btn-primary btn-sm"
             onClick={autoFill}
             disabled={aiLoading||autoFillCount>=MAX_AUTOFILL}
-            style={{opacity:autoFillCount>=MAX_AUTOFILL?0.5:1,fontWeight:600}}
+            style={{opacity:autoFillCount>=MAX_AUTOFILL?0.5:1,fontWeight:600,fontSize:13}}
           >
             {aiLoading ? "Filling…" : "✨ Auto-fill"}
           </button>
@@ -2777,28 +2794,30 @@ function CountryTab({trip,setTrip,db,authUserId}) {
       </div>
 
       {/* ── Boarding Passes ── */}
-      <div className="country-card">
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+      <div className="country-card" style={{background:"var(--surface)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2}}>
           <div>
-            <h4 style={{fontFamily:"Inter",fontSize:16,fontWeight:700,margin:0}}>🛫 Boarding Passes</h4>
+            <h4 style={{fontFamily:"Inter",fontSize:17,fontWeight:700,margin:"0 0 3px",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:20}}>🛫</span> Boarding Passes
+            </h4>
+            <div style={{fontSize:12,color:"var(--muted)"}}>PDF only · visible to all trip members · max 5MB per file</div>
           </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0,marginLeft:16}}>
             <label style={{cursor:"pointer"}}>
-              <span className="btn btn-accent btn-sm" style={{pointerEvents:"none",fontWeight:600}}>
+              <span className="btn btn-primary btn-sm" style={{pointerEvents:"none",fontWeight:600,fontSize:13,padding:"7px 18px"}}>
                 {uploading ? "Uploading…" : "⬆️ Upload"}
               </span>
               <input type="file" accept="application/pdf" style={{display:"none"}} onChange={handleUpload} disabled={uploading}/>
             </label>
-            <span style={{fontSize:11,color:"var(--muted)"}}>{boardingPasses.filter(d=>d.uploadedBy===authUserId).length}/4 uploaded</span>
+            <span style={{fontSize:12,color:"var(--muted)"}}>{boardingPasses.filter(d=>d.uploadedBy===authUserId).length}/4 uploaded</span>
           </div>
         </div>
-        <div style={{fontSize:12,color:"var(--muted)",marginBottom:12}}>PDF only · visible to all trip members · max 5MB per file</div>
-        {uploadErr&&<div style={{fontSize:12,color:"var(--red)",marginBottom:8}}>{uploadErr}</div>}
+        {uploadErr&&<div style={{fontSize:12,color:"var(--red)",margin:"8px 0"}}>{uploadErr}</div>}
 
         {boardingPasses.length===0
-          ? <div style={{textAlign:"center",padding:"32px 0",color:"var(--muted)",fontSize:13}}>
-              <div style={{fontSize:40,marginBottom:8}}>🛫</div>
-              <div style={{fontWeight:500,marginBottom:4}}>No boarding passes uploaded yet.</div>
+          ? <div style={{textAlign:"center",padding:"36px 0 20px",color:"var(--muted)",fontSize:13}}>
+              <div style={{fontSize:38,marginBottom:10}}>🛫</div>
+              <div style={{fontWeight:500,marginBottom:3}}>No boarding passes uploaded yet.</div>
               <div>Be the first to upload yours.</div>
             </div>
           : (()=>{
