@@ -4222,50 +4222,71 @@ export default function App() {
       tripMembers: [{userId:authUser.id,name:authUser.user_metadata?.full_name||authUser.email,role:"admin",joinedAt:toYMD(new Date())}],
     };
     if(!trip.isDemo && typeof trip.id !== "number" && authUser?.id) {
-      const {error: tripErr} = await supabase.from("trips").insert({
-        id: newId, title: copy.name, destination: copy.destinations?.[0]?.name||"TBD",
-        status: "planning", start_date: copy.startDate||null, end_date: copy.endDate||null,
-        created_by: authUser.id,
-        country_info: trip.country || null,
-        expense_log: [], locked_votes: {}, documents: [],
-      });
-      if(tripErr) {
-        console.error("duplicateTrip insert failed:", tripErr.message, tripErr.code, tripErr.details);
-      }
-      if(!tripErr) {
-        // trip_members
-        await supabase.from("trip_members").insert({trip_id:newId,user_id:authUser.id,role:"admin"});
-        // activities
-        const actRows = (trip.calendarItems||[]).map(ci=>({
-          trip_id: newId, title: ci.title, category: ci.type||"sightseeing",
-          scheduled_date: ci.day||null, scheduled_time: ci.startTime||null,
-          cost: ci.price||0, price_type: ci.priceType||"flat", status:"proposed",
+      // Insert using only the columns the trips table actually has
+      const { error: tripErr } = await supabase
+        .from("trips")
+        .insert({
+          title: copy.name,
+          destination: copy.destinations?.[0]?.name || "TBD",
+          status: "planning",
+          start_date: copy.startDate || null,
+          end_date: copy.endDate || null,
           created_by: authUser.id,
-        }));
-        if(actRows.length) await supabase.from("activities").insert(actRows);
-        // accommodations
-        const accomRows = (trip.accommodationOptions||[]).map(a=>({
-          trip_id: newId, name: a.name, address: a.address||"",
-          price_type: a.priceType||"nightly",
-          cost_per_night: a.priceType==="full"?0:(a.pricePerNight||0),
-          total_price: a.priceType==="full"?(a.totalPrice||0):0,
-          check_in: a.checkIn||null, check_out: a.checkOut||null,
-          upvotes: [], downvotes: [],
-        }));
-        if(accomRows.length) await supabase.from("accommodations").insert(accomRows);
-        // vehicle rentals
-        const vRows = (trip.vehicleRentals||[]).map(v=>({
-          trip_id: newId, company: v.company, model: v.model||"",
-          vehicle_type: v.vehicleType||"car", pickup_date: v.pickupDate||null,
-          return_date: v.returnDate||null, price_per_day: parseFloat(v.price||v.pricePerDay)||0,
-          price_type: v.priceType||"daily", seats: parseInt(v.seats)||null,
-          transmission: v.transmission||"automatic", notes: v.notes||"",
-          pickup_location: v.pickupLocation||"", dropoff_location: v.dropoffLocation||"",
-          upvotes: [], downvotes: [], created_by: authUser.id,
-        }));
-        if(vRows.length) await supabase.from("vehicle_rentals").insert(vRows);
+        });
+      if(tripErr) {
+        console.error("duplicateTrip insert failed:", tripErr.message, tripErr.code);
       } else {
-        console.error("duplicateTrip insert error:", tripErr);
+        // Fetch the newly created trip's server-generated id
+        const { data: newTripRow } = await supabase
+          .from("trips")
+          .select("id")
+          .eq("created_by", authUser.id)
+          .eq("title", copy.name)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .single();
+
+        if(newTripRow?.id) {
+          const realId = newTripRow.id;
+          // Update the local copy with the real DB id
+          copy.id = realId;
+
+          await supabase.from("trip_members").insert({
+            trip_id: realId, user_id: authUser.id, role: "admin"
+          });
+
+          const actRows = (trip.calendarItems||[]).map(ci=>({
+            trip_id: realId, title: ci.title, category: ci.type||"sightseeing",
+            scheduled_date: ci.day||null, scheduled_time: ci.startTime||null,
+            cost: ci.price||0, price_type: ci.priceType||"flat", status: "proposed",
+            created_by: authUser.id,
+          }));
+          if(actRows.length) await supabase.from("activities").insert(actRows);
+
+          const accomRows = (trip.accommodationOptions||[]).map(a=>({
+            trip_id: realId, name: a.name, address: a.address||"",
+            price_type: a.priceType||"nightly",
+            cost_per_night: a.priceType==="full"?0:(parseFloat(a.pricePerNight)||0),
+            total_price: a.priceType==="full"?(parseFloat(a.totalPrice)||0):0,
+            check_in: a.checkIn||null, check_out: a.checkOut||null,
+          }));
+          if(accomRows.length) await supabase.from("accommodations").insert(accomRows);
+
+          const vRows = (trip.vehicleRentals||[]).map(v=>({
+            trip_id: realId, company: v.company, model: v.model||"",
+            vehicle_type: v.vehicleType||"car",
+            pickup_date: v.pickupDate||null, return_date: v.returnDate||null,
+            price_per_day: parseFloat(v.price||v.pricePerDay)||0,
+            price_type: v.priceType||"daily",
+            seats: parseInt(v.seats)||null,
+            transmission: v.transmission||"automatic",
+            notes: v.notes||"",
+            pickup_location: v.pickupLocation||"",
+            dropoff_location: v.dropoffLocation||"",
+            created_by: authUser.id,
+          }));
+          if(vRows.length) await supabase.from("vehicle_rentals").insert(vRows);
+        }
       }
     }
     setTrips(ts=>[copy,...ts]);
