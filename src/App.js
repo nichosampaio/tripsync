@@ -1341,7 +1341,7 @@ function MapTab({trip,setTrip,db}) {
 function ActivityTab({trip,setTrip,user,db,authUserId}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
-  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1"});
+  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1",checkIn:"",checkOut:""});
   const [errs,setErrs] = useState({});
   const tripDays=useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
   const items=trip.calendarItems||[];
@@ -1363,7 +1363,7 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
       durationMin:+form.durationMin||60, location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
-      metadata:{description:form.description,notes:form.notes,upvotes:[],downvotes:[],createdBy:authUserId||user}
+      metadata:{description:form.description,notes:form.notes,checkIn:form.checkIn||null,checkOut:form.checkOut||null,upvotes:[],downvotes:[],createdBy:authUserId||user}
     };
     // Build list of days to repeat across
     const savedItems = [];
@@ -4118,6 +4118,7 @@ export default function App() {
 
   const mapRowToItem = (row, type) => ({
     id:          row.id,
+    tripId:      row.trip_id || null,
     type,
     title:       row.title,
     day:         row.day || null,
@@ -4149,13 +4150,13 @@ export default function App() {
       const row = buildItemRow(tripId, item);
       const { data, error } = await supabase.from(table).insert(row).select().single();
       if(error) { console.error("addItem error:", error.message, error.code); return item; }
-      return data ? { ...item, id: data.id } : item;
+      return data ? { ...item, id: data.id, tripId: tripId } : item;
     },
 
     updateItem: async (item) => {
       if(isMock) return;
       const table = itemTypeToTable(item.type);
-      const row = buildItemRow(item.tripId || null, item);
+      const row = buildItemRow(null, item);
       const { error } = await supabase.from(table).update(row).eq("id", item.id);
       if(error) console.error("updateItem error:", error.message, error.code);
     },
