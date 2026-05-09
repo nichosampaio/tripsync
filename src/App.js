@@ -3835,9 +3835,11 @@ export default function App() {
       .eq("user_id", authUser.id)
       .single();
     if(existing) { setJoinDone(true); setJoinRequesting(false); loadTrips(authUser.id); return; }
-    // Insert join request notification — trip_id + type:"trip_invite" + requester info
+    // Insert join request notification — sent TO the trip owner (created_by)
+    const tripOwnerId = joinTripInfo?.created_by;
+    if(!tripOwnerId) { setJoinError("Could not find trip owner. Try again."); setJoinRequesting(false); return; }
     const { error } = await supabase.from("notifications").insert({
-      user_id:  authUser.id,
+      user_id:  tripOwnerId,
       trip_id:  joinTripId,
       type:     "trip_invite",
       message:  `${user} requested to join your trip`,
@@ -3846,6 +3848,7 @@ export default function App() {
         requester_email: authUser.email,
         requester_name:  user,
         status:          "pending",
+        trip_name:       joinTripInfo?.title || "",
       },
     });
     setJoinRequesting(false);
@@ -3856,7 +3859,7 @@ export default function App() {
   // ── Load join page trip info ──
   useEffect(() => {
     if(!isJoinPage || !joinTripId) return;
-    supabase.from("trips").select("id,title,destination").eq("id", joinTripId).single()
+    supabase.from("trips").select("id,title,destination,created_by").eq("id", joinTripId).single()
       .then(({ data }) => { if(data) setJoinTripInfo(data); });
   }, [joinTripId]);
 
