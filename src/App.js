@@ -662,7 +662,9 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
       metadata: {
         ...item.metadata,
         description: form.description, notes: form.notes,
-        checkIn: form.checkIn||null, checkOut: form.checkOut||null,
+        isCheckin: form.isCheckin !== false,
+        checkIn: form.isCheckin!==false ? (form.checkIn||null) : null,
+        checkOut: form.isCheckin===false ? (form.checkOut||null) : null,
         transportationTime: form.transportationTime?+form.transportationTime:"",
         travelTimeFromPrev: form.travelTimeFromPrev?+form.travelTimeFromPrev:0,
       }
@@ -1370,7 +1372,7 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
       durationMin:+form.durationMin||60, location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
-      metadata:{description:form.description,notes:form.notes,checkIn:form.checkIn||null,checkOut:form.checkOut||null,transportationTime:form.transportationTime||"",travelTimeFromPrev:form.travelTimeFromPrev||0,upvotes:[],downvotes:[],createdBy:authUserId||user}
+      metadata:{description:form.description,notes:form.notes,isCheckin:hotelMode==="checkIn",checkIn:hotelMode==="checkIn"?(form.checkIn||null):null,checkOut:hotelMode==="checkOut"?(form.checkOut||null):null,transportationTime:form.transportationTime||"",travelTimeFromPrev:form.travelTimeFromPrev||0,upvotes:[],downvotes:[],createdBy:authUserId||user}
     };
     // Build list of days to repeat across
     const savedItems = [];
@@ -4186,15 +4188,12 @@ export default function App() {
     if(item.type === "hotel") {
       return {
         title:      item.title,
-        day:        item.day || null,
-        price:      item.price || 0,
-        price_type: item.priceType || "flat",
+        location:   item.location || "",
+        is_checkin: item.metadata?.isCheckin !== false, // true=check-in, false=check-out
+        date:       item.metadata?.checkIn || item.metadata?.checkOut || null,
         notes:      item.metadata?.notes || "",
         upvotes:    item.metadata?.upvotes || [],
         downvotes:  item.metadata?.downvotes || [],
-        location:   item.location || "",
-        check_in:   item.metadata?.checkIn || null,
-        check_out:  item.metadata?.checkOut || null,
         ...tripIdField, ...createdBy,
       };
     }
@@ -4235,8 +4234,9 @@ export default function App() {
       upvotes:            Array.isArray(row.upvotes) ? row.upvotes : [],
       downvotes:          Array.isArray(row.downvotes) ? row.downvotes : [],
       createdBy:          row.created_by || "",
-      checkIn:            row.check_in || null,
-      checkOut:           row.check_out || null,
+      isCheckin:          row.is_checkin !== false,
+      checkIn:            row.is_checkin !== false ? (row.date || null) : null,
+      checkOut:           row.is_checkin === false ? (row.date || null) : null,
       transportationTime: row.transportation_time ? String(row.transportation_time) : "",
       travelTimeFromPrev: row.travel_time_from_prev || 0,
     },
