@@ -4076,44 +4076,78 @@ export default function App() {
 
 
   const buildItemRow = (tripId, item) => {
-    const base = {
-      title:      item.title,
-      day:        item.day || null,
-      start_time: item.startTime || null,
-      price:      item.price || 0,
-      price_type: item.priceType || "flat",
-      notes:      item.metadata?.notes || "",
-      upvotes:    item.metadata?.upvotes || [],
-      downvotes:  item.metadata?.downvotes || [],
-      ...(tripId ? { trip_id: tripId } : {}),
-      ...(item.metadata?.createdBy && item.metadata.createdBy.includes("-") ? { created_by: item.metadata.createdBy } : {}),
-    };
+    const createdBy = item.metadata?.createdBy && item.metadata.createdBy.includes("-")
+      ? { created_by: item.metadata.createdBy } : {};
+    const tripIdField = tripId ? { trip_id: tripId } : {};
+
+    // activity and meal — all base columns including start_time, price
     if(item.type === "activity" || item.type === "meal") {
-      return { ...base,
+      return {
+        title:        item.title,
+        day:          item.day || null,
+        start_time:   item.startTime || null,
+        price:        item.price || 0,
+        price_type:   item.priceType || "flat",
+        notes:        item.metadata?.notes || "",
+        upvotes:      item.metadata?.upvotes || [],
+        downvotes:    item.metadata?.downvotes || [],
         duration_min: item.durationMin || 60,
         location:     item.location || "",
         description:  item.metadata?.description || "",
+        ...tripIdField, ...createdBy,
       };
     }
+    // transport — start_time and price, no check_in/check_out
     if(item.type === "transport") {
-      return { ...base,
+      return {
+        title:                 item.title,
+        day:                   item.day || null,
+        start_time:            item.startTime || null,
+        price:                 item.price || 0,
+        price_type:            item.priceType || "flat",
+        notes:                 item.metadata?.notes || "",
+        upvotes:               item.metadata?.upvotes || [],
+        downvotes:             item.metadata?.downvotes || [],
         duration_min:          item.durationMin || 60,
         location:              item.location || "",
         transportation_time:   item.metadata?.transportationTime ? parseInt(item.metadata.transportationTime) : null,
         travel_time_from_prev: item.metadata?.travelTimeFromPrev ? parseInt(item.metadata.travelTimeFromPrev) : 0,
+        ...tripIdField, ...createdBy,
       };
     }
+    // hotel (check in/out) — no start_time column in item_checkins
     if(item.type === "hotel") {
-      return { ...base,
-        location:  item.location || "",
-        check_in:  item.metadata?.checkIn || null,
-        check_out: item.metadata?.checkOut || null,
+      return {
+        title:      item.title,
+        day:        item.day || null,
+        price:      item.price || 0,
+        price_type: item.priceType || "flat",
+        notes:      item.metadata?.notes || "",
+        upvotes:    item.metadata?.upvotes || [],
+        downvotes:  item.metadata?.downvotes || [],
+        location:   item.location || "",
+        check_in:   item.metadata?.checkIn || null,
+        check_out:  item.metadata?.checkOut || null,
+        ...tripIdField, ...createdBy,
       };
     }
+    // note — no start_time or price columns in item_notes
     if(item.type === "note") {
-      return { ...base, body: item.metadata?.description || "" };
+      return {
+        title:     item.title,
+        day:       item.day || null,
+        notes:     item.metadata?.notes || "",
+        upvotes:   item.metadata?.upvotes || [],
+        downvotes: item.metadata?.downvotes || [],
+        body:      item.metadata?.description || "",
+        ...tripIdField, ...createdBy,
+      };
     }
-    return base;
+    // fallback
+    return {
+      title: item.title, day: item.day || null,
+      ...tripIdField, ...createdBy,
+    };
   };
 
   const mapRowToItem = (row, type) => ({
