@@ -1348,6 +1348,7 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
   const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1",checkIn:"",checkOut:"",transportationTime:"",travelTimeFromPrev:""});
+  const [hotelMode,setHotelMode] = useState("checkIn");
   const [errs,setErrs] = useState({});
   const tripDays=useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
   const items=trip.calendarItems||[];
@@ -1415,20 +1416,22 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
             ))}
           </div>
 
-          {/* Title + Day — shown for all types */}
+          {/* Title + Day (hidden for hotel) */}
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Title *</label>
               <input {...F("title")} placeholder={form.type==="hotel"?"e.g. Hotel Marriott":"e.g. Snorkeling at Reef"}/>
               {errs.title&&<div className="err-msg">{errs.title}</div>}
             </div>
-            <div className="form-group">
-              <label className="form-label">Day</label>
-              <select {...F("day")} className="form-input">
-                <option value="">Unscheduled</option>
-                {tripDays.map((ymd,i)=>{const d=fromYMD(ymd);return <option key={ymd} value={ymd}>Day {i+1} · {MONTHS[d.getMonth()].slice(0,3)} {d.getDate()}</option>;})}
-              </select>
-            </div>
+            {form.type!=="hotel" && (
+              <div className="form-group">
+                <label className="form-label">Day</label>
+                <select {...F("day")} className="form-input">
+                  <option value="">Unscheduled</option>
+                  {tripDays.map((ymd,i)=>{const d=fromYMD(ymd);return <option key={ymd} value={ymd}>Day {i+1} · {MONTHS[d.getMonth()].slice(0,3)} {d.getDate()}</option>;})}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* Start Time + Duration — hidden for hotel and note */}
@@ -1453,18 +1456,21 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
             </div>
           )}
 
-          {/* Check-In / Check-Out — hotel only */}
           {form.type==="hotel" && (
-            <div className="form-row">
-              <div className="form-group">
-                <label className="form-label">Check-In</label>
-                <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))}
-                  minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Check-in"/>
+            <div className="form-row" style={{alignItems:"flex-end"}}>
+              <div className="form-group" style={{flex:"0 0 auto"}}>
+                <label className="form-label">Type</label>
+                <div style={{display:"flex",gap:6}}>
+                  <button type="button" className={`type-tab ${hotelMode==="checkIn"?"active":""}`} onClick={()=>setHotelMode("checkIn")}>🏨 Check-In</button>
+                  <button type="button" className={`type-tab ${hotelMode==="checkOut"?"active":""}`} onClick={()=>setHotelMode("checkOut")}>🚪 Check-Out</button>
+                </div>
               </div>
               <div className="form-group">
-                <label className="form-label">Check-Out</label>
-                <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))}
-                  minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Check-out"/>
+                <label className="form-label">{hotelMode==="checkIn"?"Check-In Date":"Check-Out Date"}</label>
+                {hotelMode==="checkIn"
+                  ? <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))} minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Select date"/>
+                  : <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))} minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Select date"/>
+                }
               </div>
             </div>
           )}
@@ -1499,8 +1505,8 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
             </div>
           )}
 
-          {/* Price + Price Type — hidden for note */}
-          {form.type!=="note" && (
+          {/* Price + Price Type — hidden for note and hotel */}
+          {form.type!=="note" && form.type!=="hotel" && (
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Price (USD)</label>
