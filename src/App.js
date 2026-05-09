@@ -441,6 +441,15 @@ const TYPE_META = {
 let _id = 500;
 const uid = () => ++_id;
 
+// ── Item table routing — module scope so all components can access ──
+const itemTypeToTable = (type) => ({
+  activity:  "item_activities",
+  meal:      "item_meals",
+  transport: "item_transport",
+  hotel:     "item_checkins",
+  note:      "item_notes",
+}[type] || "item_activities");
+
 function toYMD(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
 function fromYMD(s) { if(!s)return null; const[y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
 function fmtDate(s) { if(!s)return""; try { const d=s.includes("T")?new Date(s):fromYMD(s); if(!d||isNaN(d.getTime()))return""; return `${MONTHS[d.getMonth()].slice(0,3)} ${d.getDate()}, ${d.getFullYear()}`; } catch(e){return"";} }
@@ -4064,14 +4073,7 @@ export default function App() {
     general:       "note",
   }[cat] || "activity");
 
-  // ── Item table routing helpers ──
-  const itemTypeToTable = (type) => ({
-    activity:  "item_activities",
-    meal:      "item_meals",
-    transport: "item_transport",
-    hotel:     "item_checkins",
-    note:      "item_notes",
-  }[type] || "item_activities");
+
 
   const buildItemRow = (tripId, item) => {
     const base = {
