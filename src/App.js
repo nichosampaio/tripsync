@@ -3835,8 +3835,12 @@ export default function App() {
       .eq("user_id", authUser.id)
       .single();
     if(existing) { setJoinDone(true); setJoinRequesting(false); loadTrips(authUser.id); return; }
-    // Insert join request notification — sent TO the trip owner (created_by)
-    const tripOwnerId = joinTripInfo?.created_by;
+    // Get trip owner — use cached info or fetch directly as fallback
+    let tripOwnerId = joinTripInfo?.created_by;
+    if(!tripOwnerId) {
+      const { data: tripData } = await supabase.from("trips").select("created_by").eq("id", joinTripId).single();
+      tripOwnerId = tripData?.created_by;
+    }
     if(!tripOwnerId) { setJoinError("Could not find trip owner. Try again."); setJoinRequesting(false); return; }
     const { error } = await supabase.from("notifications").insert({
       user_id:  tripOwnerId,
@@ -3849,19 +3853,21 @@ export default function App() {
         requester_name:  user,
         status:          "pending",
         trip_name:       joinTripInfo?.title || "",
+        trip_owner_id:   tripOwnerId,
       },
     });
+    if(error) console.error("Join request error:", error.message, error.code, error.details);
     setJoinRequesting(false);
     if(error) { setJoinError("Failed to send request. Try again."); return; }
     setJoinDone(true);
   };
 
-  // ── Load join page trip info ──
+  // ── Load join page trip info — refetch when auth changes so created_by is visible ──
   useEffect(() => {
     if(!isJoinPage || !joinTripId) return;
     supabase.from("trips").select("id,title,destination,created_by").eq("id", joinTripId).single()
       .then(({ data }) => { if(data) setJoinTripInfo(data); });
-  }, [joinTripId]);
+  }, [joinTripId, authUser?.id]);
 
   // ── Poll for join requests + process invites when user logs in ──
   useEffect(() => {
