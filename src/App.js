@@ -709,25 +709,31 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
               })}
             </select>
           </div>
-          <div className="form-group">
-            <label className="form-label">Repeat for # of days</label>
-            <input className="form-input" type="number" min="1" max="30"
-              value={form.repeatDays}
-              onChange={e=>setForm(f=>({...f,repeatDays:e.target.value}))}
-              placeholder="1"/>
-            <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Set to 2+ to add this activity on consecutive days starting from the selected day above</div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Start Time</label>
-            <TimePicker value={form.startTime} onChange={v=>setForm(f=>({...f,startTime:v}))}/>
-          </div>
+          {form.type !== "hotel" && (
+            <div className="form-group">
+              <label className="form-label">Repeat for # of days</label>
+              <input className="form-input" type="number" min="1" max="30"
+                value={form.repeatDays}
+                onChange={e=>setForm(f=>({...f,repeatDays:e.target.value}))}
+                placeholder="1"/>
+              <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Set to 2+ to add this activity on consecutive days starting from the selected day above</div>
+            </div>
+          )}
+          {form.type !== "hotel" && (
+            <div className="form-group">
+              <label className="form-label">Start Time</label>
+              <TimePicker value={form.startTime} onChange={v=>setForm(f=>({...f,startTime:v}))}/>
+            </div>
+          )}
         </div>
         <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Duration (minutes)</label>
-            <input {...F("durationMin")} placeholder="e.g. 90"/>
-            {errs.durationMin&&<div className="err-msg">{errs.durationMin}</div>}
-          </div>
+          {form.type !== "hotel" && (
+            <div className="form-group">
+              <label className="form-label">Duration (minutes)</label>
+              <input {...F("durationMin")} placeholder="e.g. 90"/>
+              {errs.durationMin&&<div className="err-msg">{errs.durationMin}</div>}
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Price (USD)</label>
             <input {...F("price")} placeholder="e.g. 45"/>
@@ -1384,7 +1390,7 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
       }
     }
     setTrip(t=>({...t,calendarItems:[...t.calendarItems,...savedItems]}));
-    setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1"});
+    setForm({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1",checkIn:"",checkOut:""});
     setShowAdd(false);
   };
 
