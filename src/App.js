@@ -1347,7 +1347,7 @@ function MapTab({trip,setTrip,db}) {
 function ActivityTab({trip,setTrip,user,db,authUserId}) {
   const [editingItem,setEditingItem] = useState(null);
   const [showAdd,setShowAdd] = useState(false);
-  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1",checkIn:"",checkOut:""});
+  const [form,setForm] = useState({type:"activity",title:"",location:"",description:"",startTime:"",durationMin:"60",price:"",priceType:"flat",notes:"",day:"",repeatDays:"1",checkIn:"",checkOut:"",transportationTime:"",travelTimeFromPrev:""});
   const [errs,setErrs] = useState({});
   const tripDays=useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
   const items=trip.calendarItems||[];
@@ -1369,7 +1369,7 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
       durationMin:+form.durationMin||60, location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
-      metadata:{description:form.description,notes:form.notes,checkIn:form.checkIn||null,checkOut:form.checkOut||null,upvotes:[],downvotes:[],createdBy:authUserId||user}
+      metadata:{description:form.description,notes:form.notes,checkIn:form.checkIn||null,checkOut:form.checkOut||null,transportationTime:form.transportationTime||"",travelTimeFromPrev:form.travelTimeFromPrev||0,upvotes:[],downvotes:[],createdBy:authUserId||user}
     };
     // Build list of days to repeat across
     const savedItems = [];
@@ -1414,10 +1414,12 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
               <button key={k} className={`type-tab ${form.type===k?"active":""}`} onClick={()=>setForm(f=>({...f,type:k}))}>{v.icon} {v.label}</button>
             ))}
           </div>
+
+          {/* Title + Day — shown for all types */}
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">Title *</label>
-              <input {...F("title")} placeholder="e.g. Snorkeling at Reef"/>
+              <input {...F("title")} placeholder={form.type==="hotel"?"e.g. Hotel Marriott":"e.g. Snorkeling at Reef"}/>
               {errs.title&&<div className="err-msg">{errs.title}</div>}
             </div>
             <div className="form-group">
@@ -1428,46 +1430,99 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
               </select>
             </div>
           </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Start Time</label>
-              <TimePicker value={form.startTime} onChange={v=>setForm(f=>({...f,startTime:v}))}/>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Duration (min)</label>
-              <input {...F("durationMin")} placeholder="60"/>
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Location</label>
-            <input {...F("location")} placeholder="e.g. Cancun, Mexico"/>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Description</label>
-            <textarea {...F("description")} className="form-input form-textarea" placeholder="Details…"/>
-          </div>
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Price (USD)</label>
-              <input {...F("price")} placeholder="e.g. 45"/>
-              {errs.price&&<div className="err-msg">{errs.price}</div>}
-            </div>
-            <div className="form-group">
-              <label className="form-label">Price Type</label>
-              <div style={{display:"flex",gap:6,marginTop:2}}>
-                <button type="button"
-                  className={`type-tab ${form.priceType==="flat"?"active":""}`}
-                  onClick={()=>setForm(f=>({...f,priceType:"flat"}))}>
-                  👥 Group
-                </button>
-                <button type="button"
-                  className={`type-tab ${form.priceType==="per_person"?"active":""}`}
-                  onClick={()=>setForm(f=>({...f,priceType:"per_person"}))}>
-                  🧍 Per Person
-                </button>
+
+          {/* Start Time + Duration — hidden for hotel and note */}
+          {form.type!=="hotel" && form.type!=="note" && (
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Start Time</label>
+                <TimePicker value={form.startTime} onChange={v=>setForm(f=>({...f,startTime:v}))}/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Duration (min)</label>
+                <input {...F("durationMin")} placeholder="60"/>
               </div>
             </div>
+          )}
+
+          {/* Location — shown for all except note */}
+          {form.type!=="note" && (
+            <div className="form-group">
+              <label className="form-label">Location</label>
+              <input {...F("location")} placeholder="e.g. Cancun, Mexico"/>
+            </div>
+          )}
+
+          {/* Check-In / Check-Out — hotel only */}
+          {form.type==="hotel" && (
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Check-In</label>
+                <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))}
+                  minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Check-in"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Check-Out</label>
+                <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))}
+                  minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Check-out"/>
+              </div>
+            </div>
+          )}
+
+          {/* Description — activity and meal only */}
+          {(form.type==="activity"||form.type==="meal") && (
+            <div className="form-group">
+              <label className="form-label">Description</label>
+              <textarea {...F("description")} className="form-input form-textarea" placeholder="Details…"/>
+            </div>
+          )}
+
+          {/* Note body */}
+          {form.type==="note" && (
+            <div className="form-group">
+              <label className="form-label">Note</label>
+              <textarea {...F("description")} className="form-input form-textarea" placeholder="Write your note…" rows={4}/>
+            </div>
+          )}
+
+          {/* Transport fields */}
+          {form.type==="transport" && (
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Transport Time (min)</label>
+                <input {...F("transportationTime")} placeholder="e.g. 45"/>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Travel from Prev (min)</label>
+                <input {...F("travelTimeFromPrev")} placeholder="e.g. 15"/>
+              </div>
+            </div>
+          )}
+
+          {/* Price + Price Type — hidden for note */}
+          {form.type!=="note" && (
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Price (USD)</label>
+                <input {...F("price")} placeholder="e.g. 45"/>
+                {errs.price&&<div className="err-msg">{errs.price}</div>}
+              </div>
+              <div className="form-group">
+                <label className="form-label">Price Type</label>
+                <div style={{display:"flex",gap:6,marginTop:2}}>
+                  <button type="button" className={`type-tab ${form.priceType==="flat"?"active":""}`} onClick={()=>setForm(f=>({...f,priceType:"flat"}))}>👥 Whole Group</button>
+                  <button type="button" className={`type-tab ${form.priceType==="per_person"?"active":""}`} onClick={()=>setForm(f=>({...f,priceType:"per_person"}))}>🧍 Per Person</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Notes — all types */}
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <textarea {...F("notes")} className="form-input form-textarea" placeholder="Any extra notes…" rows={2}/>
           </div>
+
           <div className="form-actions">
             <button className="btn btn-ghost btn-sm" onClick={()=>setShowAdd(false)}>Cancel</button>
             <button className="btn btn-primary btn-sm" onClick={addItem}>Add Item</button>
