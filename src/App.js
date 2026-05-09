@@ -798,10 +798,12 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
             </div>
           </div>
         )}
-        <div className="form-group">
-          <label className="form-label">Notes</label>
-          <textarea {...F("notes",true)} placeholder="Any extra notes…"/>
-        </div>
+        {form.type !== "note" && (
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <textarea {...F("notes",true)} placeholder="Any extra notes…"/>
+          </div>
+        )}
         <div className="form-actions">
           <button className="btn btn-ghost btn-sm" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary btn-sm" onClick={save}>Save Changes</button>
@@ -1525,11 +1527,13 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
             </div>
           )}
 
-          {/* Notes — all types */}
-          <div className="form-group">
-            <label className="form-label">Notes</label>
-            <textarea {...F("notes")} className="form-input form-textarea" placeholder="Any extra notes…" rows={2}/>
-          </div>
+          {/* Notes — all types except note (which only has the body) */}
+          {form.type !== "note" && (
+            <div className="form-group">
+              <label className="form-label">Notes</label>
+              <textarea {...F("notes")} className="form-input form-textarea" placeholder="Any extra notes…" rows={2}/>
+            </div>
+          )}
 
           <div className="form-actions">
             <button className="btn btn-ghost btn-sm" onClick={()=>setShowAdd(false)}>Cancel</button>
@@ -4202,10 +4206,9 @@ export default function App() {
       return {
         title:     item.title,
         day:       item.day || null,
-        notes:     item.metadata?.notes || "",
+        body:      item.metadata?.description || item.metadata?.notes || "",
         upvotes:   item.metadata?.upvotes || [],
         downvotes: item.metadata?.downvotes || [],
-        body:      item.metadata?.description || "",
         ...tripIdField, ...createdBy,
       };
     }
