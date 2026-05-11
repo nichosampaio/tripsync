@@ -3759,6 +3759,19 @@ export default function App() {
     loadTrips(userId);
   };
 
+  // ── Process accepted join requests for the logged-in user ──
+  const processAcceptedJoinRequests = async (userId) => {
+    if(!userId) return;
+    const { data: accepted } = await supabase
+      .from("notifications")
+      .select("trip_id")
+      .eq("type", "trip_invite")
+      .eq("user_id", userId);
+    if(!accepted?.length) return;
+    const hasAccepted = accepted.some(n => n.metadata?.status === "accepted");
+    if(hasAccepted) loadTrips(userId);
+  };
+
   // ── Load pending join requests for trips I own ──
   const loadJoinRequests = async (userId) => {
     if(!userId) return;
@@ -3804,9 +3817,10 @@ export default function App() {
       joined_at: new Date().toISOString().slice(0,10),
     });
     if(error) { console.error("acceptRequest:", error); return; }
-    // Mark notification as accepted
+    // Mark notification as accepted — preserve all metadata so requester detects it
+    const notif = joinRequests.find(r => r.id === req.id);
     await supabase.from("notifications").update({
-      metadata: { status: "accepted" }
+      metadata: { ...(notif?.metadata||{}), status: "accepted" }
     }).eq("id", req.id);
     // Remove from local state
     setJoinRequests(prev => prev.filter(r => r.id !== req.id));
@@ -3874,9 +3888,9 @@ export default function App() {
     if(!authUser) return;
     const email = authUser.email?.toLowerCase();
     processPendingInvites(authUser.id, email);
+    processAcceptedJoinRequests(authUser.id);
     loadJoinRequests(authUser.id);
-    // Poll every 30s for new join requests
-    const interval = setInterval(() => loadJoinRequests(authUser.id), 30000);
+    const interval = setInterval(() => { loadJoinRequests(authUser.id); processAcceptedJoinRequests(authUser.id); }, 30000);
     return () => clearInterval(interval);
   }, [authUser?.id]);
 
