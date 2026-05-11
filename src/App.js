@@ -3800,7 +3800,23 @@ export default function App() {
     const pending = requests.filter(r => r.metadata?.status === "pending");
     if(!pending.length) { setJoinRequests([]); return; }
 
-    setJoinRequests(pending.map(r => ({
+    // Fetch current members of these trips to filter out already-accepted requesters
+    const { data: currentMembers } = await supabase
+      .from("trip_members").select("trip_id, user_id").in("trip_id", tripIds);
+    const memberSet = new Set((currentMembers||[]).map(m => m.trip_id + ":" + m.user_id));
+
+    // Split: requests from people already in the trip vs genuinely still waiting
+    const alreadyIn = pending.filter(r => r.metadata?.requester_id && memberSet.has(r.trip_id + ":" + r.metadata.requester_id));
+    const stillPending = pending.filter(r => !r.metadata?.requester_id || !memberSet.has(r.trip_id + ":" + r.metadata.requester_id));
+
+    // Auto-close stale requests so they never reappear
+    for(const r of alreadyIn) {
+      supabase.from("notifications").update({ metadata: { ...r.metadata, status: "accepted" } }).eq("id", r.id);
+    }
+
+    if(!stillPending.length) { setJoinRequests([]); return; }
+
+    setJoinRequests(stillPending.map(r => ({
       id:             r.id,
       tripId:         r.trip_id,
       requesterId:    r.metadata?.requester_id || "",
