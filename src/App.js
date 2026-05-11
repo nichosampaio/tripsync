@@ -3816,19 +3816,16 @@ export default function App() {
       console.error("acceptRequest: missing tripId or requesterId", req);
       return;
     }
-    // Check not already a member to avoid duplicate key error
-    const { data: alreadyMember } = await supabase
-      .from("trip_members").select("id")
-      .eq("trip_id", req.tripId).eq("user_id", req.requesterId).maybeSingle();
-    if(!alreadyMember) {
-      // Insert as member (role="member") — requester is joining, not the owner
-      const { error } = await supabase.from("trip_members").insert({
-        trip_id:   req.tripId,
-        user_id:   req.requesterId,
-        role:      "member",
-        joined_at: new Date().toISOString().slice(0,10),
-      });
-      if(error) { console.error("acceptRequest insert error:", error.message, error.code); return; }
+    // Upsert requester as member (role="member") — they are joining, not owning the trip
+    const { error: memberErr } = await supabase.from("trip_members").upsert({
+      trip_id:   req.tripId,
+      user_id:   req.requesterId,
+      role:      "member",
+      joined_at: new Date().toISOString().slice(0,10),
+    }, { onConflict: "trip_id,user_id", ignoreDuplicates: true });
+    if(memberErr) {
+      console.error("acceptRequest error:", memberErr.message, memberErr.code, memberErr.details);
+      return;
     }
     // Mark notification as accepted — preserve all metadata so requester detects it
     const notif = joinRequests.find(r => r.id === req.id);
