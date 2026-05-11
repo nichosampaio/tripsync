@@ -3797,7 +3797,7 @@ export default function App() {
 
     if(!requests?.length) { setJoinRequests([]); return; }
 
-    const pending = requests.filter(r => r.metadata?.status === "pending");
+    const pending = requests.filter(r => r.metadata?.status === "pending" || !r.metadata?.status);
     if(!pending.length) { setJoinRequests([]); return; }
 
     setJoinRequests(pending.map(r => ({
@@ -3832,17 +3832,20 @@ export default function App() {
     await supabase.from("notifications").update({
       metadata: { ...(notif?.metadata||{}), status: "accepted" }
     }).eq("id", req.id);
-    // Remove from local state
+    // Remove from local state immediately so UI clears
     setJoinRequests(prev => prev.filter(r => r.id !== req.id));
-    // Reload current trip members
-    if(active?.id === req.tripId) loadTripDetails(active);
-    loadTrips(authUser.id);
+    // Reload trip details to refresh member list and count for the owner
+    const tripToUpdate = trips.find(t => t.id === req.tripId);
+    if(tripToUpdate) await loadTripDetails(tripToUpdate);
+    // Reload all trips so dashboard cards show updated member count
+    await loadTrips(authUser.id);
   };
 
   // ── Reject a join request ──
   const handleRejectRequest = async (req) => {
+    const rnotif = joinRequests.find(r => r.id === req.id);
     await supabase.from("notifications").update({
-      metadata: { status: "rejected" }
+      metadata: { ...(rnotif?.metadata||{}), status: "rejected" }
     }).eq("id", req.id);
     setJoinRequests(prev => prev.filter(r => r.id !== req.id));
   };
