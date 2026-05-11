@@ -3797,7 +3797,7 @@ export default function App() {
 
     if(!requests?.length) { setJoinRequests([]); return; }
 
-    const pending = requests.filter(r => r.metadata?.status === "pending" || !r.metadata?.status);
+    const pending = requests.filter(r => r.metadata?.status === "pending");
     if(!pending.length) { setJoinRequests([]); return; }
 
     setJoinRequests(pending.map(r => ({
@@ -4122,16 +4122,33 @@ export default function App() {
       downvotes:       Array.isArray(v.downvotes) ? v.downvotes : [],
     }));
 
+    // Fetch ALL members for this trip directly from trip_members
+    const { data: allMembers } = await supabase
+      .from("trip_members")
+      .select("user_id, role, joined_at, profiles ( full_name )")
+      .eq("trip_id", trip.id);
+    const freshMembers = (allMembers||[]).map(m => ({
+      userId:   m.user_id,
+      name:     m.profiles?.full_name || m.user_id,
+      role:     m.role,
+      joinedAt: m.joined_at,
+    }));
+
     const fullTrip = {
       ...trip,
       calendarItems,
       accommodationOptions,
       vehicleRentals,
       personalBudgets: { [user]: profile?.personal_budget ?? null },
+      tripMembers: freshMembers,
+      members:     freshMembers.map(m => m.name),
     };
 
     setActive(fullTrip);
-    setTrips(ts => ts.map(t => t.id === trip.id ? fullTrip : t));
+    setTrips(ts => ts.map(t => t.id === trip.id
+      ? { ...t, tripMembers: freshMembers, members: freshMembers.map(m => m.name) }
+      : t
+    ));
     setTripLoading(false);
   };
 
