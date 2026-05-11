@@ -3762,14 +3762,17 @@ export default function App() {
   // ── Process accepted join requests for the logged-in user ──
   const processAcceptedJoinRequests = async (userId) => {
     if(!userId) return;
-    const { data: accepted } = await supabase
+    // Find trip_invite notifications sent by this user that are now accepted
+    const { data: myRequests } = await supabase
       .from("notifications")
-      .select("trip_id")
+      .select("*")
       .eq("type", "trip_invite")
       .eq("user_id", userId);
-    if(!accepted?.length) return;
-    const hasAccepted = accepted.some(n => n.metadata?.status === "accepted");
-    if(hasAccepted) loadTrips(userId);
+    if(!myRequests?.length) return;
+    const acceptedRequests = myRequests.filter(n => n.metadata?.status === "accepted");
+    if(!acceptedRequests.length) return;
+    // Trip was already added to trip_members by owner — just reload to show it
+    loadTrips(userId);
   };
 
   // ── Load pending join requests for trips I own ──
@@ -3809,14 +3812,24 @@ export default function App() {
 
   // ── Accept a join request ──
   const handleAcceptRequest = async (req) => {
-    // Add to trip_members
-    const { error } = await supabase.from("trip_members").insert({
-      trip_id:   req.tripId,
-      user_id:   req.requesterId,
-      role:      "member",
-      joined_at: new Date().toISOString().slice(0,10),
-    });
-    if(error) { console.error("acceptRequest:", error); return; }
+    if(!req.tripId || !req.requesterId) {
+      console.error("acceptRequest: missing tripId or requesterId", req);
+      return;
+    }
+    // Check not already a member to avoid duplicate key error
+    const { data: alreadyMember } = await supabase
+      .from("trip_members").select("id")
+      .eq("trip_id", req.tripId).eq("user_id", req.requesterId).maybeSingle();
+    if(!alreadyMember) {
+      // Insert as member (role="member") — requester is joining, not the owner
+      const { error } = await supabase.from("trip_members").insert({
+        trip_id:   req.tripId,
+        user_id:   req.requesterId,
+        role:      "member",
+        joined_at: new Date().toISOString().slice(0,10),
+      });
+      if(error) { console.error("acceptRequest insert error:", error.message, error.code); return; }
+    }
     // Mark notification as accepted — preserve all metadata so requester detects it
     const notif = joinRequests.find(r => r.id === req.id);
     await supabase.from("notifications").update({
