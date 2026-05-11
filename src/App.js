@@ -4125,14 +4125,20 @@ export default function App() {
     // Fetch ALL members for this trip directly from trip_members
     const { data: allMembers } = await supabase
       .from("trip_members")
-      .select("user_id, role, joined_at, profiles ( full_name )")
+      .select("user_id, role, joined_at")
       .eq("trip_id", trip.id);
+    const memberIds = (allMembers||[]).map(m => m.user_id);
+    const { data: memberProfiles } = memberIds.length
+      ? await supabase.from("profiles").select("id, full_name").in("id", memberIds)
+      : { data: [] };
+    const profileMap = Object.fromEntries((memberProfiles||[]).map(p => [p.id, p.full_name || ""]));
     const freshMembers = (allMembers||[]).map(m => ({
       userId:   m.user_id,
-      name:     m.profiles?.full_name || m.user_id,
+      name:     profileMap[m.user_id] || m.user_id,
       role:     m.role,
       joinedAt: m.joined_at,
     }));
+
 
     const fullTrip = {
       ...trip,
