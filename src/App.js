@@ -3841,9 +3841,9 @@ export default function App() {
       const { data: tripData } = await supabase.from("trips").select("created_by").eq("id", joinTripId).single();
       tripOwnerId = tripData?.created_by;
     }
-    if(!tripOwnerId) { setJoinError("Could not find trip owner. Try again."); setJoinRequesting(false); return; }
+    // tripOwnerId stored in metadata if available, but not required since user_id = requester
     const { error } = await supabase.from("notifications").insert({
-      user_id:  tripOwnerId,
+      user_id:  authUser.id,
       trip_id:  joinTripId,
       type:     "trip_invite",
       message:  `${user} requested to join your trip`,
@@ -3853,7 +3853,7 @@ export default function App() {
         requester_name:  user,
         status:          "pending",
         trip_name:       joinTripInfo?.title || "",
-        trip_owner_id:   tripOwnerId,
+        trip_owner_id:   tripOwnerId || null,
       },
     });
     if(error) console.error("Join request error:", error.message, error.code, error.details);
