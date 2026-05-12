@@ -424,7 +424,31 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
   .accom-grid,.activity-grid{grid-template-columns:1fr}
   .sched-layout{grid-template-columns:1fr}
   .sched-mini-cal{position:static}
-}`
+}
+
+/* ─── PROFILE PAGE ────────────────────────────────────── */
+.profile-page { padding:48px; max-width:720px; margin:0 auto; }
+.profile-page h2 { font-family:'Inter',sans-serif; font-size:26px; font-weight:800; letter-spacing:-0.8px; margin-bottom:32px; color:var(--text); }
+.profile-section { background:var(--surface); border:1px solid var(--border); border-radius:var(--r-lg); padding:28px; margin-bottom:20px; box-shadow:var(--shadow-xs); }
+.profile-section-title { font-family:'Inter',sans-serif; font-size:13px; font-weight:700; color:var(--muted); letter-spacing:0.6px; text-transform:uppercase; margin-bottom:20px; }
+.profile-field { margin-bottom:16px; }
+.profile-field:last-child { margin-bottom:0; }
+.profile-field-label { font-size:11px; font-weight:700; color:var(--muted); letter-spacing:0.8px; text-transform:uppercase; margin-bottom:5px; }
+.profile-field-value { font-size:14px; color:var(--muted); background:var(--surface2); border:1.5px solid var(--border); border-radius:7px; padding:9px 12px; }
+.danger-zone { background:var(--red-soft); border:1px solid rgba(192,57,43,0.18); border-radius:var(--r-lg); padding:28px; margin-bottom:20px; }
+.danger-zone-title { font-size:13px; font-weight:700; color:var(--red); letter-spacing:0.6px; text-transform:uppercase; margin-bottom:8px; }
+.danger-zone-desc { font-size:13px; color:var(--muted); margin-bottom:18px; line-height:1.6; }
+.profile-avatar-row { display:flex; align-items:center; gap:16px; margin-bottom:24px; padding-bottom:24px; border-bottom:1px solid var(--border); }
+.profile-avatar-lg { width:56px; height:56px; border-radius:50%; background:linear-gradient(135deg,#c96a28,#e8924a); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:22px; color:#fff; box-shadow:0 2px 10px rgba(201,106,40,0.32); flex-shrink:0; }
+.profile-avatar-info h3 { font-size:18px; font-weight:700; letter-spacing:-0.3px; color:var(--text); }
+.profile-avatar-info p { font-size:13px; color:var(--muted); margin-top:2px; }
+
+/* ─── DELETE ACCOUNT MODAL ────────────────────────────── */
+.delete-trip-row { display:flex; align-items:center; gap:12px; padding:14px 16px; background:var(--surface2); border:1px solid var(--border); border-radius:var(--r-md); margin-bottom:10px; }
+.delete-trip-info { flex:1; min-width:0; }
+.delete-trip-name { font-size:14px; font-weight:600; color:var(--text); letter-spacing:-0.1px; }
+.delete-trip-meta { font-size:12px; color:var(--muted); margin-top:2px; }
+.delete-trip-action { flex-shrink:0; min-width:180px; }`
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_ABR = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -3615,6 +3639,19 @@ export default function App() {
   const [joinDone,setJoinDone]           = useState(false);
   const [joinError,setJoinError]         = useState("");
 
+  // ── Profile page state ──
+  const [showProfile,setShowProfile]             = useState(false);
+  const [profileForm,setProfileForm]             = useState({name:"",newPassword:"",confirmNewPassword:""});
+  const [profileMsg,setProfileMsg]               = useState("");
+  const [profileBusy,setProfileBusy]             = useState(false);
+  // Delete account flow
+  const [showDeleteAccount,setShowDeleteAccount] = useState(false);
+  const [deleteStep,setDeleteStep]               = useState("check"); // "check"|"resolve"|"confirm"
+  const [adminTrips,setAdminTrips]               = useState([]);      // trips where user is sole admin
+  const [tripResolutions,setTripResolutions]     = useState({});      // tripId -> {action:"transfer"|"delete", newOwnerId:""}
+  const [deleteBusy,setDeleteBusy]               = useState(false);
+  const [deleteError,setDeleteError]             = useState("");
+
   // ── On mount: restore session + listen for auth changes ──
   useEffect(() => {
     // Check if there's already a session stored in the browser (e.g. returning user)
@@ -3707,6 +3744,124 @@ export default function App() {
     setPage("landing");
     setActive(null);
     setJoinRequests([]);
+  };
+
+  // ── Update display name ──
+  const handleUpdateName = async () => {
+    const newName = profileForm.name.trim();
+    if(!newName) { setProfileMsg("❌ Name cannot be empty."); return; }
+    setProfileBusy(true); setProfileMsg("");
+    // Update auth metadata
+    const { error: authErr } = await supabase.auth.updateUser({ data: { full_name: newName } });
+    if(authErr) { setProfileMsg("❌ " + authErr.message); setProfileBusy(false); return; }
+    // Update profiles table
+    const { error: dbErr } = await supabase.from("profiles")
+      .update({ full_name: newName })
+      .eq("id", authUser.id);
+    if(dbErr) { setProfileMsg("❌ " + dbErr.message); setProfileBusy(false); return; }
+    // Refresh local auth user so nav name updates immediately
+    const { data: { user: refreshed } } = await supabase.auth.getUser();
+    if(refreshed) setAuthUser(refreshed);
+    setProfileMsg("✅ Name updated successfully.");
+    setProfileBusy(false);
+  };
+
+  // ── Change password ──
+  const handleChangePassword = async () => {
+    if(profileForm.newPassword.length < 6) { setProfileMsg("❌ Password must be at least 6 characters."); return; }
+    if(profileForm.newPassword !== profileForm.confirmNewPassword) { setProfileMsg("❌ Passwords do not match."); return; }
+    setProfileBusy(true); setProfileMsg("");
+    const { error } = await supabase.auth.updateUser({ password: profileForm.newPassword });
+    if(error) { setProfileMsg("❌ " + error.message); setProfileBusy(false); return; }
+    setProfileMsg("✅ Password updated successfully.");
+    setProfileForm(f => ({ ...f, newPassword: "", confirmNewPassword: "" }));
+    setProfileBusy(false);
+  };
+
+  // ── Open delete account flow — check which trips need resolving ──
+  const openDeleteAccount = async () => {
+    setDeleteError(""); setDeleteStep("check"); setTripResolutions({});
+    setShowDeleteAccount(true);
+    // Find all trips where user is admin
+    const { data: myAdminRows } = await supabase
+      .from("trip_members")
+      .select("trip_id")
+      .eq("user_id", authUser.id)
+      .eq("role", "admin");
+    if(!myAdminRows?.length) { setDeleteStep("confirm"); setAdminTrips([]); return; }
+    // For each admin trip, check if there are other members
+    const tripIds = myAdminRows.map(r => r.trip_id);
+    const { data: allMembers } = await supabase
+      .from("trip_members")
+      .select("trip_id, user_id, role, profiles(full_name, email)")
+      .in("trip_id", tripIds);
+    // Group members by trip
+    const membersByTrip = {};
+    (allMembers || []).forEach(m => {
+      if(!membersByTrip[m.trip_id]) membersByTrip[m.trip_id] = [];
+      membersByTrip[m.trip_id].push(m);
+    });
+    // Get trip titles
+    const { data: tripRows } = await supabase
+      .from("trips")
+      .select("id, title, destination")
+      .in("id", tripIds);
+    // Build list of trips that need action (have other members) or can be auto-deleted (solo)
+    const needsAction = [];
+    const autoDelete = [];
+    (tripRows || []).forEach(t => {
+      const members = membersByTrip[t.id] || [];
+      const others = members.filter(m => m.user_id !== authUser.id);
+      if(others.length > 0) {
+        needsAction.push({ ...t, otherMembers: others });
+      } else {
+        autoDelete.push(t);
+      }
+    });
+    setAdminTrips(needsAction);
+    // Pre-set resolutions for solo trips to auto-delete
+    const preResolved = {};
+    autoDelete.forEach(t => { preResolved[t.id] = { action: "delete", newOwnerId: "" }; });
+    setTripResolutions(preResolved);
+    if(needsAction.length === 0) { setDeleteStep("confirm"); }
+    else { setDeleteStep("resolve"); }
+  };
+
+  // ── Execute account deletion ──
+  const handleDeleteAccount = async () => {
+    setDeleteBusy(true); setDeleteError("");
+    try {
+      // 1. Process each admin trip resolution
+      for(const trip of adminTrips) {
+        const res = tripResolutions[trip.id];
+        if(!res) { setDeleteError("Please resolve all trips before continuing."); setDeleteBusy(false); return; }
+        if(res.action === "transfer") {
+          if(!res.newOwnerId) { setDeleteError(`Please select a new owner for "${trip.title}".`); setDeleteBusy(false); return; }
+          // Promote new owner
+          await supabase.from("trip_members").update({ role: "admin" }).eq("trip_id", trip.id).eq("user_id", res.newOwnerId);
+          // Remove current user from that trip
+          await supabase.from("trip_members").delete().eq("trip_id", trip.id).eq("user_id", authUser.id);
+        } else if(res.action === "delete") {
+          await supabase.from("trips").delete().eq("id", trip.id);
+        }
+      }
+      // 2. Delete user data from all tables
+      await supabase.from("trip_members").delete().eq("user_id", authUser.id);
+      await supabase.from("votes").delete().eq("user_id", authUser.id);
+      await supabase.from("comments").delete().eq("user_id", authUser.id);
+      await supabase.from("notifications").delete().eq("user_id", authUser.id);
+      await supabase.from("profiles").delete().eq("id", authUser.id);
+      // 3. Delete auth account
+      await supabase.auth.admin?.deleteUser?.(authUser.id);
+      // 4. Sign out (works even if admin delete isn't available on client)
+      await supabase.auth.signOut();
+      setShowDeleteAccount(false);
+      setPage("landing");
+      setActive(null);
+    } catch(e) {
+      setDeleteError("Something went wrong. Please try again or contact support.");
+      setDeleteBusy(false);
+    }
   };
 
   // ── Process pending email invites for the logged-in user ──
@@ -4923,8 +5078,8 @@ export default function App() {
           <div className="nav-user">
             {loggedIn
               ?<>
-                <div className="avatar">{user[0].toUpperCase()}</div>
-                <span style={{fontSize:14,fontWeight:500}}>{user}</span>
+                <div className="avatar" style={{cursor:"pointer"}} onClick={()=>{setProfileForm({name:user,newPassword:"",confirmNewPassword:""});setProfileMsg("");setShowProfile(true);}}>{user[0].toUpperCase()}</div>
+                <span style={{fontSize:14,fontWeight:500,cursor:"pointer"}} onClick={()=>{setProfileForm({name:user,newPassword:"",confirmNewPassword:""});setProfileMsg("");setShowProfile(true);}}>{user}</span>
                 <button className="btn btn-ghost btn-sm" onClick={handleSignOut}>Sign Out</button>
                </>
               :<button className="btn btn-primary btn-sm" onClick={()=>{setAuthMode("login");setAuthError("");setShowLogin(true);}}>Sign In</button>
@@ -5185,6 +5340,203 @@ export default function App() {
             </div>
           </div>
         )}
+
+        {/* ── PROFILE MODAL ── */}
+        {showProfile && (
+          <div className="modal-overlay" onClick={()=>{setShowProfile(false);setProfileMsg("");}}>
+            <div className="modal modal-lg" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+                <h3 style={{margin:0}}>My Profile</h3>
+                <button className="btn btn-ghost btn-sm" onClick={()=>{setShowProfile(false);setProfileMsg("");}}>✕</button>
+              </div>
+
+              {/* Avatar + summary */}
+              <div className="profile-avatar-row">
+                <div className="profile-avatar-lg">{user[0].toUpperCase()}</div>
+                <div className="profile-avatar-info">
+                  <h3>{user}</h3>
+                  <p>{authUser?.email}</p>
+                </div>
+              </div>
+
+              {/* Personal Info */}
+              <div className="profile-section">
+                <div className="profile-section-title">Personal Info</div>
+                <div className="profile-field">
+                  <div className="profile-field-label">Email</div>
+                  <div className="profile-field-value">{authUser?.email}</div>
+                </div>
+                <div className="profile-field">
+                  <div className="profile-field-label">Member since</div>
+                  <div className="profile-field-value">{authUser?.created_at ? new Date(authUser.created_at).toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}) : "—"}</div>
+                </div>
+                <div className="form-group" style={{marginTop:16,marginBottom:0}}>
+                  <label className="form-label">Display Name</label>
+                  <input className="form-input" value={profileForm.name}
+                    onChange={e=>setProfileForm(f=>({...f,name:e.target.value}))}
+                    placeholder="Your name"/>
+                </div>
+                <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+                  <button className="btn btn-primary btn-sm" disabled={profileBusy} onClick={handleUpdateName}>
+                    {profileBusy ? "Saving…" : "Save Name"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Change Password */}
+              <div className="profile-section">
+                <div className="profile-section-title">Change Password</div>
+                <div className="form-group">
+                  <label className="form-label">New Password</label>
+                  <input className="form-input" type="password" placeholder="••••••••"
+                    value={profileForm.newPassword}
+                    onChange={e=>setProfileForm(f=>({...f,newPassword:e.target.value}))}/>
+                  <div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>Minimum 6 characters</div>
+                </div>
+                <div className="form-group" style={{marginBottom:0}}>
+                  <label className="form-label">Confirm New Password</label>
+                  <input className="form-input" type="password" placeholder="••••••••"
+                    value={profileForm.confirmNewPassword}
+                    onChange={e=>setProfileForm(f=>({...f,confirmNewPassword:e.target.value}))}
+                    onKeyDown={e=>e.key==="Enter"&&handleChangePassword()}/>
+                </div>
+                <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+                  <button className="btn btn-primary btn-sm" disabled={profileBusy} onClick={handleChangePassword}>
+                    {profileBusy ? "Saving…" : "Update Password"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback message */}
+              {profileMsg && (
+                <div style={{
+                  padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,
+                  background: profileMsg.startsWith("✅") ? "rgba(30,122,69,0.08)" : "rgba(192,57,43,0.08)",
+                  border: profileMsg.startsWith("✅") ? "1px solid rgba(30,122,69,0.22)" : "1px solid rgba(192,57,43,0.22)",
+                  color: profileMsg.startsWith("✅") ? "var(--green)" : "var(--red)",
+                }}>
+                  {profileMsg}
+                </div>
+              )}
+
+              {/* Danger Zone */}
+              <div className="danger-zone">
+                <div className="danger-zone-title">⚠️ Danger Zone</div>
+                <div className="danger-zone-desc">
+                  Permanently delete your account and all associated data. This cannot be undone.
+                  If you own trips with other members, you will need to transfer ownership before proceeding.
+                </div>
+                <button className="btn btn-danger" onClick={()=>{setShowProfile(false);openDeleteAccount();}}>
+                  Delete My Account
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── DELETE ACCOUNT MODAL ── */}
+        {showDeleteAccount && (
+          <div className="modal-overlay" onClick={()=>{if(!deleteBusy){setShowDeleteAccount(false);setDeleteError("");}}}>
+            <div className="modal modal-lg" onClick={e=>e.stopPropagation()} style={{maxWidth:560}}>
+
+              {/* STEP: check — loading */}
+              {deleteStep==="check" && (
+                <div style={{textAlign:"center",padding:"32px 0"}}>
+                  <div style={{fontSize:32,marginBottom:12}}>⏳</div>
+                  <p style={{color:"var(--muted)",fontSize:14}}>Checking your trips…</p>
+                </div>
+              )}
+
+              {/* STEP: resolve — transfer or delete trips */}
+              {deleteStep==="resolve" && (
+                <>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                    <h3 style={{margin:0}}>Before you leave…</h3>
+                    <button className="btn btn-ghost btn-sm" onClick={()=>{setShowDeleteAccount(false);setDeleteError("");}}>✕</button>
+                  </div>
+                  <p style={{fontSize:13,color:"var(--muted)",marginBottom:24,lineHeight:1.6}}>
+                    You are the owner of the trips below. Please choose what to do with each one before your account is deleted.
+                  </p>
+                  {adminTrips.map(trip=>(
+                    <div key={trip.id} className="delete-trip-row">
+                      <div className="delete-trip-info">
+                        <div className="delete-trip-name">✈️ {trip.title}</div>
+                        <div className="delete-trip-meta">{trip.destination} · {trip.otherMembers.length} other member{trip.otherMembers.length!==1?"s":""}</div>
+                      </div>
+                      <div className="delete-trip-action">
+                        <select className="form-input" style={{fontSize:12,padding:"6px 10px"}}
+                          value={tripResolutions[trip.id]?.action||""}
+                          onChange={e=>{
+                            const action=e.target.value;
+                            setTripResolutions(r=>({...r,[trip.id]:{action,newOwnerId:""}}));
+                          }}>
+                          <option value="">Choose action…</option>
+                          <option value="transfer">Transfer ownership</option>
+                          <option value="delete">Delete trip</option>
+                        </select>
+                        {tripResolutions[trip.id]?.action==="transfer" && (
+                          <select className="form-input" style={{fontSize:12,padding:"6px 10px",marginTop:6}}
+                            value={tripResolutions[trip.id]?.newOwnerId||""}
+                            onChange={e=>setTripResolutions(r=>({...r,[trip.id]:{...r[trip.id],newOwnerId:e.target.value}}))}>
+                            <option value="">Select new owner…</option>
+                            {trip.otherMembers.map(m=>(
+                              <option key={m.user_id} value={m.user_id}>
+                                {m.profiles?.full_name || m.profiles?.email || m.user_id.slice(0,8)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                        {tripResolutions[trip.id]?.action==="delete" && (
+                          <div style={{fontSize:11,color:"var(--red)",marginTop:5,fontWeight:600}}>
+                            This trip and all its data will be permanently deleted.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  {deleteError && <div style={{color:"var(--red)",fontSize:13,marginTop:8,fontWeight:500}}>{deleteError}</div>}
+                  <div className="form-actions">
+                    <button className="btn btn-ghost" onClick={()=>{setShowDeleteAccount(false);setDeleteError("");}}>Cancel</button>
+                    <button className="btn btn-primary"
+                      disabled={adminTrips.some(t=>!tripResolutions[t.id]?.action||(tripResolutions[t.id]?.action==="transfer"&&!tripResolutions[t.id]?.newOwnerId))}
+                      onClick={()=>{setDeleteError("");setDeleteStep("confirm");}}>
+                      Continue →
+                    </button>
+                  </div>
+                </>
+              )}
+
+              {/* STEP: confirm — final confirmation */}
+              {deleteStep==="confirm" && (
+                <>
+                  <div style={{textAlign:"center",marginBottom:24}}>
+                    <div style={{fontSize:40,marginBottom:12}}>🗑️</div>
+                    <h3 style={{marginBottom:8}}>Delete your account?</h3>
+                    <p style={{fontSize:14,color:"var(--muted)",lineHeight:1.6}}>
+                      This will permanently delete your account, your profile, and remove you from all trips.
+                      This action <strong>cannot be undone</strong>.
+                    </p>
+                  </div>
+                  {deleteError && (
+                    <div style={{padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,
+                      background:"rgba(192,57,43,0.08)",border:"1px solid rgba(192,57,43,0.22)",color:"var(--red)"}}>
+                      {deleteError}
+                    </div>
+                  )}
+                  <div className="form-actions">
+                    <button className="btn btn-ghost" disabled={deleteBusy} onClick={()=>{setShowDeleteAccount(false);setDeleteError("");}}>Cancel</button>
+                    <button className="btn btn-danger" disabled={deleteBusy} onClick={handleDeleteAccount}
+                      style={{background:"var(--red)",color:"#fff",border:"none"}}>
+                      {deleteBusy ? "Deleting…" : "Yes, delete my account"}
+                    </button>
+                  </div>
+                </>
+              )}
+
+            </div>
+          </div>
+        )}
+
       </div>
     </>
   );
