@@ -5179,6 +5179,9 @@ export default function App() {
                     </button>
                 }
               </div>
+              <div style={{marginTop:16,fontSize:11,color:"var(--muted-light)",textAlign:"center",lineHeight:1.5}}>
+                🔒 We store your name and email to manage your account. We don't sell your data or share it with third parties.
+              </div>
             </div>
           </div>
         )}
