@@ -4121,19 +4121,32 @@ export default function App() {
       : [];
     setArchivedTripIds(myArchivedIds);
 
+    // Fetch trip IDs the user belongs to first, then load all members for each trip
+    const { data: memberRows } = await supabase
+      .from("trip_members")
+      .select("trip_id")
+      .eq("user_id", uid);
+    const myTripIds = (memberRows || []).map(r => r.trip_id);
+
+    if(!myTripIds.length) {
+      setTrips([DEMO_TRIP]);
+      setTripsLoading(false);
+      return;
+    }
+
     const { data, error } = await supabase
       .from("trips")
       .select(`
         id, title, destination, status, start_date, end_date, description,
         google_maps_url, country_info, expense_log, locked_votes, documents, activity_details,
-        trip_members!inner ( user_id, role, joined_at, profiles ( full_name ) ),
+        trip_members ( user_id, role, joined_at, profiles ( full_name ) ),
         item_activities ( id ),
         item_meals ( id ),
         item_transport ( id ),
         item_checkins ( id ),
         item_notes ( id )
       `)
-      .eq("trip_members.user_id", uid)
+      .in("id", myTripIds)
       .order("created_at", { ascending: false });
 
     if(error) { console.error("loadTrips:", error); setTripsLoading(false); return; }
