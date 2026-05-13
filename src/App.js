@@ -3096,7 +3096,7 @@ function CountryTab({trip,setTrip,db,authUserId}) {
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:2}}>
           <div>
             <h4 style={{fontFamily:"Inter",fontSize:17,fontWeight:700,margin:"0 0 3px",display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:20}}>🛫</span> Boarding Passes
+              <span style={{fontSize:20}}>🛫</span> Boarding Passes & Tickets
             </h4>
             <div style={{fontSize:12,color:"var(--muted)"}}>PDF only · visible to all trip members · max 5MB per file</div>
           </div>
