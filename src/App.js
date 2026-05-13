@@ -3854,7 +3854,7 @@ export default function App() {
       await supabase.from("notifications").delete().eq("user_id", authUser.id);
       await supabase.from("profiles").delete().eq("id", authUser.id);
       // 3. Delete auth account
-      await supabase.auth.admin?.deleteUser?.(authUser.id);
+      await supabase.functions.invoke("delete-user");
       // 4. Sign out (works even if admin delete isn't available on client)
       await supabase.auth.signOut();
       setShowDeleteAccount(false);
