@@ -3618,7 +3618,7 @@ export default function App() {
   // ── Auth modal state ──
   const [showLogin,setShowLogin]   = useState(false);
   const [authMode,setAuthMode]     = useState("login"); // "login" | "signup" | "forgot"
-  const [loginForm,setLoginForm]   = useState({name:"",email:"",password:"",confirmPassword:""});
+  const [loginForm,setLoginForm]   = useState({name:"",email:"",password:"",confirmPassword:"",confirmEmail:""});
   const [authError,setAuthError]   = useState("");
   const [authBusy,setAuthBusy]     = useState(false);
 
@@ -3685,6 +3685,8 @@ export default function App() {
     setAuthError("");
     if(!loginForm.name.trim()) { setAuthError("Please enter your name."); return; }
     if(!loginForm.email.trim()) { setAuthError("Please enter your email."); return; }
+    if(!loginForm.confirmEmail.trim()) { setAuthError("Please confirm your email address."); return; }
+    if(loginForm.email.trim().toLowerCase() !== loginForm.confirmEmail.trim().toLowerCase()) { setAuthError("Email addresses do not match. Please type both manually."); return; }
     if(loginForm.password.length < 6) { setAuthError("Password must be at least 6 characters."); return; }
     if(loginForm.password !== loginForm.confirmPassword) { setAuthError("Passwords do not match."); return; }
     setAuthBusy(true);
@@ -3734,7 +3736,7 @@ export default function App() {
     }
     // onAuthStateChange will fire and set authUser — no manual setAuthUser needed here
     setShowLogin(false);
-    setLoginForm({name:"",email:"",password:"",confirmPassword:""});
+    setLoginForm({name:"",email:"",password:"",confirmPassword:"",confirmEmail:""});
     setPage("dashboard");
   };
 
@@ -5062,6 +5064,7 @@ export default function App() {
               <h3 style={{marginBottom:20}}>{authMode==="login"?"Welcome back 👋":"Join TripSync ✦"}</h3>
               {authMode==="signup"&&<div className="form-group"><label className="form-label">Your Name</label><input className="form-input" placeholder="e.g. Maria" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/></div>}
               <div className="form-group"><label className="form-label">Email</label><input className="form-input" type="email" placeholder="you@email.com" value={loginForm.email} onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}/></div>
+              {authMode==="signup"&&<div className="form-group"><label className="form-label">Confirm Email</label><input className="form-input" type="email" placeholder="you@email.com" value={loginForm.confirmEmail} onChange={e=>setLoginForm(f=>({...f,confirmEmail:e.target.value}))} onPaste={e=>e.preventDefault()}/><div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>✍️ Please type your email again — do not copy and paste.</div></div>}
               <div className="form-group"><label className="form-label">Password</label><input className="form-input" type="password" placeholder="••••••••" value={loginForm.password} onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}/></div>
               {authMode==="signup"&&<div className="form-group"><label className="form-label">Confirm Password</label><input className="form-input" type="password" placeholder="••••••••" value={loginForm.confirmPassword} onChange={e=>setLoginForm(f=>({...f,confirmPassword:e.target.value}))}/></div>}
               {authError&&<div style={{padding:"10px 14px",borderRadius:9,marginBottom:16,fontSize:13,background:authError.startsWith("✅")?"rgba(52,211,153,0.1)":"rgba(248,113,113,0.1)",border:authError.startsWith("✅")?"1px solid rgba(52,211,153,0.3)":"1px solid rgba(248,113,113,0.3)",color:authError.startsWith("✅")?"var(--green)":"var(--red)"}}>{authError}</div>}
@@ -5239,7 +5242,7 @@ export default function App() {
         {showNew && <NewTripModal onClose={()=>setShowNew(false)} onCreate={createTrip} user={user}/>}
 
         {showLogin && (
-          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});setAuthMode("login");}}>
+          <div className="modal-overlay" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:"",confirmEmail:""});setAuthMode("login");}}>
             <div className="modal" onClick={e=>e.stopPropagation()}>
               {/* Tab toggle: Sign In / Sign Up */}
               <div style={{display:"flex",gap:4,marginBottom:24,background:"var(--surface2)",borderRadius:10,padding:4}}>
@@ -5284,6 +5287,19 @@ export default function App() {
                   </div>
                 )}
               </div>
+
+              {authMode==="signup" && (
+                <div className="form-group">
+                  <label className="form-label">Confirm Email</label>
+                  <input className="form-input" type="email" placeholder="you@email.com"
+                    value={loginForm.confirmEmail}
+                    onChange={e=>setLoginForm(f=>({...f,confirmEmail:e.target.value}))}
+                    onPaste={e=>e.preventDefault()}/>
+                  <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>
+                    ✍️ Please type your email again — do not copy and paste.
+                  </div>
+                </div>
+              )}
 
               {(authMode==="login"||authMode==="signup") && (
                 <div className="form-group">
@@ -5336,7 +5352,7 @@ export default function App() {
               )}
 
               <div className="form-actions">
-                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:""});setAuthMode("login");}}>Cancel</button>
+                <button className="btn btn-ghost" onClick={()=>{setShowLogin(false);setAuthError("");setLoginForm({name:"",email:"",password:"",confirmPassword:"",confirmEmail:""});setAuthMode("login");}}>Cancel</button>
                 {authMode==="forgot"
                   ? <button className="btn btn-primary" disabled={authBusy} onClick={handleForgotPassword}>
                       {authBusy ? "Sending…" : "Send Reset Link →"}
