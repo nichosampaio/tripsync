@@ -639,6 +639,8 @@ function SingleDatePicker({value,onChange,minDate,maxDate,placeholder,hasErr}) {
 // ─── UNIVERSAL EDIT MODAL ──────────────────────────────────────────────────────
 function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
   const tripDays = useMemo(()=>buildTripDays(trip.startDate,trip.endDate),[trip]);
+  const isCheckinItem = item.metadata?.isCheckin !== false;
+  const [hotelEditMode, setHotelEditMode] = useState(isCheckinItem ? "checkIn" : "checkOut");
   const [form, setForm] = useState({
     type:        item.type,
     title:       item.title,
@@ -652,6 +654,8 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
     notes:       item.metadata?.notes || "",
     checkIn:     item.metadata?.checkIn || "",
     checkOut:    item.metadata?.checkOut || "",
+    checkInTime:  item.metadata?.checkInTime || "",
+    checkOutTime: item.metadata?.checkOutTime || "",
     transportationTime: String(item.metadata?.transportationTime || ""),
     travelTimeFromPrev: String(item.metadata?.travelTimeFromPrev || ""),
   });
@@ -686,9 +690,11 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
       metadata: {
         ...item.metadata,
         description: form.description, notes: form.notes,
-        isCheckin: form.isCheckin !== false,
-        checkIn: form.isCheckin!==false ? (form.checkIn||null) : null,
-        checkOut: form.isCheckin===false ? (form.checkOut||null) : null,
+        isCheckin: hotelEditMode === "checkIn",
+        checkIn: hotelEditMode==="checkIn" ? (form.checkIn||null) : null,
+        checkOut: hotelEditMode==="checkOut" ? (form.checkOut||null) : null,
+        checkInTime: hotelEditMode==="checkIn" ? (form.checkInTime||null) : null,
+        checkOutTime: hotelEditMode==="checkOut" ? (form.checkOutTime||null) : null,
         transportationTime: form.transportationTime?+form.transportationTime:"",
         travelTimeFromPrev: form.travelTimeFromPrev?+form.travelTimeFromPrev:0,
       }
@@ -723,19 +729,19 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
           <input {...F("title")} placeholder="e.g. Snorkeling at Reef"/>
           {errs.title&&<div className="err-msg">{errs.title}</div>}
         </div>
-        <div className="form-row">
-          <div className="form-group">
-            <label className="form-label">Day</label>
-            <select {...F("day")} className="form-input">
-              <option value="">— Unscheduled —</option>
-              {tripDays.map((ymd,i)=>{
-                const d=fromYMD(ymd);
-                const dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
-                return <option key={ymd} value={ymd}>Day {i+1} · {dow} {MONTHS[d.getMonth()].slice(0,3)} {d.getDate()}</option>;
-              })}
-            </select>
-          </div>
-          {form.type !== "hotel" && (
+        {form.type !== "hotel" && (
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Day</label>
+              <select {...F("day")} className="form-input">
+                <option value="">— Unscheduled —</option>
+                {tripDays.map((ymd,i)=>{
+                  const d=fromYMD(ymd);
+                  const dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+                  return <option key={ymd} value={ymd}>Day {i+1} · {dow} {MONTHS[d.getMonth()].slice(0,3)} {d.getDate()}</option>;
+                })}
+              </select>
+            </div>
             <div className="form-group">
               <label className="form-label">Repeat for # of days</label>
               <input className="form-input" type="number" min="1" max="30"
@@ -744,63 +750,74 @@ function UniversalEditModal({ item, trip, setTrip, onClose, db }) {
                 placeholder="1"/>
               <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Set to 2+ to add this activity on consecutive days starting from the selected day above</div>
             </div>
-          )}
-          {form.type !== "hotel" && (
             <div className="form-group">
               <label className="form-label">Start Time</label>
               <TimePicker value={form.startTime} onChange={v=>setForm(f=>({...f,startTime:v}))}/>
             </div>
-          )}
-        </div>
-        <div className="form-row">
-          {form.type !== "hotel" && (
+          </div>
+        )}
+        {form.type !== "hotel" && (
+          <div className="form-row">
             <div className="form-group">
               <label className="form-label">Duration (minutes)</label>
               <input {...F("durationMin")} placeholder="e.g. 90"/>
               {errs.durationMin&&<div className="err-msg">{errs.durationMin}</div>}
             </div>
-          )}
-          <div className="form-group">
-            <label className="form-label">Price (USD)</label>
-            <input {...F("price")} placeholder="e.g. 45"/>
-            {errs.price&&<div className="err-msg">{errs.price}</div>}
-          </div>
-          <div className="form-group">
-            <label className="form-label">Price Type</label>
-            <div style={{display:"flex",gap:6,marginTop:2}}>
-              <button type="button"
-                className={`type-tab ${form.priceType==="flat"?"active":""}`}
-                onClick={()=>setForm(f=>({...f,priceType:"flat"}))}>
-                👥 Whole Group
-              </button>
-              <button type="button"
-                className={`type-tab ${form.priceType==="per_person"?"active":""}`}
-                onClick={()=>setForm(f=>({...f,priceType:"per_person"}))}>
-                🧍 Per Person
-              </button>
+            <div className="form-group">
+              <label className="form-label">Price (USD)</label>
+              <input {...F("price")} placeholder="e.g. 45"/>
+              {errs.price&&<div className="err-msg">{errs.price}</div>}
             </div>
-            <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>
-              {form.priceType==="per_person"
-                ? `Price will be multiplied by the number of members in the trip.`
-                : `Price is a single flat cost split equally across all members.`}
+            <div className="form-group">
+              <label className="form-label">Price Type</label>
+              <div style={{display:"flex",gap:6,marginTop:2}}>
+                <button type="button"
+                  className={`type-tab ${form.priceType==="flat"?"active":""}`}
+                  onClick={()=>setForm(f=>({...f,priceType:"flat"}))}>
+                  👥 Whole Group
+                </button>
+                <button type="button"
+                  className={`type-tab ${form.priceType==="per_person"?"active":""}`}
+                  onClick={()=>setForm(f=>({...f,priceType:"per_person"}))}>
+                  🧍 Per Person
+                </button>
+              </div>
+              <div style={{fontSize:12,color:"var(--muted)",marginTop:5}}>
+                {form.priceType==="per_person"
+                  ? `Price will be multiplied by the number of members in the trip.`
+                  : `Price is a single flat cost split equally across all members.`}
+              </div>
             </div>
           </div>
-        </div>
+        )}
         <div className="form-group">
           <label className="form-label">Location</label>
           <input {...F("location")} placeholder="e.g. Cancun, Mexico"/>
         </div>
         {form.type==="hotel" && (
-          <div className="form-row">
-            <div className="form-group">
-              <label className="form-label">Check-In</label>
-              <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))}
-                minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Check-in"/>
+          <div className="form-row" style={{alignItems:"flex-end"}}>
+            <div className="form-group" style={{flex:"0 0 auto"}}>
+              <label className="form-label">Type</label>
+              <div style={{display:"flex",gap:6}}>
+                <button type="button" className={`type-tab ${hotelEditMode==="checkIn"?"active":""}`} onClick={()=>setHotelEditMode("checkIn")}>🏨 Check-In</button>
+                <button type="button" className={`type-tab ${hotelEditMode==="checkOut"?"active":""}`} onClick={()=>setHotelEditMode("checkOut")}>🚪 Check-Out</button>
+              </div>
             </div>
             <div className="form-group">
-              <label className="form-label">Check-Out</label>
-              <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))}
-                minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Check-out"/>
+              <label className="form-label">{hotelEditMode==="checkIn"?"Check-In Date":"Check-Out Date"}</label>
+              {hotelEditMode==="checkIn"
+                ? <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))} minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Select date"/>
+                : <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))} minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Select date"/>
+              }
+            </div>
+            <div className="form-group">
+              <label className="form-label">{hotelEditMode==="checkIn"?"Check-In Time":"Check-Out Time"}</label>
+              <input
+                className="form-input"
+                type="time"
+                value={hotelEditMode==="checkIn"?(form.checkInTime||""):(form.checkOutTime||"")}
+                onChange={e=>setForm(f=>hotelEditMode==="checkIn"?{...f,checkInTime:e.target.value}:{...f,checkOutTime:e.target.value})}
+              />
             </div>
           </div>
         )}
