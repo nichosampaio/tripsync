@@ -1398,7 +1398,7 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
       durationMin:+form.durationMin||60, location:form.location,
       price:form.price?+form.price:0,
       priceType:form.priceType||"flat",
-      metadata:{description:form.description,notes:form.notes,isCheckin:hotelMode==="checkIn",checkIn:hotelMode==="checkIn"?(form.checkIn||null):null,checkOut:hotelMode==="checkOut"?(form.checkOut||null):null,transportationTime:form.transportationTime||"",travelTimeFromPrev:form.travelTimeFromPrev||0,upvotes:[],downvotes:[],createdBy:authUserId||user}
+      metadata:{description:form.description,notes:form.notes,isCheckin:hotelMode==="checkIn",checkIn:hotelMode==="checkIn"?(form.checkIn||null):null,checkOut:hotelMode==="checkOut"?(form.checkOut||null):null,checkInTime:hotelMode==="checkIn"?(form.checkInTime||null):null,checkOutTime:hotelMode==="checkOut"?(form.checkOutTime||null):null,transportationTime:form.transportationTime||"",travelTimeFromPrev:form.travelTimeFromPrev||0,upvotes:[],downvotes:[],createdBy:authUserId||user}
     };
     // Build list of days to repeat across
     const savedItems = [];
@@ -1485,22 +1485,34 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
           )}
 
           {form.type==="hotel" && (
-            <div className="form-row" style={{alignItems:"flex-end"}}>
-              <div className="form-group" style={{flex:"0 0 auto"}}>
-                <label className="form-label">Type</label>
-                <div style={{display:"flex",gap:6}}>
-                  <button type="button" className={`type-tab ${hotelMode==="checkIn"?"active":""}`} onClick={()=>setHotelMode("checkIn")}>🏨 Check-In</button>
-                  <button type="button" className={`type-tab ${hotelMode==="checkOut"?"active":""}`} onClick={()=>setHotelMode("checkOut")}>🚪 Check-Out</button>
+            <>
+              <div className="form-row" style={{alignItems:"flex-end"}}>
+                <div className="form-group" style={{flex:"0 0 auto"}}>
+                  <label className="form-label">Type</label>
+                  <div style={{display:"flex",gap:6}}>
+                    <button type="button" className={`type-tab ${hotelMode==="checkIn"?"active":""}`} onClick={()=>setHotelMode("checkIn")}>🏨 Check-In</button>
+                    <button type="button" className={`type-tab ${hotelMode==="checkOut"?"active":""}`} onClick={()=>setHotelMode("checkOut")}>🚪 Check-Out</button>
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{hotelMode==="checkIn"?"Check-In Date":"Check-Out Date"}</label>
+                  {hotelMode==="checkIn"
+                    ? <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))} minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Select date"/>
+                    : <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))} minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Select date"/>
+                  }
+                </div>
+                <div className="form-group">
+                  <label className="form-label">{hotelMode==="checkIn"?"Check-In Time":"Check-Out Time"}</label>
+                  <input
+                    className="form-input"
+                    type="time"
+                    value={hotelMode==="checkIn"?(form.checkInTime||""):(form.checkOutTime||"")}
+                    onChange={e=>setForm(f=>hotelMode==="checkIn"?{...f,checkInTime:e.target.value}:{...f,checkOutTime:e.target.value})}
+                    placeholder={hotelMode==="checkIn"?"e.g. 15:00":"e.g. 11:00"}
+                  />
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label">{hotelMode==="checkIn"?"Check-In Date":"Check-Out Date"}</label>
-                {hotelMode==="checkIn"
-                  ? <SingleDatePicker value={form.checkIn||null} onChange={v=>setForm(f=>({...f,checkIn:v||""}))} minDate={trip.startDate||null} maxDate={trip.endDate||null} placeholder="Select date"/>
-                  : <SingleDatePicker value={form.checkOut||null} onChange={v=>setForm(f=>({...f,checkOut:v||""}))} minDate={form.checkIn||null} maxDate={trip.endDate||null} placeholder="Select date"/>
-                }
-              </div>
-            </div>
+            </>
           )}
 
           {/* Description — activity and meal only */}
@@ -3271,54 +3283,6 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
         })}
       </div>
 
-      {/* ── Invite by Email ── */}
-      <div className="invite-panel" style={{marginTop:22}}>
-        <h5>✉️ Invite by Email</h5>
-        {members.length >= 10 && (
-          <div style={{display:"flex",alignItems:"flex-start",gap:8,background:"rgba(196,124,10,0.08)",border:"1px solid rgba(196,124,10,0.22)",borderRadius:10,padding:"10px 13px",marginBottom:12}}>
-            <span style={{fontSize:16,flexShrink:0}}>💡</span>
-            <p style={{fontSize:13,color:"var(--yellow)",margin:0,lineHeight:1.5}}>
-              <strong>Large groups can be harder to coordinate</strong> — TripSync works best for groups under 10. You can still invite more, but decisions may take longer to reach consensus.
-            </p>
-          </div>
-        )}
-        <p style={{fontSize:13,color:"var(--muted)",marginBottom:12,lineHeight:1.5}}>Invited members can join the trip immediately from their home page.</p>
-        <div style={{display:"flex",gap:8,marginBottom:4}}>
-          <input
-            className={`form-input${emailErr?" err":""}`}
-            style={{flex:1}}
-            placeholder="friend@email.com"
-            value={emailInput}
-            onChange={e=>{setEmailInput(e.target.value);setEmailErr("");}}
-            onKeyDown={e=>e.key==="Enter"&&sendInvite()}
-          />
-          <button className="btn btn-primary btn-sm" onClick={sendInvite} disabled={sendingInvite}>
-            {sendingInvite?"Sending…":"Send Invite"}
-          </button>
-        </div>
-        {emailErr && <div className="err-msg">{emailErr}</div>}
-        {inviteSuccess && <div style={{fontSize:12,color:"var(--green)",fontWeight:600,marginTop:4}}>✓ {inviteSuccess}</div>}
-        {invitedEmails.length > 0 && (
-          <div style={{marginTop:12}}>
-            {invitedEmails.map(inv => (
-              <div key={inv.id} className="invite-sent-row">
-                <span className="invite-sent-email">
-                  <span style={{fontSize:14}}>✉️</span> {inv.email}
-                </span>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  <span className={`invite-sent-status ${inv.status==="joined"?"invite-status-joined":"invite-status-pending"}`}>
-                    {inv.status==="joined"?"✓ Joined":"Pending"}
-                  </span>
-                  {inv.status!=="joined" && (
-                    <button className="ci-btn del" onClick={()=>removeInvite(inv.id)} title="Cancel invite">✕</button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
       {/* ── Share Link ── */}
       <div className="invite-panel" style={{marginTop:12}}>
         <h5>🔗 Share Trip Link</h5>
@@ -4436,13 +4400,15 @@ export default function App() {
     // hotel (check in/out) — no start_time column in item_checkins
     if(item.type === "hotel") {
       return {
-        title:      item.title,
-        location:   item.location || "",
-        is_checkin: item.metadata?.isCheckin !== false, // true=check-in, false=check-out
-        date:       item.metadata?.checkIn || item.metadata?.checkOut || null,
-        notes:      item.metadata?.notes || "",
-        upvotes:    item.metadata?.upvotes || [],
-        downvotes:  item.metadata?.downvotes || [],
+        title:          item.title,
+        location:       item.location || "",
+        is_checkin:     item.metadata?.isCheckin !== false,
+        date:           item.metadata?.checkIn || item.metadata?.checkOut || null,
+        check_in_time:  item.metadata?.checkInTime || null,
+        check_out_time: item.metadata?.checkOutTime || null,
+        notes:          item.metadata?.notes || "",
+        upvotes:        item.metadata?.upvotes || [],
+        downvotes:      item.metadata?.downvotes || [],
         ...tripIdField, ...createdBy,
       };
     }
@@ -4485,6 +4451,8 @@ export default function App() {
       isCheckin:          row.is_checkin !== false,
       checkIn:            row.is_checkin !== false ? (row.date || null) : null,
       checkOut:           row.is_checkin === false ? (row.date || null) : null,
+      checkInTime:        row.check_in_time || null,
+      checkOutTime:       row.check_out_time || null,
       transportationTime: row.transportation_time ? String(row.transportation_time) : "",
       travelTimeFromPrev: row.travel_time_from_prev || 0,
     },
