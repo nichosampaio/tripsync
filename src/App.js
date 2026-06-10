@@ -3161,12 +3161,17 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
 
 // ─── SUMMARY TAB ─────────────────────────────────────────────────────────────
 function SummaryTab({trip, onNavigate, userName}) {
+  // Mirror BudgetTab's cost math exactly so the Overview total matches the Budget tab.
+  const memberCount = (trip.members || []).length || 1;
+  const effectiveCost = ci => (ci.price || 0) * (ci.priceType === "per_person" ? memberCount : 1);
+  const PRICED_TYPES = ["activity","meal","transport","note"];
+
   const exportPDF = () => {
     const members = (trip.tripMembers||trip.members||[]).map(m=>m.name||m).join(", ");
-    const totalBudget = (trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)
+    const totalBudget = (trip.calendarItems||[]).filter(c=>PRICED_TYPES.includes(c.type)).reduce((s,c)=>s+effectiveCost(c),0)
       + calcAllAccomTotal(trip.accommodationOptions||[])
       + calcAllVehicleTotal(trip.vehicleRentals||[]);
-    const perPerson = Math.ceil(totalBudget / ((trip.tripMembers||trip.members||[]).length||1));
+    const perPerson = Math.ceil(totalBudget / memberCount);
 
     const accent = "#c96a28";
     const muted  = "#888";
@@ -3276,7 +3281,7 @@ function SummaryTab({trip, onNavigate, userName}) {
   )[0];
   const nights=nightsBetween(trip.startDate,trip.endDate);
   const items=trip.calendarItems||[];
-  const ciTotal=items.reduce((s,c)=>s+(c.price||0),0);
+  const ciTotal=items.filter(c=>PRICED_TYPES.includes(c.type)).reduce((s,c)=>s+effectiveCost(c),0);
   const accomTotal=calcAllAccomTotal(trip.accommodationOptions||[]);
   const vehicleTotal=calcAllVehicleTotal(trip.vehicleRentals||[]);
   const grandTotal=ciTotal+accomTotal+vehicleTotal;
@@ -3303,7 +3308,6 @@ function SummaryTab({trip, onNavigate, userName}) {
     .sort((a,b)=> a.day<b.day?-1 : a.day>b.day?1 : ((a.startMin??1e9)-(b.startMin??1e9)))[0];
   const upTime = upcoming ? (upcoming.startTime || (upcoming.startMin!=null ? minToTimeStr(upcoming.startMin) : "")) : "";
   const myBudget = userName ? ((trip.personalBudgets||{})[userName] ?? null) : null;
-  const memberCount = (trip.tripMembers||trip.members||[]).length;
   const perPerson = Math.ceil(grandTotal / (memberCount||1));
   const isFresh = items.length===0 && (trip.accommodationOptions||[]).length===0 && (trip.vehicleRentals||[]).length===0;
 
