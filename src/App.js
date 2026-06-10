@@ -497,7 +497,32 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
   .section-tabs::-webkit-scrollbar { display:none; }
   /* keep scrollable content clear of the home indicator */
   .dashboard, .trip-detail, .profile-page { padding-bottom:calc(28px + env(safe-area-inset-bottom)); }
-}`
+  /* edge-fade signals the tab row scrolls */
+  .section-tabs { -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%); mask-image:linear-gradient(90deg,transparent 0,#000 18px,#000 calc(100% - 18px),transparent 100%); }
+}
+
+/* ─── TAB GROUPS (launch-prep) ───────────────────────── */
+.section-tab-sep { flex:0 0 auto; align-self:center; width:1px; height:15px; background:var(--border-strong); margin:0 9px; }
+
+/* ─── TRIP OVERVIEW (home base) ──────────────────────── */
+.ov-hero { display:flex; align-items:center; gap:16px; background:linear-gradient(135deg,var(--accent-soft),transparent 70%); border:1px solid var(--border); border-radius:var(--r-lg); padding:18px 22px; margin-bottom:16px; }
+.ov-hero-count { font-family:'Playfair Display',Georgia,serif; font-size:30px; font-weight:700; color:var(--accent); line-height:1; flex-shrink:0; }
+.ov-hero-text h3 { font-size:17px; font-weight:700; letter-spacing:-0.3px; color:var(--text); }
+.ov-hero-text p { font-size:13px; color:var(--muted); margin-top:3px; }
+.ov-tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(178px,1fr)); gap:12px; }
+.ov-tile { text-align:left; font-family:inherit; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:15px 16px; cursor:pointer; transition:transform 0.16s,box-shadow 0.16s,border-color 0.16s; box-shadow:var(--shadow-xs); display:flex; flex-direction:column; gap:5px; min-height:104px; }
+.ov-tile:hover { border-color:var(--border-strong); box-shadow:var(--shadow-sm); transform:translateY(-1px); }
+.ov-tile-label { font-size:10.5px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; display:flex; align-items:center; gap:6px; }
+.ov-tile-value { font-size:21px; font-weight:700; color:var(--text); letter-spacing:-0.5px; line-height:1.1; }
+.ov-tile-sub { font-size:12px; color:var(--muted); }
+.ov-tile-go { font-size:11.5px; font-weight:600; color:var(--accent); margin-top:auto; }
+.ov-next { width:100%; text-align:left; font-family:inherit; background:var(--surface); border:1px solid var(--border); border-radius:var(--r-md); padding:16px 18px; margin-top:12px; cursor:pointer; transition:box-shadow 0.16s,border-color 0.16s; box-shadow:var(--shadow-xs); display:flex; align-items:center; gap:14px; }
+.ov-next:hover { border-color:var(--border-strong); box-shadow:var(--shadow-sm); }
+.ov-next-icon { width:42px; height:42px; border-radius:11px; background:var(--accent-soft); display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
+.ov-fresh { text-align:center; padding:30px 24px 8px; }
+.ov-fresh h3 { font-family:'Playfair Display',Georgia,serif; font-size:24px; font-weight:700; color:var(--text); letter-spacing:-0.4px; }
+.ov-fresh p { font-size:14px; color:var(--muted); margin:8px auto 20px; max-width:380px; line-height:1.55; }
+.ov-fresh-actions { display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }`
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_ABR = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -3135,7 +3160,7 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
 }
 
 // ─── SUMMARY TAB ─────────────────────────────────────────────────────────────
-function SummaryTab({trip}) {
+function SummaryTab({trip, onNavigate, userName}) {
   const exportPDF = () => {
     const members = (trip.tripMembers||trip.members||[]).map(m=>m.name||m).join(", ");
     const totalBudget = (trip.calendarItems||[]).reduce((s,c)=>s+(c.price||0),0)
@@ -3256,11 +3281,37 @@ function SummaryTab({trip}) {
   const vehicleTotal=calcAllVehicleTotal(trip.vehicleRentals||[]);
   const grandTotal=ciTotal+accomTotal+vehicleTotal;
   const VTYPE={car:"🚗",suv:"🚙",van:"🚐",motorcycle:"🏍️",scooter:"🛵",bus:"🚌"};
+  const todayY = toYMD(new Date());
+  const daysToStart = trip.startDate ? nightsBetween(todayY, trip.startDate) : null;
+  const started = trip.startDate && trip.startDate <= todayY;
+  const ended = trip.endDate && trip.endDate < todayY;
+  const countdown = !trip.startDate ? null
+    : ended ? "Trip complete"
+    : started ? "Happening now"
+    : daysToStart === 0 ? "Starts today"
+    : `${daysToStart} ${daysToStart===1?"day":"days"} to go`;
+  const locked = trip.lockedVotes || {};
+  const decisionCats = [
+    {key:"destinations",   has:(trip.destinations||[]).length>0},
+    {key:"accommodations", has:(trip.accommodationOptions||[]).length>0},
+    {key:"vehicles",       has:(trip.vehicleRentals||[]).length>0},
+  ].filter(c=>c.has);
+  const decidedCount = decisionCats.filter(c=>locked[c.key]).length;
+  const openCount = decisionCats.length - decidedCount;
+  const upcoming = (trip.calendarItems||[])
+    .filter(c=>c.day && c.day>=todayY && c.type!=="note")
+    .sort((a,b)=> a.day<b.day?-1 : a.day>b.day?1 : ((a.startMin??1e9)-(b.startMin??1e9)))[0];
+  const upTime = upcoming ? (upcoming.startTime || (upcoming.startMin!=null ? minToTimeStr(upcoming.startMin) : "")) : "";
+  const myBudget = userName ? ((trip.personalBudgets||{})[userName] ?? null) : null;
+  const memberCount = (trip.tripMembers||trip.members||[]).length;
+  const perPerson = Math.ceil(grandTotal / (memberCount||1));
+  const isFresh = items.length===0 && (trip.accommodationOptions||[]).length===0 && (trip.vehicleRentals||[]).length===0;
+
   return (
-    <div className="summary-card">
-      <div className="flex-between" style={{marginBottom:6}}>
+    <div>
+      <div className="flex-between" style={{marginBottom:16,flexWrap:"wrap",gap:10}}>
         <div>
-          <p style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Final Trip Summary</p>
+          <p style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1,marginBottom:3}}>Overview</p>
           <h3 className="summary-title">{trip.name}</h3>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center"}}>
@@ -3268,16 +3319,72 @@ function SummaryTab({trip}) {
           <span className={`badge ${trip.status==="confirmed"?"badge-green":"badge-yellow"}`}>{trip.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
         </div>
       </div>
-      <div className="summary-grid">
-        <div className="summary-item"><label>📍 Destination</label><div className="val">{topDest?.name}</div></div>
-        <div className="summary-item"><label>📅 Dates</label><div className="val" style={{fontSize:14}}>{fmtRange(trip.startDate,trip.endDate)}</div>{nights>0&&<div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>{nights} nights</div>}</div>
-        <div className="summary-item"><label>💰 Total Cost</label><div className="val">${grandTotal.toLocaleString()}</div><div className="text-sm" style={{color:"var(--muted)",marginTop:4}}>${Math.ceil(grandTotal/(trip.members.length||1))}/person</div></div>
-        <div className="summary-item"><label>🎯 Items Planned</label><div className="val">{items.length}</div></div>
-      </div>
-      {trip.accommodationOptions?.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🏨 Accommodations</label><div className="tag-wrap">{trip.accommodationOptions.map(a=><span key={a.id} className="tag" style={{background:"rgba(129,140,248,0.08)",borderColor:"rgba(74,111,165,0.22)",color:"#4a6fa5"}}>{a.name}{a.priceType==="full"&&a.totalPrice?` · $${parseFloat(a.totalPrice).toLocaleString()} full`:a.pricePerNight?` · $${a.pricePerNight}/night`:""}{a.priceType!=="full"&&calcAccomNights(a)>0?` × ${calcAccomNights(a)}n`:""}{calcAccomTotal(a)>0?` = $${calcAccomTotal(a).toLocaleString()}`:""}</span>)}</div></div>}
-      {(trip.vehicleRentals||[]).length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🚗 Vehicle Rentals</label><div className="tag-wrap">{(trip.vehicleRentals||[]).map(v=>{const ppd=parseFloat(v.price||v.pricePerDay)||0;const days=calcVehicleDays(v);const tot=calcVehicleTotal(v);return(<span key={v.id} className="tag" style={{borderColor:"rgba(249,115,22,0.25)",color:"#f97316",background:"rgba(249,115,22,0.08)"}}>{VTYPE[v.vehicleType]||"🚗"} {v.company}{v.model?` — ${v.model}`:""}{v.priceType==="full"&&ppd>0?` · $${ppd} full`:ppd>0&&days>0?` · $${ppd}/day × ${days}d = $${tot.toLocaleString()}`:ppd>0?` · $${ppd}/day`:""}</span>);})}</div></div>}
-      {items.length>0&&<div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>🎯 All Items</label><div className="tag-wrap">{items.map(c=><span key={c.id} className="tag">{TYPE_META[c.type]?.icon} {c.title}{c.price>0?` · $${c.price}${c.priceType==="per_person"?"/person":" total"}`:""}</span>)}</div></div>}
-      <div className="mt-6"><label style={{fontSize:11,color:"var(--muted)",textTransform:"uppercase",letterSpacing:1}}>👥 Members</label><div className="members-row mt-2">{trip.members.map(m=><span key={m} className="member-chip">{m}</span>)}</div></div>
+
+      {isFresh ? (
+        <div className="ov-fresh">
+          <h3>Let's plan {trip.name}</h3>
+          <p>{countdown ? `${countdown} · ${fmtRange(trip.startDate,trip.endDate)}. ` : ""}Add a first stop and invite your group — everything syncs live as you go.</p>
+          <div className="ov-fresh-actions">
+            {!trip.startDate && <button className="btn btn-primary" onClick={()=>onNavigate&&onNavigate("info")}>📅 Set dates</button>}
+            <button className={`btn ${trip.startDate?"btn-primary":"btn-ghost"}`} onClick={()=>onNavigate&&onNavigate("schedule")}>📍 Add first stop</button>
+            <button className="btn btn-ghost" onClick={()=>onNavigate&&onNavigate("members")}>👥 Invite people</button>
+          </div>
+        </div>
+      ) : (
+      <>
+        {countdown && (
+          <div className="ov-hero">
+            <div className="ov-hero-count">{started&&!ended ? "🎒" : ended ? "✓" : daysToStart}</div>
+            <div className="ov-hero-text">
+              <h3>{countdown}</h3>
+              <p>{fmtRange(trip.startDate,trip.endDate)}{nights>0?` · ${nights} ${nights===1?"night":"nights"}`:""}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="ov-tiles">
+          <button className="ov-tile" onClick={()=>onNavigate&&onNavigate("schedule")}>
+            <span className="ov-tile-label">📅 Schedule</span>
+            <span className="ov-tile-value">{items.length}</span>
+            <span className="ov-tile-sub">{items.length===1?"item planned":"items planned"}</span>
+            <span className="ov-tile-go">Open schedule →</span>
+          </button>
+          <button className="ov-tile" onClick={()=>onNavigate&&onNavigate("voting")}>
+            <span className="ov-tile-label">🗳️ Decisions</span>
+            <span className="ov-tile-value">{openCount} open</span>
+            <span className="ov-tile-sub">{decisionCats.length===0?"nothing to vote on yet":`${decidedCount} decided`}</span>
+            <span className="ov-tile-go">Review votes →</span>
+          </button>
+          <button className="ov-tile" onClick={()=>onNavigate&&onNavigate("budget")}>
+            <span className="ov-tile-label">💰 Estimated cost</span>
+            <span className="ov-tile-value">${grandTotal.toLocaleString()}</span>
+            <span className="ov-tile-sub">{memberCount>1?`$${perPerson.toLocaleString()}/person`:"total"}{myBudget!=null?` · your budget $${Number(myBudget).toLocaleString()}`:""}</span>
+            <span className="ov-tile-go">Open budget →</span>
+          </button>
+          <button className="ov-tile" onClick={()=>onNavigate&&onNavigate("members")}>
+            <span className="ov-tile-label">👥 Travelers</span>
+            <span className="ov-tile-value">{memberCount}</span>
+            <span className="ov-tile-sub">{memberCount===1?"just you so far":"on this trip"}</span>
+            <span className="ov-tile-go">{memberCount===1?"Invite people →":"Manage group →"}</span>
+          </button>
+        </div>
+
+        <button className="ov-next" onClick={()=>onNavigate&&onNavigate("schedule")}>
+          <span className="ov-next-icon">{upcoming ? (TYPE_META[upcoming.type]?.icon || "📍") : "🗓️"}</span>
+          <span style={{minWidth:0}}>
+            <span style={{display:"block",fontSize:10.5,fontWeight:700,color:"var(--muted)",textTransform:"uppercase",letterSpacing:0.6}}>Up next</span>
+            {upcoming ? (
+              <>
+                <span style={{display:"block",fontSize:15,fontWeight:600,color:"var(--text)",letterSpacing:-0.2}}>{upcoming.title}</span>
+                <span style={{display:"block",fontSize:12.5,color:"var(--muted)"}}>{fmtDate(upcoming.day)}{upTime?` · ${fmtTime(upTime)}`:""}</span>
+              </>
+            ) : (
+              <span style={{display:"block",fontSize:14,color:"var(--muted)",marginTop:2}}>Nothing scheduled yet — add your first stop.</span>
+            )}
+          </span>
+        </button>
+      </>
+      )}
     </div>
   );
 }
@@ -3422,6 +3529,8 @@ export default function App() {
   const authUserIdRef = useRef(null); // tracks the last user ID so token refreshes don't re-trigger loadTrips
   const activeRef = useRef(null);          // always-current active trip, for use inside realtime callbacks
   const realtimeTimerRef = useRef(null);   // debounce timer for collapsing bursts of remote changes
+  const tabBarRef = useRef(null);          // the scrollable section-tab row
+  const activeTabRef = useRef(null);       // the currently-active tab button, kept centered on mobile
   const loggedIn = !!authUser;
   const user = authUser?.user_metadata?.full_name || authUser?.email?.split("@")[0] || "Traveler";
 
@@ -4205,6 +4314,16 @@ export default function App() {
   // Keep a ref to the current active trip so realtime callbacks read fresh state.
   useEffect(() => { activeRef.current = active; }, [active]);
 
+  // Keep the active tab centered in the scrollable row (only scrolls the row, never the page).
+  useEffect(() => {
+    const el = activeTabRef.current, bar = tabBarRef.current;
+    if(!el || !bar) return;
+    try {
+      const er = el.getBoundingClientRect(), br = bar.getBoundingClientRect();
+      bar.scrollBy({ left: (er.left + er.width/2) - (br.left + br.width/2), behavior: "smooth" });
+    } catch(e) { /* older browsers: no-op */ }
+  }, [tab]);
+
   // ── Realtime sync: when anyone changes the open trip, pull the update in ──
   // Subscribes to row changes on every table tied to the active trip and does a
   // debounced silent re-fetch. This is what makes the app feel collaborative —
@@ -4541,7 +4660,7 @@ export default function App() {
   const updateTrip = t => { setTrips(ts=>ts.map(x=>x.id===t.id?t:x)); setActive(t); };
 
   const openTrip = t => {
-    setTab("schedule");
+    setTab("summary");
     setPage("trip");
     // Demo trip has all data pre-loaded — just set it directly
     if(t.isDemo) {
@@ -4560,7 +4679,7 @@ export default function App() {
     // If currently showing mock data (numeric ids), stay in mock mode
     if(trips.length > 0 && typeof trips[0].id === "number") {
       setTrips(ts=>[...ts,t]);
-      setShowNew(false); setActive(t); setTab("schedule"); setPage("trip");
+      setShowNew(false); setActive(t); setTab("summary"); setPage("trip");
       return;
     }
     // Insert into Supabase — do NOT chain .select() here because the SELECT policy
@@ -4595,7 +4714,7 @@ export default function App() {
       const exists = ts.find(x => x.id === newTrip.id);
       return exists ? ts.map(x => x.id === newTrip.id ? fullNewTrip : x) : [...ts, fullNewTrip];
     });
-    setActive(fullNewTrip); setShowNew(false); setTab("schedule"); setPage("trip");
+    setActive(fullNewTrip); setShowNew(false); setTab("summary"); setPage("trip");
   };
   const deleteTrip = async (tripId) => {
     if(tripId === "demo-barcelona") {
@@ -4903,14 +5022,33 @@ export default function App() {
   );
 
   const TABS = [
-    {id:"info",l:"ℹ️ Trip Info"},{id:"members",l:"👥 Members"},{id:"schedule",l:"📅 Schedule"},
-    {id:"map",l:"🗺️ Map"},{id:"accommodations",l:"🏨 Stays"},{id:"vehicles",l:"🚗 Vehicles"},
-    {id:"activities",l:"🎯 Items"},{id:"budget",l:"💰 Budget"},{id:"country",l:"🌍 Entry"},
-    {id:"voting",l:"🗳️ Vote"},{id:"summary",l:"✅ Summary"},
+    {id:"summary",l:"📋 Overview",group:"overview"},
+    {id:"schedule",l:"📅 Schedule",group:"plan"},
+    {id:"map",l:"🗺️ Map",group:"plan"},
+    {id:"accommodations",l:"🏨 Stays",group:"plan"},
+    {id:"vehicles",l:"🚗 Vehicles",group:"plan"},
+    {id:"activities",l:"🎯 Activities",group:"plan"},
+    {id:"voting",l:"🗳️ Vote",group:"decide"},
+    {id:"budget",l:"💰 Budget",group:"decide"},
+    {id:"info",l:"ℹ️ Trip Info",group:"setup"},
+    {id:"members",l:"👥 Members",group:"setup"},
+    {id:"country",l:"🛂 Visas & Entry",group:"setup"},
   ];
 
   // Count join requests for the active trip
   const activeRequestCount = active ? (joinRequests||[]).filter(r => r.tripId === active.id).length : 0;
+
+  // Count still-open group decisions (destinations / stays / vehicles that have
+  // options but aren't locked yet) — drives the badge on the Vote tab.
+  const openDecisions = (() => {
+    if(!active) return 0;
+    const locked = active.lockedVotes || {};
+    let n = 0;
+    if((active.destinations||[]).length > 0 && !locked.destinations) n++;
+    if((active.accommodationOptions||[]).length > 0 && !locked.accommodations) n++;
+    if((active.vehicleRentals||[]).length > 0 && !locked.vehicles) n++;
+    return n;
+  })();
 
   // ── Route protection: if not logged in, only the landing page is accessible ──
   const safePage = loggedIn ? page : "landing";
@@ -5120,14 +5258,21 @@ export default function App() {
               </div>
             ) : (
             <>
-            <div className="section-tabs">
-              {TABS.map(t=>(
-                <button key={t.id} className={`section-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>
-                  {t.id==="members" && activeRequestCount>0
-                    ? <span className="notif-tab-wrap">{t.l}<span className="notif-badge">{activeRequestCount}</span></span>
-                    : t.l}
-                </button>
-              ))}
+            <div className="section-tabs" ref={tabBarRef}>
+              {TABS.flatMap((t,i) => {
+                const prev = TABS[i-1];
+                const els = [];
+                if(prev && prev.group !== t.group) els.push(<span key={t.id+"-sep"} className="section-tab-sep" aria-hidden="true"/>);
+                const badge = t.id==="members" ? activeRequestCount : t.id==="voting" ? openDecisions : 0;
+                els.push(
+                  <button key={t.id} ref={tab===t.id?activeTabRef:null} className={`section-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>
+                    {badge>0
+                      ? <span className="notif-tab-wrap">{t.l}<span className="notif-badge">{badge}</span></span>
+                      : t.l}
+                  </button>
+                );
+                return els;
+              })}
             </div>
             <div className="section-content">
               {tab==="info"           && <TripInfoTab trip={active} setTrip={updateTrip} db={db}/>}
@@ -5140,7 +5285,7 @@ export default function App() {
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest} onToast={showToast}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db} authUserId={authUser?.id}/>}
-              {tab==="summary"        && <SummaryTab trip={active}/>}
+              {tab==="summary"        && <SummaryTab trip={active} onNavigate={setTab} userName={user}/>}
             </div>
             </>
             )}
