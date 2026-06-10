@@ -1899,12 +1899,23 @@ function VotingTab({trip,setTrip,user,userId,db}) {
                 {ci.location&&<div style={{fontSize:12,color:"var(--muted)",marginBottom:4}}>📍 {ci.location}</div>}
                 {ci.metadata?.description&&<div className="act-vote-desc">{ci.metadata.description}</div>}
                 <div className="act-vote-pills">
-                  {ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}
-                  {ci.price>0&&(
-                    ci.priceType==="per_person"
-                      ? <span className="pill pill-g">💵 ${ci.price}/person</span>
-                      : <span className="pill pill-g">💵 ${ci.price} total</span>
-                  )}
+                  {ci.type==="hotel" ? (()=>{
+                    const isIn = ci.metadata?.isCheckin !== false;
+                    const date = isIn ? ci.metadata?.checkIn : ci.metadata?.checkOut;
+                    const time = isIn ? ci.metadata?.checkInTime : ci.metadata?.checkOutTime;
+                    return (<>
+                      <span className="pill pill-b">{isIn ? "🏨 Check-In" : "🚪 Check-Out"}</span>
+                      {date&&<span className="pill pill-b">📅 {fmtDate(date)}</span>}
+                      {time&&<span className="pill pill-b">🕐 {fmtTime(time)}</span>}
+                    </>);
+                  })() : (<>
+                    {ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}
+                    {ci.price>0&&(
+                      ci.priceType==="per_person"
+                        ? <span className="pill pill-g">💵 ${ci.price}/person</span>
+                        : <span className="pill pill-g">💵 ${ci.price} total</span>
+                    )}
+                  </>)}
                 </div>
               </YesNoCard>
             );
