@@ -1293,11 +1293,12 @@ function MapTab({trip,setTrip,db}) {
           <div style={{background:"var(--surface2)",border:"1px solid var(--border)",borderRadius:12,padding:16,marginBottom:18}}>
             <div style={{fontSize:12,fontWeight:600,color:"var(--muted)",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>How to get your map URL</div>
             {[
-              {n:"1",t:"Go to Google My Maps",d:"Visit maps.google.com → click ☰ → Your Places → Maps"},
-              {n:"2",t:"Open or create your trip map",d:"Create a new map or open an existing one for this trip"},
-              {n:"3",t:"Copy the URL",d:"Copy from your browser address bar — or use Share → Copy Link"},
+              {n:"1",t:"Go to Google My Maps",d:"Open a new tab and go to mymaps.google.com — sign in with your Google account if prompted"},
+              {n:"2",t:"Create or open your trip map",d:"Click \"+ Create a new map\" to start fresh, or click an existing map you already made for this trip"},
+              {n:"3",t:"Copy the URL from your browser",d:"Once your map is open, copy the full URL from the browser address bar — it will contain \"?mid=\" in it"},
+              {n:"4",t:"Paste it below and connect",d:"Paste the URL into the field below and click \"Connect Map →\""},
             ].map(s=>(
-              <div key={s.n} style={{display:"flex",gap:10,marginBottom:s.n==="3"?0:10}}>
+              <div key={s.n} style={{display:"flex",gap:10,marginBottom:s.n==="4"?0:10}}>
                 <div style={{width:22,height:22,borderRadius:"50%",background:"var(--accent)",color:"#0a0f1e",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,flexShrink:0}}>{s.n}</div>
                 <div><div style={{fontSize:13,fontWeight:600}}>{s.t}</div><div style={{fontSize:12,color:"var(--muted)",marginTop:1}}>{s.d}</div></div>
               </div>
@@ -1615,21 +1616,10 @@ function ActivityTab({trip,setTrip,user,db,authUserId}) {
                 {ci.location&&<div style={{fontSize:12,color:"var(--muted)",marginTop:4}}>📍 {ci.location}</div>}
                 {ci.metadata?.description&&<div className="activity-desc">{ci.metadata.description}</div>}
                 <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
-                  {ci.type==="hotel" ? (()=>{
-                    const isIn = ci.metadata?.isCheckin !== false;
-                    const date = isIn ? ci.metadata?.checkIn : ci.metadata?.checkOut;
-                    const time = isIn ? ci.metadata?.checkInTime : ci.metadata?.checkOutTime;
-                    return (<>
-                      <span className="pill pill-b">{isIn ? "🏨 Check-In" : "🚪 Check-Out"}</span>
-                      {date&&<span className="pill pill-y">📅 {fmtDate(date)}</span>}
-                      {time&&<span className="pill pill-p">🕐 {fmtTime(time)}</span>}
-                    </>);
-                  })() : (<>
-                    {ci.startTime&&<span className="pill pill-p">🕐 {fmtTime(ci.startTime)}</span>}
-                    {ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}
-                    {ci.price>0&&<span className="pill pill-g">💵 ${ci.price}</span>}
-                    {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
-                  </>)}
+                  {ci.startTime&&<span className="pill pill-p">🕐 {fmtTime(ci.startTime)}</span>}
+                  {ci.durationMin&&<span className="pill pill-b">⏱ {ci.durationMin}min</span>}
+                  {ci.price>0&&<span className="pill pill-g">💵 ${ci.price}</span>}
+                  {ci.day&&<span className="pill pill-y">📅 {fmtDate(ci.day)}</span>}
                 </div>
                 {(()=>{
                   const up=(ci.metadata?.upvotes||[]).length,down=(ci.metadata?.downvotes||[]).length,net=up-down;
