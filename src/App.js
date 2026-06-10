@@ -448,7 +448,56 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .delete-trip-info { flex:1; min-width:0; }
 .delete-trip-name { font-size:14px; font-weight:600; color:var(--text); letter-spacing:-0.1px; }
 .delete-trip-meta { font-size:12px; color:var(--muted); margin-top:2px; }
-.delete-trip-action { flex-shrink:0; min-width:180px; }`
+.delete-trip-action { flex-shrink:0; min-width:180px; }
+
+/* ─── ACCESSIBILITY (launch-prep) ──────────────────────
+   Keyboard users need a visible focus ring; inputs already have one. */
+a:focus-visible, button:focus-visible, [role="button"]:focus-visible,
+.nav-tab:focus-visible, .section-tab:focus-visible, .btn:focus-visible,
+.back-btn:focus-visible, .dp-nav:focus-visible, .tab:focus-visible {
+  outline: 2.5px solid var(--accent); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important; scroll-behavior: auto !important;
+  }
+}
+
+/* ─── TOASTS ───────────────────────────────────────────
+   In-app messages replace blocking browser alerts. */
+.toast-stack { position:fixed; left:50%; bottom:calc(24px + env(safe-area-inset-bottom)); transform:translateX(-50%); z-index:9999; display:flex; flex-direction:column; gap:10px; align-items:center; width:min(440px, calc(100vw - 32px)); pointer-events:none; }
+.toast { pointer-events:auto; width:100%; background:var(--text); color:#fff; padding:13px 18px; border-radius:var(--r-md); box-shadow:var(--shadow-lg); font-size:13.5px; font-weight:500; line-height:1.45; letter-spacing:-0.1px; display:flex; align-items:flex-start; gap:10px; animation:toastIn 0.26s cubic-bezier(0.2,0.9,0.3,1); }
+.toast-err { background:var(--red); }
+.toast-ok { background:var(--green); }
+.toast-icon { flex-shrink:0; font-size:15px; line-height:1.3; }
+@keyframes toastIn { from{opacity:0;transform:translateY(14px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+
+/* ─── REALTIME PRESENCE PILL ───────────────────────────── */
+.live-pill { display:inline-flex; align-items:center; gap:6px; font-size:11px; font-weight:600; color:var(--green); background:var(--green-soft); border:1px solid rgba(30,122,69,0.18); padding:3px 9px; border-radius:var(--r-full); letter-spacing:0.1px; }
+.live-dot { width:6px; height:6px; border-radius:50%; background:var(--green); box-shadow:0 0 0 0 rgba(30,122,69,0.5); animation:livePulse 2s ease-in-out infinite; }
+@keyframes livePulse { 0%{box-shadow:0 0 0 0 rgba(30,122,69,0.45)} 70%{box-shadow:0 0 0 6px rgba(30,122,69,0)} 100%{box-shadow:0 0 0 0 rgba(30,122,69,0)} }
+
+/* ─── MOBILE & TOUCH (launch-prep) ─────────────────────
+   iOS input-zoom fix, 44px targets, swipeable tabs, notch-safe padding. */
+@supports (padding: max(0px)) {
+  .nav { padding-left:max(48px, env(safe-area-inset-left)); padding-right:max(48px, env(safe-area-inset-right)); }
+}
+@media (max-width:768px) {
+  /* font-size <16px makes iOS Safari auto-zoom on focus — this stops it */
+  .form-input, .add-input, .tp-input, input, textarea, select { font-size:16px; }
+  .btn { min-height:44px; padding:11px 18px; }
+  .btn-sm { min-height:40px; }
+  .section-tab { min-height:44px; padding:11px 14px; font-size:12.5px; flex:0 0 auto; }
+  .nav-tab { min-height:40px; }
+  .dp-nav { width:40px; height:40px; }
+  .back-btn { min-height:44px; padding:10px 0; }
+  /* one clean horizontal swipe row instead of a wrapped pile of tabs */
+  .section-tabs { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; gap:2px; }
+  .section-tabs::-webkit-scrollbar { display:none; }
+  /* keep scrollable content clear of the home indicator */
+  .dashboard, .trip-detail, .profile-page { padding-bottom:calc(28px + env(safe-area-inset-bottom)); }
+}`
 
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const DAYS_ABR = ["Su","Mo","Tu","We","Th","Fr","Sa"];
@@ -2950,7 +2999,7 @@ function CountryTab({trip,setTrip,db,authUserId}) {
 }
 
 // ─── MEMBERS TAB ─────────────────────────────────────────────────────────────
-function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest}) {
+function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcceptRequest,onRejectRequest,onToast}) {
   const [emailInput,setEmailInput] = useState("");
   const [emailErr,setEmailErr] = useState("");
   const [invitedEmails,setInvitedEmails] = useState([]);
@@ -3061,7 +3110,7 @@ function MembersTab({trip,setTrip,user,db,onLeave,authUserId,joinRequests,onAcce
                 <button className="btn btn-danger btn-sm"
                   style={{marginLeft:8,padding:"3px 10px",fontSize:12,opacity:canLeave?1:0.45,cursor:canLeave?"pointer":"not-allowed"}}
                   title={leaveTitle}
-                  onClick={() => { if(!canLeave){alert(leaveTitle);return;} onLeave&&onLeave(); }}>
+                  onClick={() => { if(!canLeave){onToast?onToast(leaveTitle,"error"):alert(leaveTitle);return;} onLeave&&onLeave(); }}>
                   {leaveLabel}
                 </button>
               )}
@@ -3359,10 +3408,20 @@ export default function App() {
   const [showArchived,setShowArchived] = useState(false);
   const [archivedTripIds,setArchivedTripIds] = useState([]); // per-user, stored in profiles
 
+  // ── Toasts (in-app messages, replace blocking browser alerts) ──
+  const [toasts,setToasts] = useState([]);
+  const showToast = (message, kind = "info") => {
+    const id = Date.now() + Math.random();
+    setToasts(t => [...t, { id, message, kind }]);
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4200);
+  };
+
   // ── Real Supabase Auth state ──
   const [authUser,setAuthUser]     = useState(null);   // Supabase user object (null = logged out)
   const [authLoading,setAuthLoading] = useState(true); // true while we wait for session check on load
   const authUserIdRef = useRef(null); // tracks the last user ID so token refreshes don't re-trigger loadTrips
+  const activeRef = useRef(null);          // always-current active trip, for use inside realtime callbacks
+  const realtimeTimerRef = useRef(null);   // debounce timer for collapsing bursts of remote changes
   const loggedIn = !!authUser;
   const user = authUser?.user_metadata?.full_name || authUser?.email?.split("@")[0] || "Traveler";
 
@@ -3423,8 +3482,8 @@ export default function App() {
         setPage(p => p === "landing" ? "dashboard" : p);
       } else if(event === "SIGNED_OUT") {
         setPage("landing"); setActive(null); setArchivedTripIds([]);
-        sessionStorage.removeItem("tripsync_active_id");
-        sessionStorage.removeItem("tripsync_active_tab");
+        localStorage.removeItem("tripsync_active_id");
+        localStorage.removeItem("tripsync_active_tab");
       }
     });
 
@@ -3958,8 +4017,8 @@ export default function App() {
     });
 
     // Restore previously open trip after page reload
-    const savedId  = sessionStorage.getItem("tripsync_active_id");
-    const savedTab = sessionStorage.getItem("tripsync_active_tab");
+    const savedId  = localStorage.getItem("tripsync_active_id");
+    const savedTab = localStorage.getItem("tripsync_active_tab");
     if(savedId && (data||[]).find(t => t.id === savedId)) {
       const rawRow = (data||[]).find(t => t.id === savedId);
       const shell = buildTrip(rawRow, null);
@@ -3976,8 +4035,8 @@ export default function App() {
   };
 
   // ── Load full trip details when a trip is opened ──
-  const loadTripDetails = async (trip) => {
-    setTripLoading(true);
+  const loadTripDetails = async (trip, { silent = false } = {}) => {
+    if(!silent) setTripLoading(true);
 
     // Load all item types from dedicated tables + legacy activities table in parallel
     const [
@@ -4025,13 +4084,20 @@ export default function App() {
       downvotes:     Array.isArray(a.downvotes) ? a.downvotes : [],
     }));
 
-    // Load personal budget — guard against authUser being null during restore
+    // Load THIS user's personal budget for THIS trip from its own dedicated table
+    // (keeps it isolated from trip_members.role — no privilege-escalation surface).
+    // Separate, guarded query so a missing table degrades to null instead of breaking loads.
     const currentUserId = authUser?.id || authUserIdRef.current;
-    const { data: profile } = currentUserId ? await supabase
-      .from("profiles")
-      .select("personal_budget")
-      .eq("id", currentUserId)
-      .single() : { data: null };
+    let myPersonalBudget = null;
+    if(currentUserId) {
+      const { data: pbRow, error: pbErr } = await supabase
+        .from("trip_personal_budgets")
+        .select("amount")
+        .eq("trip_id", trip.id)
+        .eq("user_id", currentUserId)
+        .maybeSingle();
+      if(!pbErr && pbRow) myPersonalBudget = pbRow.amount ?? null;
+    }
 
     // Load vehicle rentals
     const { data: vehicles } = await supabase
@@ -4077,22 +4143,52 @@ export default function App() {
     }));
 
 
+    // Load trip-level fields + JSON columns (entry info, destination votes, locked
+    // votes, expense log, name/dates/status) so realtime and reload pull them too —
+    // these live on the trips row, which the child-table fetches above don't cover.
+    const { data: tripRow } = await supabase
+      .from("trips")
+      .select("title, destination, status, start_date, end_date, description, google_maps_url, country_info, expense_log, locked_votes, documents, activity_details")
+      .eq("id", trip.id)
+      .maybeSingle();
+
+    const tripMeta = tripRow ? {
+      name:            tripRow.title,
+      status:          (archivedTripIds||[]).includes(trip.id) ? "archived" : (tripRow.status || "planning"),
+      startDate:       tripRow.start_date,
+      endDate:         tripRow.end_date,
+      description:     tripRow.description || "",
+      googleMapsUrl:   tripRow.google_maps_url || "",
+      country:         tripRow.country_info || null,
+      expenseLog:      tripRow.expense_log || [],
+      lockedVotes:     tripRow.locked_votes || {},
+      documents:       tripRow.documents || [],
+      activityDetails: tripRow.activity_details || {},
+      destinations:    (() => {
+        const savedVotes = tripRow.country_info?.destination_votes;
+        const baseName = tripRow.destination || tripRow.country_info?.destination;
+        if(Array.isArray(savedVotes) && savedVotes.length > 0) return savedVotes.map(d => ({ id:d.id, name:d.name, upvotes:Array.isArray(d.upvotes)?d.upvotes:[], downvotes:Array.isArray(d.downvotes)?d.downvotes:[] }));
+        return baseName ? [{ id:1, name:baseName, upvotes:[], downvotes:[] }] : [];
+      })(),
+    } : {};
+
     const fullTrip = {
       ...trip,
+      ...tripMeta,
       calendarItems,
       accommodationOptions,
       vehicleRentals,
-      personalBudgets: { [user]: profile?.personal_budget ?? null },
+      personalBudgets: { [user]: myPersonalBudget },
       tripMembers: freshMembers,
       members:     freshMembers.map(m => m.name),
     };
 
     setActive(fullTrip);
     setTrips(ts => ts.map(t => t.id === trip.id
-      ? { ...t, tripMembers: freshMembers, members: freshMembers.map(m => m.name) }
+      ? { ...t, ...tripMeta, tripMembers: freshMembers, members: freshMembers.map(m => m.name) }
       : t
     ));
-    setTripLoading(false);
+    if(!silent) setTripLoading(false);
   };
 
   // ── Load trips when user logs in ──
@@ -4106,12 +4202,66 @@ export default function App() {
     else { setTrips([]); setActive(null); }
   }, [authUser]);
 
+  // Keep a ref to the current active trip so realtime callbacks read fresh state.
+  useEffect(() => { activeRef.current = active; }, [active]);
+
+  // ── Realtime sync: when anyone changes the open trip, pull the update in ──
+  // Subscribes to row changes on every table tied to the active trip and does a
+  // debounced silent re-fetch. This is what makes the app feel collaborative —
+  // a teammate adding an activity or casting a vote now shows up without a reload.
+  // Degrades gracefully: if a table isn't in the `supabase_realtime` publication,
+  // its listener simply never fires (no error). Demo/mock trips are skipped.
+  useEffect(() => {
+    const tripId = active?.id;
+    if(!tripId || active?.isDemo || typeof tripId !== "string") return;
+
+    const scheduleRefresh = () => {
+      clearTimeout(realtimeTimerRef.current);
+      realtimeTimerRef.current = setTimeout(() => {
+        const current = activeRef.current;
+        // Only refresh if the same trip is still open and nothing else is loading.
+        if(current?.id === tripId && !tripLoading) {
+          loadTripDetails(current, { silent: true });
+        }
+      }, 650);
+    };
+
+    const TABLES = [
+      "item_activities", "item_meals", "item_transport", "item_checkins",
+      "item_notes", "accommodations", "vehicle_rentals", "trip_members",
+    ];
+
+    let channel = supabase.channel(`trip:${tripId}`);
+    TABLES.forEach(table => {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table, filter: `trip_id=eq.${tripId}` },
+        scheduleRefresh
+      );
+    });
+    // The trip's own row keys on `id`, not `trip_id` — covers name/dates/status,
+    // expense log, locked votes, destination votes, and entry requirements.
+    channel = channel.on(
+      "postgres_changes",
+      { event: "*", schema: "public", table: "trips", filter: `id=eq.${tripId}` },
+      scheduleRefresh
+    );
+    channel.subscribe();
+
+    return () => {
+      clearTimeout(realtimeTimerRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [active?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Save personal budget to Supabase profiles table ──
   const savePersonalBudgetToDb = async (amount) => {
-    await supabase
-      .from("profiles")
-      .update({ personal_budget: amount })
-      .eq("id", authUser.id);
+    const tripId = activeRef.current?.id;
+    if(!tripId || typeof tripId !== "string" || !authUser?.id) return;
+    const { error } = await supabase
+      .from("trip_personal_budgets")
+      .upsert({ trip_id: tripId, user_id: authUser.id, amount }, { onConflict: "trip_id,user_id" });
+    if(error) console.error("savePersonalBudget:", error.message);
   };
 
   // ── Centralized DB write helpers — passed as `db` prop to all tabs ──
@@ -4380,11 +4530,11 @@ export default function App() {
   // ── Trip handlers ──
   useEffect(() => {
     if(active?.id && active.id !== "demo-barcelona") {
-      sessionStorage.setItem("tripsync_active_id", active.id);
-      sessionStorage.setItem("tripsync_active_tab", tab);
+      localStorage.setItem("tripsync_active_id", active.id);
+      localStorage.setItem("tripsync_active_tab", tab);
     } else if(!active) {
-      sessionStorage.removeItem("tripsync_active_id");
-      sessionStorage.removeItem("tripsync_active_tab");
+      localStorage.removeItem("tripsync_active_id");
+      localStorage.removeItem("tripsync_active_tab");
     }
   }, [active?.id, tab]);
 
@@ -4455,9 +4605,9 @@ export default function App() {
     }
     const tripToDelete = trips.find(t => t.id === tripId);
     const myMembership = (tripToDelete?.tripMembers || []).find(m => m.userId === authUser.id);
-    if(!myMembership || myMembership.role !== "admin") { alert("Only the trip owner can delete this trip."); return; }
+    if(!myMembership || myMembership.role !== "admin") { showToast("Only the trip owner can delete this trip.", "error"); return; }
     const otherMembers = (tripToDelete?.tripMembers || []).filter(m => m.userId !== authUser.id);
-    if(otherMembers.length > 0) { alert(`You must remove all ${otherMembers.length} member(s) before deleting this trip.`); return; }
+    if(otherMembers.length > 0) { showToast(`Remove all ${otherMembers.length} other member${otherMembers.length>1?"s":""} before deleting this trip.`, "error"); return; }
     const { error } = await supabase.from("trips").delete().eq("id", tripId);
     if(error) { console.error("deleteTrip:", error); return; }
     setTrips(ts => ts.filter(t => t.id !== tripId));
@@ -4659,14 +4809,14 @@ export default function App() {
     const tripToLeave = trips.find(t => t.id === tripId);
     // Safety guard: if tripMembers hasn't loaded yet, don't proceed — prevents false "owner alone" deletes
     if(!tripToLeave?.tripMembers?.length) {
-      alert("Trip membership data is still loading. Please try again in a moment.");
+      showToast("Trip details are still loading — try again in a moment.", "info");
       return;
     }
     const myMembership = (tripToLeave?.tripMembers || []).find(m => m.userId === authUser.id);
     const otherMembers = (tripToLeave?.tripMembers || []).filter(m => m.userId !== authUser.id);
     const isOwner = myMembership?.role === "admin";
     if(isOwner && otherMembers.length > 0) {
-      alert(`You created this trip. You can only leave once all ${otherMembers.length} other member(s) have left.`);
+      showToast(`As the owner, you can leave only after all ${otherMembers.length} other member${otherMembers.length>1?"s have":" has"} left.`, "error");
       return;
     }
     if(isOwner && otherMembers.length === 0) {
@@ -4914,7 +5064,7 @@ export default function App() {
                       <button
                         className="btn btn-ghost btn-sm"
                         style={{position:"absolute",top:10,right:10,padding:"4px 8px",fontSize:13,color:canDelete?"var(--muted)":"var(--border)",zIndex:2,cursor:canDelete?"pointer":"not-allowed"}}
-                        onClick={e=>{e.stopPropagation();if(!canDelete){alert(tip);return;}if(window.confirm(`Delete "${trip.name}"? This cannot be undone.`))deleteTrip(trip.id);}}
+                        onClick={e=>{e.stopPropagation();if(!canDelete){showToast(tip,"info");return;}if(window.confirm(`Delete "${trip.name}"? This cannot be undone.`))deleteTrip(trip.id);}}
                         title={tip}
                       >✕</button>
                     );
@@ -4958,6 +5108,9 @@ export default function App() {
               <h2>{active.name}</h2>
               <span className={`badge ${active.status==="confirmed"?"badge-green":"badge-yellow"}`}>{active.status==="confirmed"?"✓ Confirmed":"⏳ Planning"}</span>
               {active.startDate&&<span className="badge" style={{fontSize:12}}>📅 {fmtRange(active.startDate,active.endDate)}</span>}
+              {!active.isDemo && typeof active.id==="string" && (
+                <span className="live-pill" title="Changes from your group sync automatically"><span className="live-dot"/>Live</span>
+              )}
               <button className="btn btn-ghost btn-sm" style={{marginLeft:"auto"}} onClick={()=>setTab("info")}>✏️ Edit Trip</button>
             </div>
             {tripLoading ? (
@@ -4985,7 +5138,7 @@ export default function App() {
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db} authUserId={authUser?.id}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
-              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest}/>}
+              {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest} onToast={showToast}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db} authUserId={authUser?.id}/>}
               {tab==="summary"        && <SummaryTab trip={active}/>}
             </div>
@@ -5322,6 +5475,17 @@ export default function App() {
         )}
 
       </div>
+
+      {toasts.length > 0 && (
+        <div className="toast-stack" role="status" aria-live="polite">
+          {toasts.map(t => (
+            <div key={t.id} className={`toast ${t.kind==="error"?"toast-err":t.kind==="success"?"toast-ok":""}`}>
+              <span className="toast-icon">{t.kind==="error"?"⚠️":t.kind==="success"?"✓":"ℹ️"}</span>
+              <span>{t.message}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </>
   );
 }
