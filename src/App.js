@@ -250,6 +250,11 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Helvetica Neue'
 .pill-g { background:var(--green-soft); color:var(--green); border:1px solid rgba(36,138,61,0.16); }
 .pill-y { background:var(--yellow-soft); color:var(--yellow); border:1px solid rgba(196,124,10,0.16); }
 .type-badge { padding:3px 9px; border-radius:var(--r-full); font-size:11px; font-weight:600; border:1px solid; display:inline-flex; align-items:center; gap:4px; }
+.vote-stat { padding:2px 8px; border-radius:var(--r-full); font-size:11px; font-weight:600; border:1px solid; display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+.vote-stat-pos  { background:var(--green-soft);  color:var(--green);  border-color:rgba(30,122,69,0.18); }
+.vote-stat-neg  { background:var(--red-soft);    color:var(--red);    border-color:rgba(255,59,48,0.18); }
+.vote-stat-even { background:var(--yellow-soft); color:var(--yellow); border-color:rgba(160,112,0,0.18); }
+.vote-stat-none { background:var(--surface2);    color:var(--muted);  border-color:var(--border); }
 .type-activity { background:var(--accent-soft); color:var(--accent); border-color:rgba(201,106,40,0.16); }
 .type-meal     { background:var(--yellow-soft); color:var(--yellow); border-color:rgba(196,124,10,0.16); }
 .type-hotel    { background:rgba(110,110,115,0.09); color:var(--muted); border-color:rgba(110,110,115,0.16); }
@@ -979,6 +984,29 @@ function MiniCal({startDate,endDate,activeDay,onSelectDay}) {
   );
 }
 
+// ─── VOTE STATUS CHIP ─────────────────────────────────────────────────────────
+// Read-only net-vote indicator for a calendar item, so the voting status of
+// every activity is visible from the Schedule tab. (Casting votes still happens
+// on the Vote tab.) `compact` shows just the net score; full shows the breakdown.
+function VoteStat({ ci, compact }) {
+  const up    = (ci.metadata?.upvotes   || []).length;
+  const down  = (ci.metadata?.downvotes || []).length;
+  const total = up + down;
+  const net   = up - down;
+  const netLabel = net > 0 ? `+${net}` : `${net}`;
+  const tone  = total === 0 ? "none" : net > 0 ? "pos" : net < 0 ? "neg" : "even";
+  const title = total === 0 ? "No votes yet" : `${up} for · ${down} against · net ${netLabel}`;
+  return (
+    <span className={`vote-stat vote-stat-${tone}`} title={title}>
+      {total === 0
+        ? <>🗳️ No votes</>
+        : compact
+          ? <>🗳️ {netLabel}</>
+          : <>👍 {up} · 👎 {down} · net {netLabel}</>}
+    </span>
+  );
+}
+
 // ─── DAY BLOCK ────────────────────────────────────────────────────────────────
 function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEditItem,db}) {
   const d=fromYMD(dayYMD);
@@ -1118,6 +1146,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
                         <div className="ci-body">
                           <div className="ci-title">{ci.title}</div>
                           {ci.location&&<div style={{fontSize:11,color:"var(--muted)"}}>📍 {ci.location}</div>}
+                          <div style={{marginTop:5}}><VoteStat ci={ci} compact/></div>
                         </div>
                         <div className="ci-actions">
                           <button className="ci-btn" onClick={e=>{e.stopPropagation();onEditItem(ci);}}>✏️</button>
@@ -1165,7 +1194,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
                           >
                             {isOverlap&&<span style={{position:"absolute",top:3,right:5,fontSize:9}}>⚠️</span>}
                             <div className="tl-event-name">{TI(ci.type)} {ci.title}</div>
-                            <div className="tl-event-time">{minToTimeStr(ci.startMin)} – {minToTimeStr(endMin)}</div>
+                            <div className="tl-event-time">{minToTimeStr(ci.startMin)} – {minToTimeStr(endMin)}{(() => { const u=(ci.metadata?.upvotes||[]).length, dn=(ci.metadata?.downvotes||[]).length, n=u-dn; return u+dn>0 ? " · 🗳️ "+(n>0?"+"+n:n) : ""; })()}</div>
                             {height>46&&ci.location&&<div style={{fontSize:10,opacity:0.7,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📍 {ci.location}</div>}
                           </div>
                         );
@@ -1207,6 +1236,7 @@ function DayBlock({dayYMD,dayNum,totalDays,trip,setTrip,isOpen,onToggleOpen,onEd
                       <div className="ci-title">{ci.title}</div>
                       <div className="ci-meta">
                         <span className={`type-badge type-${ci.type}`}>{TYPE_META[ci.type]?.label}</span>
+                        {ci.type!=="note" && <VoteStat ci={ci}/>}
                         {ci.startTime&&<span>🕐 {fmtTime(ci.startTime)}</span>}
                         {ci.durationMin&&<span>⏱ {ci.durationMin}min</span>}
                         {ci.price>0&&<span>💵 ${ci.price}</span>}
@@ -5042,18 +5072,6 @@ export default function App() {
   // Count join requests for the active trip
   const activeRequestCount = active ? (joinRequests||[]).filter(r => r.tripId === active.id).length : 0;
 
-  // Count still-open group decisions (destinations / stays / vehicles that have
-  // options but aren't locked yet) — drives the badge on the Vote tab.
-  const openDecisions = (() => {
-    if(!active) return 0;
-    const locked = active.lockedVotes || {};
-    let n = 0;
-    if((active.destinations||[]).length > 0 && !locked.destinations) n++;
-    if((active.accommodationOptions||[]).length > 0 && !locked.accommodations) n++;
-    if((active.vehicleRentals||[]).length > 0 && !locked.vehicles) n++;
-    return n;
-  })();
-
   // ── Route protection: if not logged in, only the landing page is accessible ──
   const safePage = loggedIn ? page : "landing";
 
@@ -5267,7 +5285,7 @@ export default function App() {
                 const prev = TABS[i-1];
                 const els = [];
                 if(prev && prev.group !== t.group) els.push(<span key={t.id+"-sep"} className="section-tab-sep" aria-hidden="true"/>);
-                const badge = t.id==="members" ? activeRequestCount : t.id==="voting" ? openDecisions : 0;
+                const badge = t.id==="members" ? activeRequestCount : 0;
                 els.push(
                   <button key={t.id} ref={tab===t.id?activeTabRef:null} className={`section-tab ${tab===t.id?"active":""}`} onClick={()=>setTab(t.id)}>
                     {badge>0
