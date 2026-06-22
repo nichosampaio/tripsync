@@ -2861,13 +2861,34 @@ function VehicleTab({trip,setTrip,db}) {
 }
 
 // ─── FLIGHTS TAB ──────────────────────────────────────────────────────────────
-const BLANK_F = { airline:"", departureLoc:"", departureTime:"", duration:"", cost:"", docsLink:"" };
+// ─── DURATION PICKER (hours / minutes dropdowns) ──────────────────────────────
+function DurationPicker({ hours, minutes, onChange }) {
+  return (
+    <div className="time-picker">
+      <select className="form-input" style={{maxWidth:98}} value={hours}
+        onChange={e=>onChange({ hours:e.target.value, minutes })}>
+        <option value="">Hrs</option>
+        {Array.from({length:25},(_,i)=>i).map(h=><option key={h} value={h}>{h} h</option>)}
+      </select>
+      <select className="form-input" style={{maxWidth:98}} value={minutes}
+        onChange={e=>onChange({ hours, minutes:e.target.value })}>
+        <option value="">Min</option>
+        {[0,5,10,15,20,25,30,35,40,45,50,55].map(m=><option key={m} value={m}>{m} m</option>)}
+      </select>
+    </div>
+  );
+}
+
+// ─── FLIGHTS TAB ──────────────────────────────────────────────────────────────
+const BLANK_F = { airline:"", departureLoc:"", departureDate:"", departureTime:"", durationHours:"", durationMinutes:"", cost:"", docsLink:"" };
 function FlightTab({trip,setTrip,db}) {
   const [show,setShow]     = useState(false);
   const [editId,setEditId] = useState(null);
   const [form,setForm]     = useState(BLANK_F);
   const [errs,setErrs]     = useState({});
   const flights = trip.flights || [];
+  // Same day options the activity editor uses, so the date dropdown matches.
+  const tripDays = useMemo(()=>buildTripDays(trip.startDate, trip.endDate), [trip.startDate, trip.endDate]);
 
   const validate = () => {
     const e = {};
@@ -2879,8 +2900,13 @@ function FlightTab({trip,setTrip,db}) {
 
   const openAdd  = () => { setForm(BLANK_F); setEditId(null); setErrs({}); setShow(true); };
   const openEdit = f => {
-    setForm({ airline:f.airline||"", departureLoc:f.departureLoc||"", departureTime:f.departureTime||"",
-      duration:f.duration||"", cost:String(f.cost||""), docsLink:f.docsLink||"" });
+    setForm({
+      airline:f.airline||"", departureLoc:f.departureLoc||"",
+      departureDate:f.departureDate||"", departureTime:f.departureTime||"",
+      durationHours:   f.durationHours   != null && f.durationHours   !== "" ? String(f.durationHours)   : "",
+      durationMinutes: f.durationMinutes != null && f.durationMinutes !== "" ? String(f.durationMinutes) : "",
+      cost:String(f.cost||""), docsLink:f.docsLink||"",
+    });
     setEditId(f.id); setErrs({}); setShow(true);
   };
 
@@ -2895,12 +2921,14 @@ function FlightTab({trip,setTrip,db}) {
   const save = () => {
     if(!validate()) return;
     const fmt = {
-      airline:       form.airline.trim(),
-      departureLoc:  form.departureLoc.trim(),
-      departureTime: form.departureTime.trim(),
-      duration:      form.duration.trim(),
-      cost:          form.cost ? +form.cost : "",
-      docsLink:      form.docsLink.trim(),
+      airline:         form.airline.trim(),
+      departureLoc:    form.departureLoc.trim(),
+      departureDate:   form.departureDate || "",
+      departureTime:   form.departureTime || "",
+      durationHours:   form.durationHours   !== "" ? +form.durationHours   : "",
+      durationMinutes: form.durationMinutes !== "" ? +form.durationMinutes : "",
+      cost:            form.cost ? +form.cost : "",
+      docsLink:        form.docsLink.trim(),
     };
     let next;
     if(editId) {
@@ -2932,8 +2960,29 @@ function FlightTab({trip,setTrip,db}) {
             <div className="form-group"><label className="form-label">Departure location</label><input {...F("departureLoc")} placeholder="e.g. Miami (MIA)"/></div>
           </div>
           <div className="form-row">
-            <div className="form-group"><label className="form-label">Departure time</label><input {...F("departureTime")} placeholder="e.g. Fri, Oct 17 · 8:30 PM"/></div>
-            <div className="form-group"><label className="form-label">Duration</label><input {...F("duration")} placeholder="e.g. 8h 45m (direct)"/></div>
+            <div className="form-group">
+              <label className="form-label">Departure date</label>
+              <select value={form.departureDate} onChange={e=>setForm(f=>({...f,departureDate:e.target.value}))} className="form-input">
+                <option value="">— Select date —</option>
+                {tripDays.map((ymd,i)=>{
+                  const d=fromYMD(ymd);
+                  const dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+                  return <option key={ymd} value={ymd}>Day {i+1} · {dow} {MONTHS[d.getMonth()].slice(0,3)} {d.getDate()}</option>;
+                })}
+              </select>
+              {tripDays.length===0&&<div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Set trip dates in ℹ️ Trip Info to pick a departure date.</div>}
+            </div>
+            <div className="form-group">
+              <label className="form-label">Departure time</label>
+              <TimePicker value={form.departureTime} onChange={v=>setForm(f=>({...f,departureTime:v}))}/>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label className="form-label">Duration</label>
+              <DurationPicker hours={form.durationHours} minutes={form.durationMinutes}
+                onChange={({hours,minutes})=>setForm(f=>({...f,durationHours:hours,durationMinutes:minutes}))}/>
+            </div>
             <div className="form-group"><label className="form-label">Cost ($)</label><input {...F("cost")} placeholder="e.g. 540"/>{errs.cost&&<div className="err-msg">{errs.cost}</div>}</div>
           </div>
           <div className="form-group">
@@ -2951,26 +3000,31 @@ function FlightTab({trip,setTrip,db}) {
       {flights.length === 0 && !show
         ? <div className="empty-state"><div>✈️</div>No flight options yet. Add your first one above!</div>
         : <div className="accom-grid">
-            {flights.map(f => (
-              <div key={f.id} className="accom-card">
-                <div className="card-head">
-                  <div className="card-name">✈️ {f.airline || "Flight option"}</div>
-                  <div className="card-actions">
-                    <button className="btn btn-ghost btn-sm" style={{padding:"4px 9px"}} onClick={()=>openEdit(f)}>✏️</button>
-                    <button className="btn btn-danger btn-sm" style={{padding:"4px 9px"}} onClick={()=>del(f.id)}>🗑</button>
+            {flights.map(f => {
+              const dt = [f.departureDate?fmtDate(f.departureDate):"", f.departureTime?fmtTime(f.departureTime):""].filter(Boolean).join(" · ");
+              const dh = +f.durationHours||0, dm = +f.durationMinutes||0;
+              const dur = [dh>0?`${dh}h`:"", dm>0?`${dm}m`:""].filter(Boolean).join(" ");
+              return (
+                <div key={f.id} className="accom-card">
+                  <div className="card-head">
+                    <div className="card-name">✈️ {f.airline || "Flight option"}</div>
+                    <div className="card-actions">
+                      <button className="btn btn-ghost btn-sm" style={{padding:"4px 9px"}} onClick={()=>openEdit(f)}>✏️</button>
+                      <button className="btn btn-danger btn-sm" style={{padding:"4px 9px"}} onClick={()=>del(f.id)}>🗑</button>
+                    </div>
+                  </div>
+                  <div className="card-meta">
+                    {f.departureLoc&&<div className="card-meta-row">📍 Departs <strong>{f.departureLoc}</strong></div>}
+                    <div className="card-meta-row" style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                      {dt&&<span>🕐 <strong>{dt}</strong></span>}
+                      {dur&&<span>⏱ <strong>{dur}</strong></span>}
+                      {f.cost>0&&<span>💰 <strong>${(+f.cost).toLocaleString()}</strong></span>}
+                    </div>
+                    {f.docsLink&&<div className="card-meta-row"><a href={f.docsLink} target="_blank" rel="noopener noreferrer" style={{color:"var(--accent)",textDecoration:"none",fontWeight:600,wordBreak:"break-all"}}>📄 Boarding passes &amp; documents →</a></div>}
                   </div>
                 </div>
-                <div className="card-meta">
-                  {f.departureLoc&&<div className="card-meta-row">📍 Departs <strong>{f.departureLoc}</strong></div>}
-                  <div className="card-meta-row" style={{display:"flex",gap:16,flexWrap:"wrap"}}>
-                    {f.departureTime&&<span>🕐 <strong>{f.departureTime}</strong></span>}
-                    {f.duration&&<span>⏱ <strong>{f.duration}</strong></span>}
-                    {f.cost>0&&<span>💰 <strong>${(+f.cost).toLocaleString()}</strong></span>}
-                  </div>
-                  {f.docsLink&&<div className="card-meta-row"><a href={f.docsLink} target="_blank" rel="noopener noreferrer" style={{color:"var(--accent)",textDecoration:"none",fontWeight:600,wordBreak:"break-all"}}>📄 Boarding passes &amp; documents →</a></div>}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
       }
     </div>
@@ -3611,8 +3665,8 @@ const DEMO_TRIP = {
   budgets:{"$300–500":1,"$500–800":2,"$800+":2},
   personalBudgets:{Alex:900,Jamie:750,Sam:800,Taylor:950,Morgan:700},
   flights:[
-    {id:"fl-demo-1",airline:"TAP Air Portugal · TP202",departureLoc:"Miami (MIA)",departureTime:"Fri, Oct 17 · 6:45 PM",duration:"8h 50m (1 stop · LIS)",cost:612,docsLink:"https://drive.google.com/drive/folders/example-boarding-passes"},
-    {id:"fl-demo-2",airline:"Iberia · IB6276",departureLoc:"Miami (MIA)",departureTime:"Fri, Oct 17 · 9:10 PM",duration:"8h 25m (direct)",cost:705,docsLink:""},
+    {id:"fl-demo-1",airline:"TAP Air Portugal · TP202",departureLoc:"Miami (MIA)",departureDate:"2025-10-17",departureTime:"18:45",durationHours:8,durationMinutes:50,cost:612,docsLink:"https://drive.google.com/drive/folders/example-boarding-passes"},
+    {id:"fl-demo-2",airline:"Iberia · IB6276",departureLoc:"Miami (MIA)",departureDate:"2025-10-17",departureTime:"21:10",durationHours:8,durationMinutes:25,cost:705,docsLink:""},
   ],
   accommodations:[],
   accommodationOptions:[
