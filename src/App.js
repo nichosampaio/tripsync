@@ -2860,6 +2860,123 @@ function VehicleTab({trip,setTrip,db}) {
   );
 }
 
+// ─── FLIGHTS TAB ──────────────────────────────────────────────────────────────
+const BLANK_F = { airline:"", departureLoc:"", departureTime:"", duration:"", cost:"", docsLink:"" };
+function FlightTab({trip,setTrip,db}) {
+  const [show,setShow]     = useState(false);
+  const [editId,setEditId] = useState(null);
+  const [form,setForm]     = useState(BLANK_F);
+  const [errs,setErrs]     = useState({});
+  const flights = trip.flights || [];
+
+  const validate = () => {
+    const e = {};
+    if(!form.airline.trim() && !form.departureLoc.trim()) e.airline = "Add an airline or departure location";
+    if(form.cost && isNaN(+form.cost)) e.cost = "Numeric";
+    if(form.docsLink.trim() && !/^https?:\/\//i.test(form.docsLink.trim())) e.docsLink = "Start with http:// or https://";
+    setErrs(e); return !Object.keys(e).length;
+  };
+
+  const openAdd  = () => { setForm(BLANK_F); setEditId(null); setErrs({}); setShow(true); };
+  const openEdit = f => {
+    setForm({ airline:f.airline||"", departureLoc:f.departureLoc||"", departureTime:f.departureTime||"",
+      duration:f.duration||"", cost:String(f.cost||""), docsLink:f.docsLink||"" });
+    setEditId(f.id); setErrs({}); setShow(true);
+  };
+
+  // Flights live in the trips.flights JSON column — persist via the generic
+  // db.updateTrip helper (a no-op on demo/mock trips). Pass a plain object to
+  // setTrip so both the open trip and the trips list stay in sync.
+  const commit = next => {
+    setTrip({ ...trip, flights: next });
+    if(db) db.updateTrip(trip.id, { flights: next });
+  };
+
+  const save = () => {
+    if(!validate()) return;
+    const fmt = {
+      airline:       form.airline.trim(),
+      departureLoc:  form.departureLoc.trim(),
+      departureTime: form.departureTime.trim(),
+      duration:      form.duration.trim(),
+      cost:          form.cost ? +form.cost : "",
+      docsLink:      form.docsLink.trim(),
+    };
+    let next;
+    if(editId) {
+      const updated = { ...flights.find(f=>f.id===editId), ...fmt };
+      next = flights.map(f=>f.id===editId?updated:f);
+    } else {
+      next = [...flights, { id:uid(), ...fmt }];
+    }
+    commit(next);
+    setShow(false);
+  };
+
+  const del = id => commit(flights.filter(f=>f.id!==id));
+
+  const F = k => ({ value:form[k], onChange:e=>setForm(f=>({...f,[k]:e.target.value})), className:`form-input${errs[k]?" err":""}` });
+
+  return (
+    <div>
+      <div className="section-hdr">
+        <h4>✈️ Flights</h4>
+        <button className="btn btn-accent2 btn-sm" onClick={openAdd}>+ Add Option</button>
+      </div>
+      <p className="text-muted" style={{marginBottom:14}}>Compare flight options for the group, then link a Google Doc or Drive folder so everyone can grab their boarding passes.</p>
+      {show && (
+        <div className="inline-form">
+          <h5>{editId?"Edit Flight Option":"New Flight Option"}</h5>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Airline / flight</label><input {...F("airline")} placeholder="e.g. TAP Air Portugal · TP202"/>{errs.airline&&<div className="err-msg">{errs.airline}</div>}</div>
+            <div className="form-group"><label className="form-label">Departure location</label><input {...F("departureLoc")} placeholder="e.g. Miami (MIA)"/></div>
+          </div>
+          <div className="form-row">
+            <div className="form-group"><label className="form-label">Departure time</label><input {...F("departureTime")} placeholder="e.g. Fri, Oct 17 · 8:30 PM"/></div>
+            <div className="form-group"><label className="form-label">Duration</label><input {...F("duration")} placeholder="e.g. 8h 45m (direct)"/></div>
+            <div className="form-group"><label className="form-label">Cost ($)</label><input {...F("cost")} placeholder="e.g. 540"/>{errs.cost&&<div className="err-msg">{errs.cost}</div>}</div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Boarding passes & documents link</label>
+            <input {...F("docsLink")} placeholder="https://docs.google.com/…  or  https://drive.google.com/…"/>
+            {errs.docsLink&&<div className="err-msg">{errs.docsLink}</div>}
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:4}}>Paste a Google Docs link or a Google Drive folder where the group keeps their boarding passes and booking confirmations.</div>
+          </div>
+          <div className="form-actions">
+            <button className="btn btn-ghost btn-sm" onClick={()=>setShow(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" onClick={save}>{editId?"Save Changes":"Add Flight"}</button>
+          </div>
+        </div>
+      )}
+      {flights.length === 0 && !show
+        ? <div className="empty-state"><div>✈️</div>No flight options yet. Add your first one above!</div>
+        : <div className="accom-grid">
+            {flights.map(f => (
+              <div key={f.id} className="accom-card">
+                <div className="card-head">
+                  <div className="card-name">✈️ {f.airline || "Flight option"}</div>
+                  <div className="card-actions">
+                    <button className="btn btn-ghost btn-sm" style={{padding:"4px 9px"}} onClick={()=>openEdit(f)}>✏️</button>
+                    <button className="btn btn-danger btn-sm" style={{padding:"4px 9px"}} onClick={()=>del(f.id)}>🗑</button>
+                  </div>
+                </div>
+                <div className="card-meta">
+                  {f.departureLoc&&<div className="card-meta-row">📍 Departs <strong>{f.departureLoc}</strong></div>}
+                  <div className="card-meta-row" style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                    {f.departureTime&&<span>🕐 <strong>{f.departureTime}</strong></span>}
+                    {f.duration&&<span>⏱ <strong>{f.duration}</strong></span>}
+                    {f.cost>0&&<span>💰 <strong>${(+f.cost).toLocaleString()}</strong></span>}
+                  </div>
+                  {f.docsLink&&<div className="card-meta-row"><a href={f.docsLink} target="_blank" rel="noopener noreferrer" style={{color:"var(--accent)",textDecoration:"none",fontWeight:600,wordBreak:"break-all"}}>📄 Boarding passes &amp; documents →</a></div>}
+                </div>
+              </div>
+            ))}
+          </div>
+      }
+    </div>
+  );
+}
+
 // ─── TRIP INFO TAB ────────────────────────────────────────────────────────────
 function TripInfoTab({trip,setTrip,db}) {
   const [editing,setEditing] = useState(false);
@@ -3447,7 +3564,7 @@ function NewTripModal({onClose,onCreate,user}) {
         tripMembers:[{userId:user,name:user,role:"admin",joinedAt:toYMD(new Date())}],
         destinations:dests.length?dests:[{id:1,name:"TBD",upvotes:[],downvotes:[]}],
         budgets:{"$300–500":0,"$500–800":0,"$800+":0},
-        accommodations:[],accommodationOptions:[],calendarItems:[],
+        accommodations:[],accommodationOptions:[],calendarItems:[],flights:[],
         availability:{},country:null,googleMapsUrl:""
       });
     } catch(err) {
@@ -3493,6 +3610,10 @@ const DEMO_TRIP = {
   ],
   budgets:{"$300–500":1,"$500–800":2,"$800+":2},
   personalBudgets:{Alex:900,Jamie:750,Sam:800,Taylor:950,Morgan:700},
+  flights:[
+    {id:"fl-demo-1",airline:"TAP Air Portugal · TP202",departureLoc:"Miami (MIA)",departureTime:"Fri, Oct 17 · 6:45 PM",duration:"8h 50m (1 stop · LIS)",cost:612,docsLink:"https://drive.google.com/drive/folders/example-boarding-passes"},
+    {id:"fl-demo-2",airline:"Iberia · IB6276",departureLoc:"Miami (MIA)",departureTime:"Fri, Oct 17 · 9:10 PM",duration:"8h 25m (direct)",cost:705,docsLink:""},
+  ],
   accommodations:[],
   accommodationOptions:[
     {id:30,name:"Eixample Design Apartment",address:"Carrer de Provença 200, Barcelona",pricePerNight:210,rating:4.9,checkIn:"2025-10-17",checkOut:"2025-10-21",notes:"Rooftop terrace, sleeps 5, near Sagrada Família. VOTED FAVOURITE ✓",upvotes:["Alex","Jamie","Sam","Taylor","Morgan"],downvotes:[]},
@@ -4134,6 +4255,7 @@ export default function App() {
       calendarItems:       existing?.calendarItems      ?? [],
       vehicleRentals:      existing?.vehicleRentals     ?? [],
       accommodationOptions:existing?.accommodationOptions ?? [],
+      flights:             existing?.flights            ?? [],
       availability:        existing?.availability        ?? {},
       personalBudgets:     existing?.personalBudgets     ?? {},
       country:             t.country_info || null,
@@ -4268,6 +4390,19 @@ export default function App() {
       downvotes:       Array.isArray(v.downvotes) ? v.downvotes : [],
     }));
 
+    // Load flight options (stored as a JSON array on the trips row). Queried
+    // separately and guarded so a not-yet-migrated `flights` column degrades to
+    // [] instead of breaking the whole trip load.
+    let flights = [];
+    {
+      const { data: fRow, error: fErr } = await supabase
+        .from("trips")
+        .select("flights")
+        .eq("id", trip.id)
+        .maybeSingle();
+      if(!fErr && fRow && Array.isArray(fRow.flights)) flights = fRow.flights;
+    }
+
     // Fetch ALL members for this trip directly from trip_members
     const { data: allMembers } = await supabase
       .from("trip_members")
@@ -4321,6 +4456,7 @@ export default function App() {
       calendarItems,
       accommodationOptions,
       vehicleRentals,
+      flights,
       personalBudgets: { [user]: myPersonalBudget },
       tripMembers: freshMembers,
       members:     freshMembers.map(m => m.name),
@@ -4741,7 +4877,7 @@ export default function App() {
     // Build trip locally — never call loadTrips() here as it races with setActive
     // and was querying with null userId, returning empty results that wiped trip data
     const fullNewTrip = {
-      ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [], vehicleRentals: [],
+      ...t, id: newTrip.id, calendarItems: [], accommodationOptions: [], vehicleRentals: [], flights: [],
       tripMembers: [{ userId: authUser.id, name: user, role: "admin", joinedAt: new Date().toISOString().slice(0,10) }],
     };
     setTrips(ts => {
@@ -4799,6 +4935,7 @@ export default function App() {
       destinations: (trip.destinations||[]).map(d=>({
         ...d, id: uid(), upvotes:[], downvotes:[]
       })),
+      flights: (trip.flights||[]).map(f=>({ ...f, id: uid() })),
       // Copy entry requirements but clear boarding passes
       country: trip.country ? {
         ...trip.country,
@@ -4908,6 +5045,13 @@ export default function App() {
       if(vRows.length) {
         const {error: vErr} = await supabase.from("vehicle_rentals").insert(vRows);
         if(vErr) console.error("duplicateTrip vehicles:", vErr.message);
+      }
+
+      // Step 7: flights (JSON column on the trips row) — non-blocking; safely
+      // no-ops if the flights column hasn't been migrated yet.
+      if((copy.flights||[]).length) {
+        const {error: fErr} = await supabase.from("trips").update({ flights: copy.flights }).eq("id", realId);
+        if(fErr) console.error("duplicateTrip flights:", fErr.message);
       }
     }
 
@@ -5061,6 +5205,7 @@ export default function App() {
     {id:"map",l:"🗺️ Map",group:"plan"},
     {id:"accommodations",l:"🏨 Stays",group:"plan"},
     {id:"vehicles",l:"🚗 Vehicles",group:"plan"},
+    {id:"flights",l:"✈️ Flights",group:"plan"},
     {id:"activities",l:"🎯 Activities",group:"plan"},
     {id:"voting",l:"🗳️ Vote",group:"decide"},
     {id:"budget",l:"💰 Budget",group:"decide"},
@@ -5305,6 +5450,7 @@ export default function App() {
               {tab==="accommodations" && <AccommodationTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="activities"     && <ActivityTab trip={active} setTrip={updateTrip} user={user} db={db} authUserId={authUser?.id}/>}
               {tab==="vehicles"       && <VehicleTab trip={active} setTrip={updateTrip} db={db}/>}
+              {tab==="flights"        && <FlightTab trip={active} setTrip={updateTrip} db={db}/>}
               {tab==="members"        && <MembersTab trip={active} setTrip={updateTrip} user={user} db={db} onLeave={()=>leaveTrip(active.id)} authUserId={authUser?.id} joinRequests={joinRequests} onAcceptRequest={handleAcceptRequest} onRejectRequest={handleRejectRequest} onToast={showToast}/>}
               {tab==="country"        && <CountryTab trip={active} setTrip={updateTrip} db={db} authUserId={authUser?.id}/>}
               {tab==="summary"        && <SummaryTab trip={active} onNavigate={setTab} userName={user}/>}
